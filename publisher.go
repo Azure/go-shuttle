@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/keikumata/azure-pub-sub/internal/reflection"
 )
 
 // Publisher is a struct to contain service bus entities relevant to publishing to a topic
@@ -20,10 +20,10 @@ type Publisher struct {
 }
 
 // PublisherManagementOption provides structure for configuring a new Publisher
-type PublisherManagementOption func(h *Publisher) error
+type PublisherManagementOption func(p *Publisher) error
 
 // PublisherOption provides structure for configuring when starting to publish to a specified topic
-type PublisherOption func(h *Publisher) error
+type PublisherOption func(p *Publisher) error
 
 // PublisherWithConnectionString configures a publisher with the information provided in a Service Bus connection string
 func PublisherWithConnectionString(connStr string) PublisherManagementOption {
@@ -100,11 +100,11 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Publis
 	// adding in user properties to enable filtering on listener side
 	sbMsg := servicebus.NewMessageFromString(string(msgJSON))
 	sbMsg.UserProperties = make(map[string]interface{})
-	sbMsg.UserProperties["type"] = getType(msg)
+	sbMsg.UserProperties["type"] = reflection.GetType(msg)
 
 	// add in custom headers setup at initialization time
 	for headerName, headerKey := range p.headers {
-		val := getReflectionValue(msg, headerKey)
+		val := reflection.GetReflectionValue(msg, headerKey)
 		if val != nil {
 			sbMsg.UserProperties[headerName] = val
 		}
@@ -125,30 +125,6 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Publis
 		return fmt.Errorf("failed to send message to topic %s: %w", p.topicSender.Name, err)
 	}
 	return nil
-}
-
-func getReflectionValue(obj interface{}, key string) *string {
-	reflectedObj := reflect.ValueOf(obj).Elem()
-	reflectedVal := reflectedObj.FieldByName(key)
-
-	if isZeroOfUnderlyingType(reflectedVal) {
-		return nil
-	}
-	res := fmt.Sprintf("%v", reflectedVal.Interface().(interface{}))
-	return &res
-}
-
-func getType(obj interface{}) string {
-	valueOf := reflect.ValueOf(obj)
-
-	if valueOf.Type().Kind() == reflect.Ptr {
-		return reflect.Indirect(valueOf).Type().Name()
-	}
-	return valueOf.Type().Name()
-}
-
-func isZeroOfUnderlyingType(x interface{}) bool {
-	return reflect.DeepEqual(x, reflect.Zero(reflect.TypeOf(x)).Interface())
 }
 
 func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespace) (*servicebus.TopicEntity, error) {
