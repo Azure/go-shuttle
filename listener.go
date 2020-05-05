@@ -23,10 +23,10 @@ type Listener struct {
 }
 
 // ListenerManagementOption provides structure for configuring a new Listener
-type ListenerManagementOption func(h *Listener) error
+type ListenerManagementOption func(l *Listener) error
 
 // ListenerOption provides structure for configuring when starting to listen to a specified topic
-type ListenerOption func(h *Listener) error
+type ListenerOption func(l *Listener) error
 
 // ListenerWithConnectionString configures a listener with the information provided in a Service Bus connection string
 func ListenerWithConnectionString(connStr string) ListenerManagementOption {
@@ -197,8 +197,17 @@ func ensureFilterRule(
 	}
 	for _, rule := range rules {
 		if rule.Name == filterName {
-			// exit early cause the rule already exists
-			return nil
+			if compareFilter(rule.Filter, filter.ToFilterDescription()) {
+				// exit early cause the rule with the same filter already exists
+				return nil
+			}
+			// update existing rule with new filter
+			err = sm.DeleteRule(ctx, subName, rule.Name)
+			if err != nil {
+				return err
+			}
+			_, err = sm.PutRule(ctx, subName, filterName, filter)
+			return err
 		}
 	}
 
@@ -209,4 +218,13 @@ func ensureFilterRule(
 	}
 	_, err = sm.PutRule(ctx, subName, filterName, filter)
 	return err
+}
+
+func compareFilter(f1, f2 servicebus.FilterDescription) bool {
+	if f1.Type == "CorrelationFilter" {
+		return f1.CorrelationFilter.CorrelationID == f2.CorrelationFilter.CorrelationID &&
+			f1.CorrelationFilter.Label == f2.CorrelationFilter.Label
+	}
+	// other than CorrelationFilter all other filters use a SQLExpression
+	return *f1.SQLExpression == *f2.SQLExpression
 }
