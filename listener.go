@@ -191,8 +191,19 @@ func ensureFilterRule(
 	subName string,
 	filterName string,
 	filter servicebus.FilterDescriber) error {
+	rules, err := sm.ListRules(ctx, subName)
+	if err != nil {
+		return err
+	}
+	for _, rule := range rules {
+		if rule.Name == filterName {
+			// exit early cause the rule already exists
+			return nil
+		}
+	}
+
 	// remove the default rule, which is the "TrueFilter" that accepts all messages
-	err := sm.DeleteRule(ctx, subName, "$Default")
+	err = sm.DeleteRule(ctx, subName, "$Default")
 	if err != nil {
 		return err
 	}
