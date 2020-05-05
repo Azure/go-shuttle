@@ -96,8 +96,7 @@ func NewPublisher(topicName string, opts ...PublisherManagementOption) (*Publish
 // Publish publishes to the pre-configured Service Bus topic
 func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...PublisherOption) error {
 	msgJSON, err := json.Marshal(msg)
-	tmp := string(msgJSON)
-	fmt.Println(tmp)
+
 	// adding in user properties to enable filtering on listener side
 	sbMsg := servicebus.NewMessageFromString(string(msgJSON))
 	sbMsg.UserProperties = make(map[string]interface{})
