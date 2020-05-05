@@ -15,7 +15,8 @@ err := listener.Listen(ctx, handle, topicName)
 ### Subscribe to a topic with a client-supplied name
 ```
 err := listener.Listen(
-    ctx, handle,
+    ctx,
+    handle,
     topicName,
     pubsub.SetSubscriptionName("subName"),
 )
@@ -25,7 +26,8 @@ err := listener.Listen(
 ```
 sqlFilter := fmt.Sprintf("destinationId LIKE '%s'", "test")
 err := listener.Listen(
-    ctx, handle,
+    ctx,
+    handle,
     topicName,
     pubsub.SetSubscriptionFilter(
         "testFilter",
