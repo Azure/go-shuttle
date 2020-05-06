@@ -79,7 +79,7 @@ func (suite *BaseSuite) SetupSuite() {
 	suite.Namespace = parsed.Namespace
 	suite.Token = suite.servicePrincipalToken()
 	suite.Environment = azure.PublicCloud
-	suite.TagID = RandomString("tag", 10)
+	suite.TagID = randomString("tag", 10)
 
 	if !suite.NoError(suite.ensureProvisioned(sbmgmt.SkuTierStandard)) {
 		suite.FailNow("failed to ensure provisioned")
@@ -126,7 +126,6 @@ func (suite *BaseSuite) GetNewNamespace(opts ...servicebus.NamespaceOption) *ser
 }
 
 func (suite *BaseSuite) servicePrincipalToken() *adal.ServicePrincipalToken {
-
 	oauthConfig, err := adal.NewOAuthConfig(azure.PublicCloud.ActiveDirectoryEndpoint, suite.TenantID)
 	if err != nil {
 		suite.T().Fatal(err)
@@ -183,6 +182,7 @@ func (suite *BaseSuite) ensureProvisioned(tier sbmgmt.SkuTier) error {
 	return nil
 }
 
+// EnsureTopic checks if the topic exists and creates one if it doesn't
 func (suite *BaseSuite) EnsureTopic(ctx context.Context, name string) (*servicebus.TopicEntity, error) {
 	ns := suite.GetNewNamespace()
 	tm := ns.NewTopicManager()
@@ -195,13 +195,13 @@ func (suite *BaseSuite) EnsureTopic(ctx context.Context, name string) (*serviceb
 	return tm.Put(ctx, name)
 }
 
-// RandomName generates a random Event Hub name tagged with the suite id
-func (suite *BaseSuite) RandomName(prefix string, length int) string {
-	return RandomString(prefix, length) + "-" + suite.TagID
+// randomString generates a random Event Hub name tagged with the suite id
+func (suite *BaseSuite) randomName(prefix string, length int) string {
+	return randomString(prefix, length) + "-" + suite.TagID
 }
 
-// RandomString generates a random string with prefix
-func RandomString(prefix string, length int) string {
+// randomString generates a random string with prefix
+func randomString(prefix string, length int) string {
 	b := make([]rune, length)
 	for i := range b {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]

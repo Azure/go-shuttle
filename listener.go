@@ -20,13 +20,14 @@ type Listener struct {
 	namespace          *servicebus.Namespace
 	topicEntity        *servicebus.TopicEntity
 	subscriptionEntity *servicebus.SubscriptionEntity
+	listenerHandle     *servicebus.ListenerHandle
 }
 
 // ListenerManagementOption provides structure for configuring a new Listener
-type ListenerManagementOption func(h *Listener) error
+type ListenerManagementOption func(l *Listener) error
 
 // ListenerOption provides structure for configuring when starting to listen to a specified topic
-type ListenerOption func(h *Listener) error
+type ListenerOption func(l *Listener) error
 
 // ListenerWithConnectionString configures a listener with the information provided in a Service Bus connection string
 func ListenerWithConnectionString(connStr string) ListenerManagementOption {
@@ -56,6 +57,9 @@ func SetSubscriptionName(name string) ListenerOption {
 // SetSubscriptionFilter configures a filter of the subscription to listen to
 func SetSubscriptionFilter(filterName string, filter servicebus.FilterDescriber) ListenerOption {
 	return func(l *Listener) error {
+		if len(filterName) == 0 || filter == nil {
+			return errors.New("filter name or filter cannot be zero value")
+		}
 		ctx := context.Background()
 		sm, err := l.namespace.NewSubscriptionManager(l.topicEntity.Name)
 		if err != nil {
@@ -122,6 +126,7 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", subReceiver.Name, err)
 	}
+
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
 		func(ctx context.Context, message *servicebus.Message) error {
@@ -133,12 +138,25 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 			return message.Complete(ctx)
 		},
 	))
+	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 
 	if err := subReceiver.Close(ctx); err != nil {
 		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
 	return listenerHandle.Err()
+}
+
+// Close closes the listener if an active listener exists
+func (l *Listener) Close(ctx context.Context) error {
+	if l.listenerHandle == nil {
+		return errors.New("no active listener. cannot close")
+	}
+	if err := l.listenerHandle.Close(ctx); err != nil {
+		l.listenerHandle = nil
+		return fmt.Errorf("error shutting down service bus subscription. %w", err)
+	}
+	return nil
 }
 
 func getNamespace(connStr string) (*servicebus.Namespace, error) {
@@ -191,11 +209,40 @@ func ensureFilterRule(
 	subName string,
 	filterName string,
 	filter servicebus.FilterDescriber) error {
+	rules, err := sm.ListRules(ctx, subName)
+	if err != nil {
+		return err
+	}
+	for _, rule := range rules {
+		if rule.Name == filterName {
+			if compareFilter(rule.Filter, filter.ToFilterDescription()) {
+				// exit early cause the rule with the same filter already exists
+				return nil
+			}
+			// update existing rule with new filter
+			err = sm.DeleteRule(ctx, subName, rule.Name)
+			if err != nil {
+				return err
+			}
+			_, err = sm.PutRule(ctx, subName, filterName, filter)
+			return err
+		}
+	}
+
 	// remove the default rule, which is the "TrueFilter" that accepts all messages
-	err := sm.DeleteRule(ctx, subName, "$Default")
+	err = sm.DeleteRule(ctx, subName, "$Default")
 	if err != nil {
 		return err
 	}
 	_, err = sm.PutRule(ctx, subName, filterName, filter)
 	return err
+}
+
+func compareFilter(f1, f2 servicebus.FilterDescription) bool {
+	if f1.Type == "CorrelationFilter" {
+		return f1.CorrelationFilter.CorrelationID == f2.CorrelationFilter.CorrelationID &&
+			f1.CorrelationFilter.Label == f2.CorrelationFilter.Label
+	}
+	// other than CorrelationFilter all other filters use a SQLExpression
+	return *f1.SQLExpression == *f2.SQLExpression
 }
