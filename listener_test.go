@@ -4,41 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
-	"testing"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/joho/godotenv"
-	"github.com/keikumata/azure-pub-sub/internal/test"
-	"github.com/stretchr/testify/suite"
 )
-
-type (
-	serviceBusSuite struct {
-		test.BaseSuite
-	}
-)
-
-const (
-	defaultTimeout = 60 * time.Second
-	topicName      = "testTopic"
-)
-
-func TestSB(t *testing.T) {
-	suite.Run(t, new(serviceBusSuite))
-}
-
-func (suite *serviceBusSuite) SetupTest() {
-	_, err := suite.EnsureTopic(context.Background(), topicName+suite.TagID)
-	if err != nil {
-		suite.T().Fatal(err)
-	}
-}
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string
 func (suite *serviceBusSuite) TestCreateNewListenerFromConnectionString() {
-	_ = godotenv.Load()
-
 	listener, err := createNewListenerFromConnectionString()
 	if suite.NoError(err) {
 		connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING")
@@ -47,7 +19,6 @@ func (suite *serviceBusSuite) TestCreateNewListenerFromConnectionString() {
 }
 
 func (suite *serviceBusSuite) TestListenWithDefault() {
-	_ = godotenv.Load()
 	listener, err := createNewListenerFromConnectionString()
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
@@ -58,14 +29,13 @@ func (suite *serviceBusSuite) TestListenWithDefault() {
 		listener.Listen(
 			ctx,
 			createTestHandler(),
-			topicName+suite.TagID,
+			suite.TopicName,
 		)
 		suite.EqualValues(listener.subscriptionEntity.Name, "default")
 	}
 }
 
 func (suite *serviceBusSuite) TestListenWithCustomSubscription() {
-	_ = godotenv.Load()
 	listener, err := createNewListenerFromConnectionString()
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
@@ -76,7 +46,7 @@ func (suite *serviceBusSuite) TestListenWithCustomSubscription() {
 		listener.Listen(
 			ctx,
 			createTestHandler(),
-			topicName+suite.TagID,
+			suite.TopicName,
 			SetSubscriptionName("subName"),
 		)
 		suite.EqualValues(listener.subscriptionEntity.Name, "subName")
@@ -84,28 +54,45 @@ func (suite *serviceBusSuite) TestListenWithCustomSubscription() {
 }
 
 func (suite *serviceBusSuite) TestListenWithCustomFilter() {
-	_ = godotenv.Load()
 	listener, err := createNewListenerFromConnectionString()
 	if suite.NoError(err) {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-		defer cancel()
-		go func() {
-			time.Sleep(10 * time.Second)
-			cancel()
-		}()
-		listener.Listen(
-			ctx,
-			createTestHandler(),
-			topicName+suite.TagID,
-			SetSubscriptionFilter(
-				"testFilter",
-				servicebus.SQLFilter{Expression: "destinationId LIKE test"},
-			),
+		suite.startListenAndCheckForFilter(
+			listener,
+			"testFilter",
+			servicebus.SQLFilter{Expression: "destinationId LIKE test"},
+			"default",
 		)
-		ruleExists, err := suite.checkRule("default", "testFilter")
-		if suite.NoError(err) {
-			suite.True(*ruleExists)
-		}
+		// check if it correctly replaces an existing rule
+		suite.startListenAndCheckForFilter(
+			listener,
+			"testFilter",
+			servicebus.SQLFilter{Expression: "destinationId LIKE test2"},
+			"default",
+		)
+	}
+}
+
+// startListenAndCheckForFilter starts the listener and makes sure that the correct rules were created
+func (suite *serviceBusSuite) startListenAndCheckForFilter(
+	listener *Listener,
+	filterName string,
+	filter servicebus.FilterDescriber,
+	subName string) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	go func() {
+		time.Sleep(10 * time.Second)
+		cancel()
+	}()
+	listener.Listen(
+		ctx,
+		createTestHandler(),
+		suite.TopicName,
+		SetSubscriptionFilter(filterName, filter),
+	)
+	ruleExists, err := suite.checkRule(subName, filterName, filter)
+	if suite.NoError(err) {
+		suite.True(*ruleExists)
 	}
 }
 
@@ -124,9 +111,9 @@ func createTestHandler() Handle {
 	}
 }
 
-func (suite *serviceBusSuite) checkRule(subName, filterName string) (*bool, error) {
+func (suite *serviceBusSuite) checkRule(subName, filterName string, filter servicebus.FilterDescriber) (*bool, error) {
 	ns := suite.GetNewNamespace()
-	sm, err := ns.NewSubscriptionManager(topicName + suite.TagID)
+	sm, err := ns.NewSubscriptionManager(suite.TopicName)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +123,10 @@ func (suite *serviceBusSuite) checkRule(subName, filterName string) (*bool, erro
 	}
 	for _, rule := range rules {
 		if rule.Name == filterName {
-			t := true
-			return &t, nil
+			if compareFilter(rule.Filter, filter.ToFilterDescription()) {
+				t := true
+				return &t, nil
+			}
 		}
 	}
 	f := false

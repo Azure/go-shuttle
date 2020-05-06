@@ -20,6 +20,7 @@ type Listener struct {
 	namespace          *servicebus.Namespace
 	topicEntity        *servicebus.TopicEntity
 	subscriptionEntity *servicebus.SubscriptionEntity
+	listenerHandle     *servicebus.ListenerHandle
 }
 
 // ListenerManagementOption provides structure for configuring a new Listener
@@ -56,6 +57,9 @@ func SetSubscriptionName(name string) ListenerOption {
 // SetSubscriptionFilter configures a filter of the subscription to listen to
 func SetSubscriptionFilter(filterName string, filter servicebus.FilterDescriber) ListenerOption {
 	return func(l *Listener) error {
+		if len(filterName) == 0 || filter == nil {
+			return errors.New("filter name or filter cannot be zero value")
+		}
 		ctx := context.Background()
 		sm, err := l.namespace.NewSubscriptionManager(l.topicEntity.Name)
 		if err != nil {
@@ -122,6 +126,7 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", subReceiver.Name, err)
 	}
+
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
 		func(ctx context.Context, message *servicebus.Message) error {
@@ -133,12 +138,25 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 			return message.Complete(ctx)
 		},
 	))
+	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 
 	if err := subReceiver.Close(ctx); err != nil {
 		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
 	return listenerHandle.Err()
+}
+
+// Close closes the listener if an active listener exists
+func (l *Listener) Close(ctx context.Context) error {
+	if l.listenerHandle == nil {
+		return errors.New("no active listener. cannot close")
+	}
+	if err := l.listenerHandle.Close(ctx); err != nil {
+		l.listenerHandle = nil
+		return fmt.Errorf("error shutting down service bus subscription. %w", err)
+	}
+	return nil
 }
 
 func getNamespace(connStr string) (*servicebus.Namespace, error) {
