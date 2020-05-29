@@ -13,7 +13,7 @@ const (
 )
 
 // Handle is a func to handle the message received from a subscription
-type Handle func(ctx context.Context, message string) error
+type Handle func(ctx context.Context, message, messageType string) error
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
 type Listener struct {
@@ -130,7 +130,7 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
 		func(ctx context.Context, message *servicebus.Message) error {
-			err := handle(ctx, string(message.Data))
+			err := handle(ctx, string(message.Data), message.UserProperties["type"].(string))
 			if err != nil {
 				err = message.Abandon(ctx)
 				return err
