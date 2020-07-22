@@ -8,6 +8,7 @@ import (
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/keikumata/azure-pub-sub/internal/reflection"
 	"github.com/keikumata/azure-pub-sub/internal/test"
 	"github.com/stretchr/testify/suite"
 )
@@ -51,12 +52,12 @@ type publishReceiveTest struct {
 	shouldSucceed    bool
 }
 
-// TestPublishAndListenWithDefault tests both the publisher and listener with default configurations
-func (suite *serviceBusSuite) TestPublishAndListenWithDefault() {
+// TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
+func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDefault() {
 	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherFromConnectionString(suite.TopicName)
+	publisher, err := createNewPublisherWithConnectionString(suite.TopicName)
 	suite.NoError(err)
-	listener, err := createNewListenerFromConnectionString()
+	listener, err := createNewListenerWithConnectionString()
 	suite.NoError(err)
 
 	// create test event
@@ -77,12 +78,12 @@ func (suite *serviceBusSuite) TestPublishAndListenWithDefault() {
 	)
 }
 
-// TestPublishAndListenWithTypeFilter tests both the publisher and listener with a filter on the event type
-func (suite *serviceBusSuite) TestPublishAndListenWithTypeFilter() {
+// TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
+func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingTypeFilter() {
 	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherFromConnectionString(suite.TopicName)
+	publisher, err := createNewPublisherWithConnectionString(suite.TopicName)
 	suite.NoError(err)
-	listener, err := createNewListenerFromConnectionString()
+	listener, err := createNewListenerWithConnectionString()
 	suite.NoError(err)
 
 	// create test event
@@ -121,12 +122,12 @@ func (suite *serviceBusSuite) TestPublishAndListenWithTypeFilter() {
 	)
 }
 
-// TestPublishAndListenWithCustomHeaderFilter tests both the publisher and listener with a customer filter
-func (suite *serviceBusSuite) TestPublishAndListenWithCustomHeaderFilter() {
+// TestPublishAndListenWithConnectionStringUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
+func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingCustomHeaderFilter() {
 	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherWithCustomHeader(suite.TopicName, "testHeader", "Key")
+	publisher, err := createNewPublisherWithConnectionStringUsingCustomHeader(suite.TopicName, "testHeader", "Key")
 	suite.NoError(err)
-	listener, err := createNewListenerFromConnectionString()
+	listener, err := createNewListenerWithConnectionString()
 	suite.NoError(err)
 
 	// create test event
@@ -165,15 +166,15 @@ func (suite *serviceBusSuite) TestPublishAndListenWithCustomHeaderFilter() {
 	)
 }
 
-// TestPublishAndListenWithCustomHeaderFilter tests both the publisher and listener with a customer filter
-func (suite *serviceBusSuite) TestPublishAndListenWithDuplicateDetection() {
+// TestPublishAndListenWithConnectionStringUsingDuplicateDetection tests both the publisher and listener with duplicate detection
+func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDuplicateDetection() {
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	dupeDetectionTopicName := testTopicName + "dupedetection" + suite.TagID
 	dupeDetectionWindow := 5 * time.Minute
 	publisher, err := createNewPublisherWithDuplicateDetection(dupeDetectionTopicName, &dupeDetectionWindow)
 	suite.NoError(err)
-	listener, err := createNewListenerFromConnectionString()
+	listener, err := createNewListenerWithConnectionString()
 	suite.NoError(err)
 
 	// create test event
@@ -226,7 +227,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceive
 		suite.NoError(err)
 		testConfig.listener.Listen(
 			ctx,
-			checkResultHandler(string(eventJSON), gotMessage),
+			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
@@ -260,11 +261,15 @@ func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceive
 	suite.NoError(err)
 }
 
-func checkResultHandler(publishedMsg string, ch chan<- bool) Handle {
+func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) Handle {
 	return func(ctx context.Context, message string, messageType string) error {
 		if publishedMsg != message {
 			ch <- false
 			return errors.New("published message and received message are different")
+		}
+		if publishedMsgType != messageType {
+			ch <- false
+			return errors.New("published message type and received message type are different")
 		}
 		ch <- true
 		return nil

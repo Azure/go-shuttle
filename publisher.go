@@ -9,6 +9,7 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/keikumata/azure-pub-sub/internal/reflection"
+	servicebusinternal "github.com/keikumata/azure-pub-sub/internal/servicebus"
 )
 
 // Publisher is a struct to contain service bus entities relevant to publishing to a topic
@@ -29,7 +30,25 @@ type PublisherOption func(p *Publisher) error
 // PublisherWithConnectionString configures a publisher with the information provided in a Service Bus connection string
 func PublisherWithConnectionString(connStr string) PublisherManagementOption {
 	return func(p *Publisher) error {
-		ns, err := getNamespace(connStr)
+		if connStr == "" {
+			return errors.New("no Service Bus connection string provided")
+		}
+		ns, err := getNamespace(servicebus.NamespaceWithConnectionString(connStr))
+		if err != nil {
+			return err
+		}
+		p.namespace = ns
+		return nil
+	}
+}
+
+// PublisherWithManagedIdentity configures a publisher with the attached managed identity and the Service bus resource name
+func PublisherWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID string) PublisherManagementOption {
+	return func(p *Publisher) error {
+		if serviceBusNamespaceName == "" {
+			return errors.New("no Service Bus namespace provided")
+		}
+		ns, err := getNamespace(servicebusinternal.NamespaceWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID))
 		if err != nil {
 			return err
 		}
