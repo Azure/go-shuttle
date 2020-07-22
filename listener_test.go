@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 )
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string
-func (suite *serviceBusSuite) TestCreateNewListenerFromConnectionString() {
-	listener, err := createNewListenerFromConnectionString()
+func (suite *serviceBusSuite) TestCreateNewListenerWithConnectionString() {
+	listener, err := createNewListenerWithConnectionString()
 	if suite.NoError(err) {
 		connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING")
 		suite.Contains(connStr, listener.namespace.Name)
@@ -19,42 +20,44 @@ func (suite *serviceBusSuite) TestCreateNewListenerFromConnectionString() {
 }
 
 func (suite *serviceBusSuite) TestListenWithDefault() {
-	listener, err := createNewListenerFromConnectionString()
+	listener, err := createNewListenerWithConnectionString()
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		go func() {
 			time.Sleep(10 * time.Second)
 			cancel()
 		}()
-		listener.Listen(
+		err := listener.Listen(
 			ctx,
 			createTestHandler(),
 			suite.TopicName,
 		)
+		suite.True(contextCanceledError(err), "listener listen function failed", err.Error())
 		suite.EqualValues(listener.subscriptionEntity.Name, "default")
 	}
 }
 
 func (suite *serviceBusSuite) TestListenWithCustomSubscription() {
-	listener, err := createNewListenerFromConnectionString()
+	listener, err := createNewListenerWithConnectionString()
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		go func() {
 			time.Sleep(10 * time.Second)
 			cancel()
 		}()
-		listener.Listen(
+		err := listener.Listen(
 			ctx,
 			createTestHandler(),
 			suite.TopicName,
 			SetSubscriptionName("subName"),
 		)
+		suite.True(contextCanceledError(err), "listener listen function failed", err.Error())
 		suite.EqualValues(listener.subscriptionEntity.Name, "subName")
 	}
 }
 
 func (suite *serviceBusSuite) TestListenWithCustomFilter() {
-	listener, err := createNewListenerFromConnectionString()
+	listener, err := createNewListenerWithConnectionString()
 	if suite.NoError(err) {
 		suite.startListenAndCheckForFilter(
 			listener,
@@ -84,19 +87,20 @@ func (suite *serviceBusSuite) startListenAndCheckForFilter(
 		time.Sleep(10 * time.Second)
 		cancel()
 	}()
-	listener.Listen(
+	err := listener.Listen(
 		ctx,
 		createTestHandler(),
 		suite.TopicName,
 		SetSubscriptionFilter(filterName, filter),
 	)
-	ruleExists, err := suite.checkRule(subName, filterName, filter)
+	suite.True(contextCanceledError(err), "listener listen function failed", err.Error())
+	ruleExists, err := suite.checkRule(listener.namespace, subName, filterName, filter)
 	if suite.NoError(err) {
 		suite.True(*ruleExists)
 	}
 }
 
-func createNewListenerFromConnectionString() (*Listener, error) {
+func createNewListenerWithConnectionString() (*Listener, error) {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		return nil, errors.New("environment variable SERVICEBUS_CONNECTION_STRING was not set")
@@ -111,8 +115,12 @@ func createTestHandler() Handle {
 	}
 }
 
-func (suite *serviceBusSuite) checkRule(subName, filterName string, filter servicebus.FilterDescriber) (*bool, error) {
-	ns := suite.GetNewNamespace()
+func contextCanceledError(err error) bool {
+	return strings.Contains(err.Error(), "context deadline exceeded") ||
+		strings.Contains(err.Error(), "context canceled")
+}
+
+func (suite *serviceBusSuite) checkRule(ns *servicebus.Namespace, subName, filterName string, filter servicebus.FilterDescriber) (*bool, error) {
 	sm, err := ns.NewSubscriptionManager(suite.TopicName)
 	if err != nil {
 		return nil, err

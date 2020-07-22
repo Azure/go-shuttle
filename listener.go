@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+
+	servicebusinternal "github.com/keikumata/azure-pub-sub/internal/servicebus"
 )
 
 const (
@@ -32,7 +34,25 @@ type ListenerOption func(l *Listener) error
 // ListenerWithConnectionString configures a listener with the information provided in a Service Bus connection string
 func ListenerWithConnectionString(connStr string) ListenerManagementOption {
 	return func(l *Listener) error {
-		ns, err := getNamespace(connStr)
+		if connStr == "" {
+			return errors.New("no Service Bus connection string provided")
+		}
+		ns, err := getNamespace(servicebus.NamespaceWithConnectionString(connStr))
+		if err != nil {
+			return err
+		}
+		l.namespace = ns
+		return nil
+	}
+}
+
+// ListenerWithManagedIdentity configures a listener with the attached managed identity and the Service bus resource name
+func ListenerWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID string) ListenerManagementOption {
+	return func(l *Listener) error {
+		if serviceBusNamespaceName == "" {
+			return errors.New("no Service Bus namespace provided")
+		}
+		ns, err := getNamespace(servicebusinternal.NamespaceWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID))
 		if err != nil {
 			return err
 		}
@@ -124,7 +144,7 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 	}
 	subReceiver, err := sub.NewReceiver(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create new subscription receiver %s: %w", subReceiver.Name, err)
+		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
 
 	// Create a handle class that has that function
@@ -165,14 +185,10 @@ func (l *Listener) Close(ctx context.Context) error {
 	return nil
 }
 
-func getNamespace(connStr string) (*servicebus.Namespace, error) {
-	if connStr == "" {
-		return nil, errors.New("no Service Bus connection string provided")
-	}
-	// Create a client to communicate with a Service Bus Namespace.
-	namespace, err := servicebus.NewNamespace(servicebus.NamespaceWithConnectionString(connStr))
+func getNamespace(option servicebus.NamespaceOption) (*servicebus.Namespace, error) {
+	namespace, err := servicebus.NewNamespace(option)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating service bus namespace failed: %w", err)
 	}
 	return namespace, nil
 }
@@ -189,12 +205,12 @@ func getSubscriptionEntity(
 	te *servicebus.TopicEntity) (*servicebus.SubscriptionEntity, error) {
 	subscriptionManager, err := ns.NewSubscriptionManager(te.Name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating subscription manager failed: %w", err)
 	}
 
 	subEntity, err := ensureSubscription(ctx, subscriptionManager, subscriptionName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ensuring subscription failed: %w", err)
 	}
 
 	return subEntity, nil
@@ -217,7 +233,7 @@ func ensureFilterRule(
 	filter servicebus.FilterDescriber) error {
 	rules, err := sm.ListRules(ctx, subName)
 	if err != nil {
-		return err
+		return fmt.Errorf("listing subscription filter rules failed: %w", err)
 	}
 	for _, rule := range rules {
 		if rule.Name == filterName {
@@ -228,20 +244,26 @@ func ensureFilterRule(
 			// update existing rule with new filter
 			err = sm.DeleteRule(ctx, subName, rule.Name)
 			if err != nil {
-				return err
+				return fmt.Errorf("deleting subscription filter rule failed: %w", err)
 			}
 			_, err = sm.PutRule(ctx, subName, filterName, filter)
-			return err
+			if err != nil {
+				return fmt.Errorf("updating subscription filter rule failed: %w", err)
+			}
+			return nil
 		}
 	}
 
 	// remove the default rule, which is the "TrueFilter" that accepts all messages
 	err = sm.DeleteRule(ctx, subName, "$Default")
 	if err != nil {
-		return err
+		return fmt.Errorf("deleting default rule failed: %w", err)
 	}
 	_, err = sm.PutRule(ctx, subName, filterName, filter)
-	return err
+	if err != nil {
+		return fmt.Errorf("updating subscription filter rule failed: %w", err)
+	}
+	return nil
 }
 
 func compareFilter(f1, f2 servicebus.FilterDescription) bool {
