@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"time"
 )
 
 // TestCreatePublisherFromConnectionStringWithNewTopic tests the creation of a publisher for a new topic and a connection string
@@ -61,5 +62,18 @@ func createNewPublisherWithCustomHeader(topicName, headerName, msgKey string) (*
 		topicName,
 		PublisherWithConnectionString(connStr),
 		SetDefaultHeader(headerName, msgKey),
+	)
+}
+
+func createNewPublisherWithDuplicateDetection(topicName string, window *time.Duration) (*Publisher, error) {
+	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
+	if connStr == "" {
+		return nil, errors.New("environment variable SERVICEBUS_CONNECTION_STRING was not set")
+	}
+
+	return NewPublisher(
+		topicName,
+		PublisherWithConnectionString(connStr),
+		SetDuplicateDetection(window),
 	)
 }

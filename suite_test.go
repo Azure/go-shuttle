@@ -151,6 +151,46 @@ func (suite *serviceBusSuite) TestPublishAndListenWithCustomHeaderFilter() {
 	)
 }
 
+// TestPublishAndListenWithCustomHeaderFilter tests both the publisher and listener with a customer filter
+func (suite *serviceBusSuite) TestPublishAndListenWithDuplicateDetection() {
+	// this assumes that the testTopic was created at the start of the test suite
+	dupeDetectionWindow := 5 * time.Minute
+	publisher, err := createNewPublisherWithDuplicateDetection(suite.TopicName, &dupeDetectionWindow)
+	suite.NoError(err)
+	listener, err := createNewListenerFromConnectionString()
+	suite.NoError(err)
+
+	// create test event
+	testEvent := &testEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	// test with a filter on the custom header
+	suite.publishAndReceiveMessage(
+		publishReceiveTest{
+			listener:         listener,
+			publisher:        publisher,
+			listenerOptions:  []ListenerOption{SetSubscriptionName("subName3")},
+			publisherOptions: []PublisherOption{SetMessageID("hi")},
+			filter:           &servicebus.SQLFilter{Expression: "testHeader LIKE 'key'"},
+			shouldSucceed:    true,
+		},
+		testEvent,
+	)
+	// test with a filter on the custom header but wrong value
+	suite.publishAndReceiveMessage(
+		publishReceiveTest{
+			listener:        listener,
+			publisher:       publisher,
+			listenerOptions: []ListenerOption{SetSubscriptionName("subName3")},
+			filter:          servicebus.SQLFilter{Expression: "testHeader LIKE 'notkey'"},
+			shouldSucceed:   false,
+		},
+		testEvent,
+	)
+}
+
 func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceiveTest, event interface{}) {
 	ctx := context.Background()
 	gotMessage := make(chan bool)
