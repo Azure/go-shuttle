@@ -1,6 +1,29 @@
 # azure-pub-sub
 This golang library serves as a wrapper around the [azure-service-bus-go SDK](https://github.com/Azure/azure-service-bus-go) to facilitate the implementation of a pub-sub system on Azure using service bus.
 
+## Conventions & Assumptions
+Currently we are assuming that both the publisher and the listener will both use this azure-pub-sub library.
+This is because the listener assumes that the struct type of the body is in the header of the message it receives.
+This addition is done automatically when using the publisher of this library via reflection.
+This is done so that the library user can easily filter out certain event types.
+Specifically this is what the message should look like:
+
+```
+{
+  data: <some data>,
+  userProperties: {
+     type: <name of the struct type> // used for subscription filters
+  }
+}
+```
+This is enforced by the fact that the listener handler's function signature expects the messageType to be there:
+```
+type Handle func(ctx context.Context, message, messageType string) error
+```
+If the `type` field from `userProperties` is missing, the listener handler will automatically throw an error saying it is not supported.
+
+In the future we will support raw listener handlers that don't have this restriction to allow for more publisher flexibility.
+
 ## Listener Examples
 ### Initializing a listener with a Service Bus connection string
 ```
