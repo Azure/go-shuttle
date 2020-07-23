@@ -199,7 +199,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceive
 }
 
 func checkResultHandler(publishedMsg string, ch chan<- bool) Handle {
-	return func(ctx context.Context, message string) error {
+	return func(ctx context.Context, message string, messageType string) error {
 		if publishedMsg != message {
 			ch <- false
 			return errors.New("published message and received message are different")
