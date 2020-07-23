@@ -106,7 +106,7 @@ func createNewListenerFromConnectionString() (*Listener, error) {
 }
 
 func createTestHandler() Handle {
-	return func(ctx context.Context, message string) error {
+	return func(ctx context.Context, message string, messageType string) error {
 		return nil
 	}
 }
