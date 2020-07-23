@@ -130,12 +130,18 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
 		func(ctx context.Context, message *servicebus.Message) error {
-			err := handle(ctx, string(message.Data), message.UserProperties["type"].(string))
-			if err != nil {
-				err = message.Abandon(ctx)
-				return err
+			if val, ok := message.UserProperties["type"]; ok {
+				err := handle(ctx, string(message.Data), val.(string))
+				if err != nil {
+					err = message.Abandon(ctx)
+					return err
+				}
+				return message.Complete(ctx)
+			} else {
+				// TODO(keikumata): when logging is setup log a warning here
+				// type field in the service bus message's UserProperties should not be empty
+				return message.Abandon(ctx)
 			}
-			return message.Complete(ctx)
 		},
 	))
 	l.listenerHandle = listenerHandle
