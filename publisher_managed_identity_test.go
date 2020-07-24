@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"time"
 )
 
 // TestCreatePublisherWithManagedIdentityWithNewTopic tests the creation of a publisher for a new topic and managed identity
@@ -69,5 +70,21 @@ func createNewPublisherWithManagedIdentityUsingCustomHeader(topicName, headerNam
 		topicName,
 		PublisherWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID),
 		SetDefaultHeader(headerName, msgKey),
+	)
+}
+
+func createNewPublisherWithManagedIdentityUsingDuplicateDetection(topicName string, window *time.Duration) (*Publisher, error) {
+	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
+	if serviceBusNamespaceName == "" {
+		return nil, errors.New("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
+	}
+
+	// if managedIdentityClientID is empty then library will assume system assigned managed identity
+	managedIdentityClientID := os.Getenv("MANAGED_IDENTITY_CLIENT_ID")
+
+	return NewPublisher(
+		topicName,
+		PublisherWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID),
+		SetDuplicateDetection(window),
 	)
 }
