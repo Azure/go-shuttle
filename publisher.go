@@ -13,10 +13,11 @@ import (
 
 // Publisher is a struct to contain service bus entities relevant to publishing to a topic
 type Publisher struct {
-	namespace   *servicebus.Namespace
-	topicSender *servicebus.Sender
-	headers     map[string]string
-	sbMsg       *servicebus.Message
+	namespace              *servicebus.Namespace
+	topicSender            *servicebus.Sender
+	headers                map[string]string
+	topicManagementOptions []servicebus.TopicManagementOption
+	sbMsg                  *servicebus.Message
 }
 
 // PublisherManagementOption provides structure for configuring a new Publisher
@@ -48,13 +49,33 @@ func SetDefaultHeader(headerName, msgKey string) PublisherManagementOption {
 	}
 }
 
+// SetDuplicateDetection guarantees that the topic will have exactly-once delivery over a user-defined span of time.
+// Defaults to 30 seconds with a maximum of 7 days
+func SetDuplicateDetection(window *time.Duration) PublisherManagementOption {
+	return func(p *Publisher) error {
+		p.topicManagementOptions = append(p.topicManagementOptions, servicebus.TopicWithDuplicateDetection(window))
+		return nil
+	}
+}
+
 // SetMessageDelay schedules a message in the future
 func SetMessageDelay(delay time.Duration) PublisherOption {
 	return func(p *Publisher) error {
 		if p.sbMsg == nil {
-			return errors.New("Cannot assign message delay")
+			return errors.New("cannot assign message delay")
 		}
 		p.sbMsg.ScheduleAt(time.Now().Add(delay))
+		return nil
+	}
+}
+
+// SetMessageID sets the messageID of the message. Used for duplication detection
+func SetMessageID(messageID string) PublisherOption {
+	return func(p *Publisher) error {
+		if p.sbMsg == nil {
+			return errors.New("cannot assign message ID")
+		}
+		p.sbMsg.ID = messageID
 		return nil
 	}
 }
@@ -72,7 +93,7 @@ func NewPublisher(topicName string, opts ...PublisherManagementOption) (*Publish
 			return nil, err
 		}
 	}
-	topicEntity, err := ensureTopic(context.Background(), topicName, publisher.namespace)
+	topicEntity, err := ensureTopic(context.Background(), topicName, publisher.namespace, publisher.topicManagementOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get topic: %w", err)
 	}
@@ -127,12 +148,12 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Publis
 	return nil
 }
 
-func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespace) (*servicebus.TopicEntity, error) {
+func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespace, opts ...servicebus.TopicManagementOption) (*servicebus.TopicEntity, error) {
 	tm := namespace.NewTopicManager()
 	te, err := tm.Get(ctx, name)
 	if err == nil {
 		return te, nil
 	}
 
-	return tm.Put(ctx, name)
+	return tm.Put(ctx, name, opts...)
 }

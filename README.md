@@ -80,27 +80,38 @@ publisher, _ := pubsub.NewPublisher(
 )
 ```
 
+### Initializing a publisher with duplication detection
+Duplication detection cannot be enabled on Service Bus topics that already exist.
+Please think about what capabilities you would like on the Service Bus topic up front at creation time.
+
+Note that you need to use this [feature](https://docs.microsoft.com/en-us/azure/service-bus-messaging/duplicate-detection) in conjunction with setting a messageID on each message you send.
+Refer to the [Publishing a message with a message ID section](#publishing-a-message-with-a-message-id) on how to do this.
+
+```
+topicName := "topic"
+dupeDetectionWindow := 5 * time.Minute
+publisher, _ := pubsub.NewPublisher(
+    topicName,
+    pubsub.PublisherWithConnectionString(serviceBusConnectionString),
+    pubsub.SetDuplicateDetection(&dupeDetectionWindow), // if window is null then a default of 30 seconds is used
+)
+```
+
 ### Publishing a message
 ```
-cmd := &ClusterStatusChanged{
-    Event: Event{Id: uuidVal},
-    Command: Command{
-        Id:            uuid.New(),
-        DestinationId: "destination",
-    },
+cmd := &SomethingHappenedEvent{
+    Id: uuid.New(),
+    SomeStringField: "value",
 }
-// by default the msg header will have "type" == "ClusterStatusChanged"
+// by default the msg header will have "type" == "SomethingHappenedEvent"
 err := publisher.Publish(ctx, cmd)
 ```
 
 ### Publishing a message with a delay
 ```
-cmd := &ClusterStatusChanged{
-    Event: Event{Id: uuidVal},
-    Command: Command{
-        Id:            uuid.New(),
-        DestinationId: "destination",
-    },
+cmd := &SomethingHappenedEvent{
+    Id: uuid.New(),
+    SomeStringField: "value",
 }
 err := publisher.Publish(
     ctx,
@@ -108,3 +119,20 @@ err := publisher.Publish(
     pubsub.SetMessageDelay(5*time.Second),
 )
 ```
+
+### Publishing a message with a message ID
+The duplication detection feature requires messages to have a messageID, as messageID is the key ServiceBus will de-dupe on.
+Refer to the [Initializing a publisher with duplication detection section](#initializing-a-publisher-with-duplication-detection).
+```
+cmd := &SomethingHappenedEvent{
+    Id: uuid.New(),
+    SomeStringField: "value",
+}
+messageID := "someMessageIDWithBusinessContext"
+err := publisher.Publish(
+    ctx,
+    cmd,
+    pubsub.SetMessageID(messageID),
+)
+```
+

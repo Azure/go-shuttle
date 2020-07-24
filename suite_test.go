@@ -42,11 +42,12 @@ func (suite *serviceBusSuite) SetupSuite() {
 }
 
 type publishReceiveTest struct {
+	topicName        string
 	listener         *Listener
 	publisher        *Publisher
-	filter           servicebus.FilterDescriber
 	listenerOptions  []ListenerOption
 	publisherOptions []PublisherOption
+	publishCount     *int
 	shouldSucceed    bool
 }
 
@@ -59,19 +60,20 @@ func (suite *serviceBusSuite) TestPublishAndListenWithDefault() {
 	suite.NoError(err)
 
 	// create test event
-	testEvent := &testEvent{
+	event := &testEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
 	}
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
+			topicName:       suite.TopicName,
 			listener:        listener,
 			publisher:       publisher,
 			listenerOptions: []ListenerOption{SetSubscriptionName("subName1")},
 			shouldSucceed:   true,
 		},
-		testEvent,
+		event,
 	)
 }
 
@@ -84,7 +86,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithTypeFilter() {
 	suite.NoError(err)
 
 	// create test event
-	testEvent := &testEvent{
+	event := &testEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
@@ -92,24 +94,30 @@ func (suite *serviceBusSuite) TestPublishAndListenWithTypeFilter() {
 	// test with a filter on the event type
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName2")},
-			filter:          servicebus.SQLFilter{Expression: "type LIKE 'testEvent'"},
-			shouldSucceed:   true,
+			topicName: suite.TopicName,
+			listener:  listener,
+			publisher: publisher,
+			listenerOptions: []ListenerOption{
+				SetSubscriptionName("subName2"),
+				SetSubscriptionFilter("testFilter", servicebus.SQLFilter{Expression: "type LIKE 'testEvent'"}),
+			},
+			shouldSucceed: true,
 		},
-		testEvent,
+		event,
 	)
 	// test with a filter on the the wrong type - should fail
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName2")},
-			filter:          &servicebus.SQLFilter{Expression: "type LIKE 'testEvent2'"},
-			shouldSucceed:   false,
+			topicName: suite.TopicName,
+			listener:  listener,
+			publisher: publisher,
+			listenerOptions: []ListenerOption{
+				SetSubscriptionName("subName2"),
+				SetSubscriptionFilter("testFilter", servicebus.SQLFilter{Expression: "type LIKE 'testEvent2'"}),
+			},
+			shouldSucceed: false,
 		},
-		testEvent,
+		event,
 	)
 }
 
@@ -122,7 +130,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithCustomHeaderFilter() {
 	suite.NoError(err)
 
 	// create test event
-	testEvent := &testEvent{
+	event := &testEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
@@ -130,24 +138,81 @@ func (suite *serviceBusSuite) TestPublishAndListenWithCustomHeaderFilter() {
 	// test with a filter on the custom header
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName3")},
-			filter:          &servicebus.SQLFilter{Expression: "testHeader LIKE 'key'"},
-			shouldSucceed:   true,
+			topicName: suite.TopicName,
+			listener:  listener,
+			publisher: publisher,
+			listenerOptions: []ListenerOption{
+				SetSubscriptionName("subName3"),
+				SetSubscriptionFilter("testFilter", servicebus.SQLFilter{Expression: "testHeader LIKE 'key'"}),
+			},
+			shouldSucceed: true,
 		},
-		testEvent,
+		event,
 	)
 	// test with a filter on the custom header but wrong value
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
+			topicName: suite.TopicName,
+			listener:  listener,
+			publisher: publisher,
+			listenerOptions: []ListenerOption{
+				SetSubscriptionName("subName3"),
+				SetSubscriptionFilter("testFilter", servicebus.SQLFilter{Expression: "testHeader LIKE 'notkey'"}),
+			},
+			shouldSucceed: false,
+		},
+		event,
+	)
+}
+
+// TestPublishAndListenWithCustomHeaderFilter tests both the publisher and listener with a customer filter
+func (suite *serviceBusSuite) TestPublishAndListenWithDuplicateDetection() {
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	dupeDetectionTopicName := testTopicName + "dupedetection" + suite.TagID
+	dupeDetectionWindow := 5 * time.Minute
+	publisher, err := createNewPublisherWithDuplicateDetection(dupeDetectionTopicName, &dupeDetectionWindow)
+	suite.NoError(err)
+	listener, err := createNewListenerFromConnectionString()
+	suite.NoError(err)
+
+	// create test event
+	event := &testEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	// test with duplicate detection
+	publishCount := 2
+	suite.publishAndReceiveMessage(
+		publishReceiveTest{
+			topicName:        dupeDetectionTopicName,
+			listener:         listener,
+			publisher:        publisher,
+			listenerOptions:  []ListenerOption{SetSubscriptionName("subName4")},
+			publisherOptions: []PublisherOption{SetMessageID("hi")},
+			publishCount:     &publishCount,
+			shouldSucceed:    true,
+		},
+		event,
+	)
+
+	// create another test event. if dupe detection didn't work then this test will fail because the listener will
+	// receive the first event and not the second event
+	event2 := &testEvent{
+		ID:    2,
+		Key:   "key2",
+		Value: "value2",
+	}
+	suite.publishAndReceiveMessage(
+		publishReceiveTest{
+			topicName:       dupeDetectionTopicName,
 			listener:        listener,
 			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName3")},
-			filter:          servicebus.SQLFilter{Expression: "testHeader LIKE 'notkey'"},
-			shouldSucceed:   false,
+			listenerOptions: []ListenerOption{SetSubscriptionName("subName4")},
+			shouldSucceed:   true,
 		},
-		testEvent,
+		event2,
 	)
 }
 
@@ -159,30 +224,27 @@ func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceive
 	go func() {
 		eventJSON, err := json.Marshal(event)
 		suite.NoError(err)
-		var listenerOpts []ListenerOption
-		if testConfig.filter == nil {
-			listenerOpts = testConfig.listenerOptions
-		} else {
-			listenerOpts = append(
-				testConfig.listenerOptions,
-				SetSubscriptionFilter("testFilter", testConfig.filter),
-			)
-		}
 		testConfig.listener.Listen(
 			ctx,
 			checkResultHandler(string(eventJSON), gotMessage),
-			suite.TopicName,
-			listenerOpts...,
+			testConfig.topicName,
+			testConfig.listenerOptions...,
 		)
 	}()
 	// publish after the listener is setup
 	time.Sleep(5 * time.Second)
-	err := testConfig.publisher.Publish(
-		ctx,
-		event,
-		testConfig.publisherOptions...,
-	)
-	suite.NoError(err)
+	publishCount := 1
+	if testConfig.publishCount != nil {
+		publishCount = *testConfig.publishCount
+	}
+	for i := 0; i < publishCount; i++ {
+		err := testConfig.publisher.Publish(
+			ctx,
+			event,
+			testConfig.publisherOptions...,
+		)
+		suite.NoError(err)
+	}
 
 	select {
 	case isSuccessful := <-gotMessage:
@@ -194,7 +256,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceive
 			suite.FailNow("Test didn't finish on time")
 		}
 	}
-	err = testConfig.listener.Close(ctx)
+	err := testConfig.listener.Close(ctx)
 	suite.NoError(err)
 }
 
