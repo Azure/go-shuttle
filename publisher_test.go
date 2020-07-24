@@ -65,7 +65,7 @@ func createNewPublisherWithConnectionStringUsingCustomHeader(topicName, headerNa
 	)
 }
 
-func createNewPublisherWithDuplicateDetection(topicName string, window *time.Duration) (*Publisher, error) {
+func createNewPublisherWithConnectionStringUsingDuplicateDetection(topicName string, window *time.Duration) (*Publisher, error) {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		return nil, errors.New("environment variable SERVICEBUS_CONNECTION_STRING was not set")

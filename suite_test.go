@@ -60,6 +60,46 @@ func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDefau
 	listener, err := createNewListenerWithConnectionString()
 	suite.NoError(err)
 
+	suite.defaultTest(publisher, listener)
+}
+
+// TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
+func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingTypeFilter() {
+	// this assumes that the testTopic was created at the start of the test suite
+	publisher, err := createNewPublisherWithConnectionString(suite.TopicName)
+	suite.NoError(err)
+	listener, err := createNewListenerWithConnectionString()
+	suite.NoError(err)
+
+	suite.typeFilterTest(publisher, listener)
+}
+
+// TestPublishAndListenWithConnectionStringUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
+func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingCustomHeaderFilter() {
+	// this assumes that the testTopic was created at the start of the test suite
+	publisher, err := createNewPublisherWithConnectionStringUsingCustomHeader(suite.TopicName, "testHeader", "Key")
+	suite.NoError(err)
+	listener, err := createNewListenerWithConnectionString()
+	suite.NoError(err)
+
+	suite.customHeaderFilterTest(publisher, listener)
+}
+
+// TestPublishAndListenWithConnectionStringUsingDuplicateDetection tests both the publisher and listener with duplicate detection
+func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDuplicateDetection() {
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	dupeDetectionTopicName := testTopicName + "dupedetection" + suite.TagID
+	dupeDetectionWindow := 5 * time.Minute
+	publisher, err := createNewPublisherWithConnectionStringUsingDuplicateDetection(dupeDetectionTopicName, &dupeDetectionWindow)
+	suite.NoError(err)
+	listener, err := createNewListenerWithConnectionString()
+	suite.NoError(err)
+
+	suite.duplicateDetectionTest(publisher, listener, dupeDetectionTopicName)
+}
+
+func (suite *serviceBusSuite) defaultTest(publisher *Publisher, listener *Listener) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -78,14 +118,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDefau
 	)
 }
 
-// TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
-func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingTypeFilter() {
-	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherWithConnectionString(suite.TopicName)
-	suite.NoError(err)
-	listener, err := createNewListenerWithConnectionString()
-	suite.NoError(err)
-
+func (suite *serviceBusSuite) typeFilterTest(publisher *Publisher, listener *Listener) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -122,14 +155,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingTypeF
 	)
 }
 
-// TestPublishAndListenWithConnectionStringUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
-func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingCustomHeaderFilter() {
-	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherWithConnectionStringUsingCustomHeader(suite.TopicName, "testHeader", "Key")
-	suite.NoError(err)
-	listener, err := createNewListenerWithConnectionString()
-	suite.NoError(err)
-
+func (suite *serviceBusSuite) customHeaderFilterTest(publisher *Publisher, listener *Listener) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -166,17 +192,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingCusto
 	)
 }
 
-// TestPublishAndListenWithConnectionStringUsingDuplicateDetection tests both the publisher and listener with duplicate detection
-func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDuplicateDetection() {
-	// creating a separate topic that was not created at the beginning of the test suite
-	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
-	dupeDetectionTopicName := testTopicName + "dupedetection" + suite.TagID
-	dupeDetectionWindow := 5 * time.Minute
-	publisher, err := createNewPublisherWithDuplicateDetection(dupeDetectionTopicName, &dupeDetectionWindow)
-	suite.NoError(err)
-	listener, err := createNewListenerWithConnectionString()
-	suite.NoError(err)
-
+func (suite *serviceBusSuite) duplicateDetectionTest(publisher *Publisher, listener *Listener, topicName string) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -187,7 +203,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDupli
 	publishCount := 2
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			topicName:        dupeDetectionTopicName,
+			topicName:        topicName,
 			listener:         listener,
 			publisher:        publisher,
 			listenerOptions:  []ListenerOption{SetSubscriptionName("subName4")},
@@ -207,7 +223,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDupli
 	}
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			topicName:       dupeDetectionTopicName,
+			topicName:       topicName,
 			listener:        listener,
 			publisher:       publisher,
 			listenerOptions: []ListenerOption{SetSubscriptionName("subName4")},

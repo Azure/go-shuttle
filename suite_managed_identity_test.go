@@ -3,7 +3,7 @@
 package pubsub
 
 import (
-	servicebus "github.com/Azure/azure-service-bus-go"
+	"time"
 )
 
 // TestPublishAndListenWithManagedIdentityUsingDefault tests both the publisher and listener with default configurations
@@ -14,21 +14,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingDefaul
 	listener, err := createNewListenerWithManagedIdentity()
 	suite.NoError(err)
 
-	// create test event
-	testEvent := &testEvent{
-		ID:    1,
-		Key:   "key",
-		Value: "value",
-	}
-	suite.publishAndReceiveMessage(
-		publishReceiveTest{
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName1")},
-			shouldSucceed:   true,
-		},
-		testEvent,
-	)
+	suite.defaultTest(publisher, listener)
 }
 
 // TestPublishAndListenWithManagedIdentityUsingTypeFilter tests both the publisher and listener with a filter on the event type
@@ -39,34 +25,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingTypeFi
 	listener, err := createNewListenerWithManagedIdentity()
 	suite.NoError(err)
 
-	// create test event
-	testEvent := &testEvent{
-		ID:    1,
-		Key:   "key",
-		Value: "value",
-	}
-	// test with a filter on the event type
-	suite.publishAndReceiveMessage(
-		publishReceiveTest{
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName2")},
-			filter:          servicebus.SQLFilter{Expression: "type LIKE 'testEvent'"},
-			shouldSucceed:   true,
-		},
-		testEvent,
-	)
-	// test with a filter on the the wrong type - should fail
-	suite.publishAndReceiveMessage(
-		publishReceiveTest{
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName2")},
-			filter:          &servicebus.SQLFilter{Expression: "type LIKE 'testEvent2'"},
-			shouldSucceed:   false,
-		},
-		testEvent,
-	)
+	suite.typeFilterTest(publisher, listener)
 }
 
 
@@ -78,32 +37,19 @@ func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingCustom
 	listener, err := createNewListenerWithManagedIdentity()
 	suite.NoError(err)
 
-	// create test event
-	testEvent := &testEvent{
-		ID:    1,
-		Key:   "key",
-		Value: "value",
-	}
-	// test with a filter on the custom header
-	suite.publishAndReceiveMessage(
-		publishReceiveTest{
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName3")},
-			filter:          &servicebus.SQLFilter{Expression: "testHeader LIKE 'key'"},
-			shouldSucceed:   true,
-		},
-		testEvent,
-	)
-	// test with a filter on the custom header but wrong value
-	suite.publishAndReceiveMessage(
-		publishReceiveTest{
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName3")},
-			filter:          servicebus.SQLFilter{Expression: "testHeader LIKE 'notkey'"},
-			shouldSucceed:   false,
-		},
-		testEvent,
-	)
+	suite.customHeaderFilterTest(publisher, listener)
+}
+
+// TestPublishAndListenWithConnectionStringUsingDuplicateDetection tests both the publisher and listener with duplicate detection
+func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingDuplicateDetection() {
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	dupeDetectionTopicName := testTopicName + "dupedetection-managedidentity" + suite.TagID
+	dupeDetectionWindow := 5 * time.Minute
+	publisher, err := createNewPublisherWithManagedIdentityUsingDuplicateDetection(dupeDetectionTopicName, &dupeDetectionWindow)
+	suite.NoError(err)
+	listener, err := createNewListenerWithConnectionString()
+	suite.NoError(err)
+
+	suite.duplicateDetectionTest(publisher, listener, dupeDetectionTopicName)
 }
