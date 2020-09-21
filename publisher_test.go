@@ -8,9 +8,9 @@ import (
 )
 
 // TestCreatePublisherFromConnectionStringWithNewTopic tests the creation of a publisher for a new topic and a connection string
-func (suite *serviceBusSuite) TestCreatePublisherFromConnectionStringWithNewTopic() {
+func (suite *serviceBusSuite) TestCreatePublisherWithConnectionStringUsingNewTopic() {
 	topicName := "newTopic" + suite.TagID
-	publisher, err := createNewPublisherFromConnectionString(topicName)
+	publisher, err := createNewPublisherWithConnectionString(topicName)
 	if suite.NoError(err) {
 		connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING")
 		suite.Contains(connStr, publisher.namespace.Name)
@@ -28,9 +28,9 @@ func (suite *serviceBusSuite) TestCreatePublisherFromConnectionStringWithNewTopi
 }
 
 // TestCreatePublisherFromConnectionStringWithExistingTopic tests the creation of a publisher for an existing topic and a connection string
-func (suite *serviceBusSuite) TestCreatePublisherFromConnectionStringWithExistingTopic() {
+func (suite *serviceBusSuite) TestCreatePublisherWithConnectionStringUsingExistingTopic() {
 	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherFromConnectionString(suite.TopicName)
+	publisher, err := createNewPublisherWithConnectionString(suite.TopicName)
 	if suite.NoError(err) {
 		connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING")
 		suite.Contains(connStr, publisher.namespace.Name)
@@ -43,7 +43,7 @@ func (suite *serviceBusSuite) TestCreatePublisherFromConnectionStringWithExistin
 	}
 }
 
-func createNewPublisherFromConnectionString(topicName string) (*Publisher, error) {
+func createNewPublisherWithConnectionString(topicName string) (*Publisher, error) {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		return nil, errors.New("environment variable SERVICEBUS_CONNECTION_STRING was not set")
@@ -52,7 +52,7 @@ func createNewPublisherFromConnectionString(topicName string) (*Publisher, error
 	return NewPublisher(topicName, PublisherWithConnectionString(connStr))
 }
 
-func createNewPublisherWithCustomHeader(topicName, headerName, msgKey string) (*Publisher, error) {
+func createNewPublisherWithConnectionStringUsingCustomHeader(topicName, headerName, msgKey string) (*Publisher, error) {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		return nil, errors.New("environment variable SERVICEBUS_CONNECTION_STRING was not set")
@@ -65,7 +65,7 @@ func createNewPublisherWithCustomHeader(topicName, headerName, msgKey string) (*
 	)
 }
 
-func createNewPublisherWithDuplicateDetection(topicName string, window *time.Duration) (*Publisher, error) {
+func createNewPublisherWithConnectionStringUsingDuplicateDetection(topicName string, window *time.Duration) (*Publisher, error) {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		return nil, errors.New("environment variable SERVICEBUS_CONNECTION_STRING was not set")
