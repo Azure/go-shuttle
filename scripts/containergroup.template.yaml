@@ -39,7 +39,7 @@ properties:
         value: ${TEST_SERVICEBUS_RESOURCE_GROUP}
   imageRegistryCredentials: # Credentials to pull a private image
   - server: ${REGISTRY}
-    username: sbtestreg
+    username: ${REGISTRY_USER}
     password: ${REGISTRY_PASSWORD}
   restartPolicy: Never
   osType: Linux
