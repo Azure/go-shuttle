@@ -172,4 +172,8 @@ err := publisher.Publish(
     pubsub.SetMessageID(messageID),
 )
 ```
+## Dev environment and integration tests
 
+1. copy the `.env.template` to a `.env` at the root of the repository
+2. Create a resource group and a service bus namespace
+3. fill in the environment variable in the .env file 

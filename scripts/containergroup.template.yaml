@@ -1,0 +1,45 @@
+name: pubsubtester
+apiVersion: '2019-12-01'
+location: westus2
+identity:
+  type: UserAssigned
+  userAssignedIdentities:
+    "${MANAGED_IDENTITY_ID}": {}
+properties:
+  containers:
+  - name: tester
+    properties:
+      image: ${IMAGE}
+      command:
+      - go
+      - test
+      - -v
+      resources: # Resource requirements of the instance
+        requests:
+          memoryInGB: 2
+          cpu: 2
+      environmentVariables:
+      - name: AZURE_CLIENT_SECRET
+        secureValue: ${AZURE_CLIENT_SECRET}
+      - name: AZURE_SUBSCRIPTION_ID
+        value: ${AZURE_SUBSCRIPTION_ID}
+      - name: AZURE_TENANT_ID
+        value: ${AZURE_TENANT_ID}
+      - name: AZURE_CLIENT_ID
+        value: ${AZURE_CLIENT_ID}
+      - name: SERVICEBUS_CONNECTION_STRING
+        secureValue: ${SERVICEBUS_CONNECTION_STRING}
+      - name: SERVICEBUS_NAMESPACE_NAME
+        value: ${SERVICEBUS_NAMESPACE_NAME}
+      - name: MANAGED_IDENTITY_CLIENT_ID
+        value: ${MANAGED_IDENTITY_CLIENT_ID}
+      - name: TEST_SERVICEBUS_LOCATION
+        value: ${TEST_SERVICEBUS_LOCATION}
+      - name: TEST_SERVICEBUS_RESOURCE_GROUP
+        value: ${TEST_SERVICEBUS_RESOURCE_GROUP}
+  imageRegistryCredentials: # Credentials to pull a private image
+  - server: ${REGISTRY}
+    username: sbtestreg
+    password: ${REGISTRY_PASSWORD}
+  restartPolicy: Never
+  osType: Linux
