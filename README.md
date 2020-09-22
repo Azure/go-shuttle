@@ -175,5 +175,7 @@ err := publisher.Publish(
 ## Dev environment and integration tests
 
 1. copy the `.env.template` to a `.env` at the root of the repository
-2. Create a resource group and a service bus namespace
-3. fill in the environment variable in the .env file 
+2. fill in the environment variable in the .env file 
+3. run `make test-setup`. that will create the necessary azure resources.
+4. run `make build-test-image` and `make push-test-image`. that will build and push the test image to the create private registry
+5. run `make test-aci`
