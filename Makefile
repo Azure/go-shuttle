@@ -18,7 +18,7 @@ push-test-image:
 	docker login -u ${REGISTRY_USER} -p ${REGISTRY_PASSWORD} ${REGISTRY}
 	docker push ${IMAGE}
 
-test-yaml: clean-aci scripts/containergroup.yaml
+test-aci: clean-aci scripts/containergroup.yaml
 	containerId=$$(az container create --file scripts/containergroup.yaml \
 	--resource-group ${TEST_RESOURCE_GROUP} \
 	--verbose \
