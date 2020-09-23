@@ -17,7 +17,7 @@ type serviceBusSuite struct {
 	test.BaseSuite
 	TopicName string
 	Publisher Publisher
-	Listener Listener
+	Listener  Listener
 }
 
 type testEvent struct {

@@ -50,7 +50,6 @@ func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityResourceIDU
 	suite.typeFilterTest(publisher, listener)
 }
 
-
 // TestPublishAndListenWithManagedIdentityUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
 func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingCustomHeaderFilter() {
 	// this assumes that the testTopic was created at the start of the test suite
