@@ -38,6 +38,24 @@ func (suite *serviceBusSuite) TestListenWithDefaultUsingManagedIdentity() {
 	}
 }
 
+func (suite *serviceBusSuite) TestListenWithDefaultUsingManagedIdentityResourceID() {
+	listener, err := createNewListenerWithManagedIdentityResourceID()
+	if suite.NoError(err) {
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+		go func() {
+			time.Sleep(10 * time.Second)
+			cancel()
+		}()
+		err := listener.Listen(
+			ctx,
+			createTestHandler(),
+			suite.TopicName,
+		)
+		suite.True(err == nil || contextCanceledError(err), "listener listen function failed", err.Error())
+		suite.EqualValues(listener.subscriptionEntity.Name, "default")
+	}
+}
+
 func (suite *serviceBusSuite) TestListenWithCustomFilterUsingManagedIdentity() {
 	listener, err := createNewListenerWithManagedIdentity()
 	if suite.NoError(err) {
@@ -66,5 +84,18 @@ func createNewListenerWithManagedIdentity() (*Listener, error) {
 	// if managedIdentityClientID is empty then library will assume system assigned managed identity
 	managedIdentityClientID := os.Getenv("MANAGED_IDENTITY_CLIENT_ID")
 
-	return NewListener(ListenerWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID))
+	return NewListener(ListenerWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID))
 }
+
+func createNewListenerWithManagedIdentityResourceID() (*Listener, error) {
+	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
+	if serviceBusNamespaceName == "" {
+		return nil, errors.New("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
+	}
+
+	// if managedIdentityClientID is empty then library will assume system assigned managed identity
+	managedIdentityResourceID := os.Getenv("MANAGED_IDENTITY_RESOURCE_ID")
+
+	return NewListener(ListenerWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
+}
+
