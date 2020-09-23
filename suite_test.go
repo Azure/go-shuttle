@@ -16,6 +16,8 @@ import (
 type serviceBusSuite struct {
 	test.BaseSuite
 	TopicName string
+	Publisher Publisher
+	Listener  Listener
 }
 
 type testEvent struct {

@@ -17,6 +17,17 @@ func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingDefaul
 	suite.defaultTest(publisher, listener)
 }
 
+// TestPublishAndListenWithManagedIdentityUsingDefault tests both the publisher and listener with default configurations
+func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityResourceIDUsingDefault() {
+	// this assumes that the testTopic was created at the start of the test suite
+	publisher, err := createNewPublisherWithManagedIdentityResourceID(suite.TopicName)
+	suite.NoError(err)
+	listener, err := createNewListenerWithManagedIdentityResourceID()
+	suite.NoError(err)
+
+	suite.defaultTest(publisher, listener)
+}
+
 // TestPublishAndListenWithManagedIdentityUsingTypeFilter tests both the publisher and listener with a filter on the event type
 func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingTypeFilter() {
 	// this assumes that the testTopic was created at the start of the test suite
@@ -28,6 +39,16 @@ func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingTypeFi
 	suite.typeFilterTest(publisher, listener)
 }
 
+// TestPublishAndListenWithManagedIdentityUsingTypeFilter tests both the publisher and listener with a filter on the event type
+func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityResourceIDUsingTypeFilter() {
+	// this assumes that the testTopic was created at the start of the test suite
+	publisher, err := createNewPublisherWithManagedIdentityResourceID(suite.TopicName)
+	suite.NoError(err)
+	listener, err := createNewListenerWithManagedIdentityResourceID()
+	suite.NoError(err)
+
+	suite.typeFilterTest(publisher, listener)
+}
 
 // TestPublishAndListenWithManagedIdentityUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
 func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingCustomHeaderFilter() {

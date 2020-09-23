@@ -46,7 +46,7 @@ MANAGED_IDENTITY_CLIENT_ID=$(az identity create \
 --query clientId \
 -o tsv)
 
-MANAGED_IDENTITY_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourcegroups/${TEST_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${SERVICEBUS_NAMESPACE_NAME}_id"
+MANAGED_IDENTITY_RESOURCE_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourcegroups/${TEST_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${SERVICEBUS_NAMESPACE_NAME}_id"
 
 echo "assign servicebus role to identity"
 az role assignment create \
@@ -58,7 +58,7 @@ az role assignment create \
 echo "adding config to .env"
 DOTENV=$1
 sed -i .bak "s|MANAGED_IDENTITY_CLIENT_ID=.*|MANAGED_IDENTITY_CLIENT_ID=${MANAGED_IDENTITY_CLIENT_ID}|g" ${DOTENV}
-sed -i .bak "s|MANAGED_IDENTITY_ID=.*|MANAGED_IDENTITY_ID=${MANAGED_IDENTITY_ID}|g" ${DOTENV}
+sed -i .bak "s|MANAGED_IDENTITY_RESOURCE_ID=.*|MANAGED_IDENTITY_RESOURCE_ID=${MANAGED_IDENTITY_RESOURCE_ID}|g" ${DOTENV}
 sed -i .bak "s|REGISTRY_USER=.*|REGISTRY_USER=${REGISTRY_USER}|g" ${DOTENV}
 sed -i .bak "s|REGISTRY_PASSWORD=.*|REGISTRY_PASSWORD=${REGISTRY_PASSWORD}|g" ${DOTENV}
 sed -i .bak "s|REGISTRY=.*|REGISTRY=${REGISTRY}|g" ${DOTENV}

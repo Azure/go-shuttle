@@ -35,13 +35,17 @@ To configure using managed identity with Service Bus, refer to this [link](https
 Note if you see errors for certain operation, you may have an RBAC issue. Refer to the built-in RBAC roles [here](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity#built-in-rbac-roles-for-azure-service-bus).
 #### Using user assigned managed identity
 ```
-listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID))
+listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID))
+```
+Or using the resource id:
+```
+listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
 ```
 
 #### Using system assigned managed identity
 ```
 // keep managed identity client ID empty to default using system assigned managed identity
-listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentity(serviceBusNamespaceName, ""))
+listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityClientID(serviceBusNamespaceName, ""))
 ```
 
 ### Subscribe to a topic
@@ -87,23 +91,43 @@ publisher, _ := pubsub.NewPublisher(
 To configure using managed identity with Service Bus, refer to this [link](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity).
 Note if you see errors for certain operation, you may have an RBAC issue. Refer to the built-in RBAC roles [here](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity#built-in-rbac-roles-for-azure-service-bus).
 #### Using user assigned managed identity
+Using Identity ClientID
 ```
 topicName := "topic"
 publisher, _ := pubsub.NewPublisher(
     topicName,
-    pubsub.PublisherWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID),
+    pubsub.PublisherWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID),
+)
+```
+Using Identity ResourceID
+```
+topicName := "topic"
+publisher, _ := pubsub.NewPublisher(
+    topicName,
+    pubsub.PublisherWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID),
 )
 ```
 
 #### Using system assigned managed identity
+Using Identity ClientID
 ```
 // keep managed identity client ID empty to default using system assigned managed identity
 topicName := "topic"
 publisher, _ := pubsub.NewPublisher(
     topicName,
-    pubsub.PublisherWithManagedIdentity(serviceBusNamespaceName, ""),
+    pubsub.PublisherWithManagedIdentityClientID(serviceBusNamespaceName, identityClientID),
 )
 ```
+Using Identity ResourceID
+```
+// keep managed identity client ID empty to default using system assigned managed identity
+topicName := "topic"
+publisher, _ := pubsub.NewPublisher(
+    topicName,
+    pubsub.PublisherWithManagedIdentityResourceID(serviceBusNamespaceName, identityResourceID),
+)
+```
+
 
 
 ### Initializing a publisher with a header
