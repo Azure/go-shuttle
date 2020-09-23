@@ -4,7 +4,7 @@ location: westus2
 identity:
   type: UserAssigned
   userAssignedIdentities:
-    "${MANAGED_IDENTITY_ID}": {}
+    "${MANAGED_IDENTITY_RESOURCE_ID}": {}
 properties:
   containers:
   - name: tester
