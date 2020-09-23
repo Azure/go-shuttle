@@ -24,6 +24,7 @@ type (
 	TokenProviderConfiguration struct {
 		TenantID            string
 		ClientID            string
+		ResourceID			string
 		ClientSecret        string
 		CertificatePath     string
 		CertificatePassword string
@@ -88,11 +89,28 @@ func JWTProviderWithClientCertificate(clientID, certificatePath, certificatePass
 	}
 }
 
-// JWTProviderWithManagedIdentity configures the TokenProvider using managed identity
-// - attempt to authenticate using managed identity. If clientID is supplied then it will use that
-//   as the clientID of the user assigned managed identity. Otherwise it will default to the system assigned managed
+// JWTProviderWithManagedIdentityResourceID configures the TokenProvider using managed identity
+// - attempt to authenticate using managed identity resourceID. Otherwise it will default to the system assigned managed
 //   identity
-func JWTProviderWithManagedIdentity(clientID, environment string) JWTProviderOption {
+func JWTProviderWithManagedIdentityResourceID(resourceID, environment string) JWTProviderOption {
+	return func(config *TokenProviderConfiguration) error {
+		config.ResourceID = resourceID
+
+		if config.Env == nil {
+			env, err := azureEnvFromEnvironment(environment)
+			if err != nil {
+				return err
+			}
+			config.Env = env
+		}
+		return nil
+	}
+}
+
+// JWTProviderWithManagedIdentityClientID configures the TokenProvider using managed identity clientID
+// - attempt to authenticate using managed identity clientID. Otherwise it will default to the system assigned managed
+//   identity
+func JWTProviderWithManagedIdentityClientID(clientID, environment string) JWTProviderOption {
 	return func(config *TokenProviderConfiguration) error {
 		config.ClientID = clientID
 
@@ -105,6 +123,15 @@ func JWTProviderWithManagedIdentity(clientID, environment string) JWTProviderOpt
 		}
 		return nil
 	}
+}
+
+// JWTProviderWithManagedIdentity configures the TokenProvider using managed identity
+// - attempt to authenticate using managed identity. If clientID is supplied then it will use that
+//   as the clientID of the user assigned managed identity. Otherwise it will default to the system assigned managed
+//   identity
+// Deprecated use JWTProviderWithManagedIdentityClientID
+func JWTProviderWithManagedIdentity(clientID, environment string) JWTProviderOption {
+	return JWTProviderWithManagedIdentityClientID(clientID, environment)
 }
 
 // JWTProviderWithResourceURI configures the token provider to use a specific eventhubResourceURI URI
@@ -201,10 +228,13 @@ func (c *TokenProviderConfiguration) NewServicePrincipalToken() (*adal.ServicePr
 }
 
 func (c *TokenProviderConfiguration) getTokenProvider(msiEndpoint string) (*adal.ServicePrincipalToken, error){
-	if c.ClientID == "" {
-		return adal.NewServicePrincipalTokenFromMSI(msiEndpoint, c.ResourceURI)
+	if c.ClientID != "" {
+		return adal.NewServicePrincipalTokenFromMSIWithUserAssignedID(msiEndpoint, c.ResourceURI, c.ClientID)
 	}
-	return adal.NewServicePrincipalTokenFromMSIWithUserAssignedID(msiEndpoint, c.ResourceURI, c.ClientID)
+	if c.ResourceID != "" {
+		return adal.NewServicePrincipalTokenFromMSIWithIdentityResourceID(msiEndpoint, c.ResourceURI, c.ResourceID)
+	}
+	return adal.NewServicePrincipalTokenFromMSI(msiEndpoint, c.ResourceURI)
 }
 
 // GetToken gets a CBS JWT

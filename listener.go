@@ -46,13 +46,33 @@ func ListenerWithConnectionString(connStr string) ListenerManagementOption {
 	}
 }
 
-// ListenerWithManagedIdentity configures a listener with the attached managed identity and the Service bus resource name
+// Deprecated use ListenerWithManagedIdentityClientID instead
 func ListenerWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID string) ListenerManagementOption {
+	return ListenerWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID)
+}
+
+// ListenerWithManagedIdentityClientID configures a listener with the attached managed identity and the Service bus resource name
+func ListenerWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID string) ListenerManagementOption {
 	return func(l *Listener) error {
 		if serviceBusNamespaceName == "" {
 			return errors.New("no Service Bus namespace provided")
 		}
-		ns, err := getNamespace(servicebusinternal.NamespaceWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID))
+		ns, err := getNamespace(servicebusinternal.NamespaceWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID))
+		if err != nil {
+			return err
+		}
+		l.namespace = ns
+		return nil
+	}
+}
+
+// ListenerWithManagedIdentityResourceID configures a listener with the attached managed identity and the Service bus resource name
+func ListenerWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID string) ListenerManagementOption {
+	return func(l *Listener) error {
+		if serviceBusNamespaceName == "" {
+			return errors.New("no Service Bus namespace provided")
+		}
+		ns, err := getNamespace(servicebusinternal.NamespaceWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
 		if err != nil {
 			return err
 		}
