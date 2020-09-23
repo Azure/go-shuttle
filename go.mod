@@ -6,9 +6,9 @@ require (
 	github.com/Azure/azure-amqp-common-go/v3 v3.0.0
 	github.com/Azure/azure-sdk-for-go v37.1.0+incompatible
 	github.com/Azure/azure-service-bus-go v0.10.1
-	github.com/Azure/go-autorest/autorest v0.9.3
-	github.com/Azure/go-autorest/autorest/adal v0.8.1
+	github.com/Azure/go-autorest/autorest v0.11.6
+	github.com/Azure/go-autorest/autorest/adal v0.9.4
 	github.com/joho/godotenv v1.3.0
 	github.com/stretchr/testify v1.3.0
-	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 )
