@@ -24,7 +24,7 @@ type (
 	TokenProviderConfiguration struct {
 		TenantID            string
 		ClientID            string
-		ResourceID			string
+		ResourceID          string
 		ClientSecret        string
 		CertificatePath     string
 		CertificatePassword string
@@ -227,7 +227,7 @@ func (c *TokenProviderConfiguration) NewServicePrincipalToken() (*adal.ServicePr
 	return spToken, nil
 }
 
-func (c *TokenProviderConfiguration) getTokenProvider(msiEndpoint string) (*adal.ServicePrincipalToken, error){
+func (c *TokenProviderConfiguration) getTokenProvider(msiEndpoint string) (*adal.ServicePrincipalToken, error) {
 	if c.ClientID != "" {
 		return adal.NewServicePrincipalTokenFromMSIWithUserAssignedID(msiEndpoint, c.ResourceURI, c.ClientID)
 	}
