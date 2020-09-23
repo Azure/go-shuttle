@@ -98,4 +98,3 @@ func createNewListenerWithManagedIdentityResourceID() (*Listener, error) {
 
 	return NewListener(ListenerWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
 }
-

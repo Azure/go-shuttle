@@ -15,6 +15,7 @@ const (
 )
 
 var errorOption func(h *servicebussdk.Namespace) error
+
 func newErrorOption(err error) servicebussdk.NamespaceOption {
 	return func(ns *servicebussdk.Namespace) error { return err }
 }
@@ -22,15 +23,15 @@ func newErrorOption(err error) servicebussdk.NamespaceOption {
 // NamespaceWithManagedIdentity is a custom NamespaceOption to instantiate a Service Bus namespace client with
 // managed identity resource id
 func NamespaceWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID string) servicebussdk.NamespaceOption {
-		provider, err := aad.NewJWTProvider(
-			aad.JWTProviderWithManagedIdentityResourceID(managedIdentityResourceID, ""),
-			aad.JWTProviderWithResourceURI(serviceBusResourceURI),
-		)
-		if err != nil {
-			// TODO: make this fail at creation of the option, instead of runtime.
-			return newErrorOption(err)
-		}
-		return NamespaceWithTokenProvider(serviceBusNamespaceName, provider)
+	provider, err := aad.NewJWTProvider(
+		aad.JWTProviderWithManagedIdentityResourceID(managedIdentityResourceID, ""),
+		aad.JWTProviderWithResourceURI(serviceBusResourceURI),
+	)
+	if err != nil {
+		// TODO: make this fail at creation of the option, instead of runtime.
+		return newErrorOption(err)
+	}
+	return NamespaceWithTokenProvider(serviceBusNamespaceName, provider)
 }
 
 // NamespaceWithManagedIdentityClientID is a custom NamespaceOption to instantiate a Service Bus namespace client with
