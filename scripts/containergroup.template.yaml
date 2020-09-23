@@ -33,10 +33,12 @@ properties:
         value: ${SERVICEBUS_NAMESPACE_NAME}
       - name: MANAGED_IDENTITY_CLIENT_ID
         value: ${MANAGED_IDENTITY_CLIENT_ID}
-      - name: TEST_SERVICEBUS_LOCATION
-        value: ${TEST_SERVICEBUS_LOCATION}
-      - name: TEST_SERVICEBUS_RESOURCE_GROUP
-        value: ${TEST_SERVICEBUS_RESOURCE_GROUP}
+      - name: MANAGED_IDENTITY_RESOURCE_ID
+        value: ${MANAGED_IDENTITY_RESOURCE_ID}
+      - name: TEST_LOCATION
+        value: ${TEST_LOCATION}
+      - name: TEST_RESOURCE_GROUP
+        value: ${TEST_RESOURCE_GROUP}
   imageRegistryCredentials: # Credentials to pull a private image
   - server: ${REGISTRY}
     username: ${REGISTRY_USER}

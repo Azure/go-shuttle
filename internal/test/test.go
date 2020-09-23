@@ -66,11 +66,11 @@ func (suite *BaseSuite) SetupSuite() {
 	setFromEnv("AZURE_CLIENT_ID", &suite.ClientID)
 	setFromEnv("AZURE_CLIENT_SECRET", &suite.ClientSecret)
 	setFromEnv("SERVICEBUS_CONNECTION_STRING", &suite.ConnStr)
-	setFromEnv("TEST_SERVICEBUS_RESOURCE_GROUP", &suite.ResourceGroup)
+	setFromEnv("TEST_RESOURCE_GROUP", &suite.ResourceGroup)
 
 	// TODO: automatically infer the location from the resource group, if it's not specified.
 	// https://github.com/Azure/azure-service-bus-go/issues/40
-	setFromEnv("TEST_SERVICEBUS_LOCATION", &suite.Location)
+	setFromEnv("TEST_LOCATION", &suite.Location)
 
 	parsed, err := conn.ParsedConnectionFromStr(suite.ConnStr)
 	if !suite.NoError(err) {
