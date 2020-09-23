@@ -42,13 +42,33 @@ func PublisherWithConnectionString(connStr string) PublisherManagementOption {
 	}
 }
 
-// PublisherWithManagedIdentity configures a publisher with the attached managed identity and the Service bus resource name
+// Deprecated. use PublisherWithManagedIdentityClientID or PublisherWithManagedIdentityResourceID instead
 func PublisherWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID string) PublisherManagementOption {
+	return PublisherWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID)
+}
+
+// PublisherWithManagedIdentityResourceID configures a publisher with the attached managed identity and the Service bus resource name
+func PublisherWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID string) PublisherManagementOption {
 	return func(p *Publisher) error {
 		if serviceBusNamespaceName == "" {
 			return errors.New("no Service Bus namespace provided")
 		}
-		ns, err := getNamespace(servicebusinternal.NamespaceWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID))
+		ns, err := getNamespace(servicebusinternal.NamespaceWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
+		if err != nil {
+			return err
+		}
+		p.namespace = ns
+		return nil
+	}
+}
+
+// PublisherWithManagedIdentityClientID configures a publisher with the attached managed identity and the Service bus resource name
+func PublisherWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID string) PublisherManagementOption {
+	return func(p *Publisher) error {
+		if serviceBusNamespaceName == "" {
+			return errors.New("no Service Bus namespace provided")
+		}
+		ns, err := getNamespace(servicebusinternal.NamespaceWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID))
 		if err != nil {
 			return err
 		}
