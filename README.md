@@ -43,8 +43,8 @@ listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityResourceID(s
 ```
 
 #### Using system assigned managed identity
+Keep the clientID parameter empty
 ```
-// keep managed identity client ID empty to default using system assigned managed identity
 listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityClientID(serviceBusNamespaceName, ""))
 ```
 
@@ -109,26 +109,14 @@ publisher, _ := pubsub.NewPublisher(
 ```
 
 #### Using system assigned managed identity
-Using Identity ClientID
+Keep the clientID parameter empty
 ```
-// keep managed identity client ID empty to default using system assigned managed identity
 topicName := "topic"
 publisher, _ := pubsub.NewPublisher(
     topicName,
-    pubsub.PublisherWithManagedIdentityClientID(serviceBusNamespaceName, identityClientID),
+    pubsub.PublisherWithManagedIdentityClientID(serviceBusNamespaceName, ""),
 )
 ```
-Using Identity ResourceID
-```
-// keep managed identity client ID empty to default using system assigned managed identity
-topicName := "topic"
-publisher, _ := pubsub.NewPublisher(
-    topicName,
-    pubsub.PublisherWithManagedIdentityResourceID(serviceBusNamespaceName, identityResourceID),
-)
-```
-
-
 
 ### Initializing a publisher with a header
 ```
