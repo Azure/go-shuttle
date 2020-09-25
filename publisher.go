@@ -18,14 +18,13 @@ type Publisher struct {
 	topicSender            *servicebus.Sender
 	headers                map[string]string
 	topicManagementOptions []servicebus.TopicManagementOption
-	sbMsg                  *servicebus.Message
 }
 
 // PublisherManagementOption provides structure for configuring a new Publisher
 type PublisherManagementOption func(p *Publisher) error
 
-// PublisherOption provides structure for configuring when starting to publish to a specified topic
-type PublisherOption func(p *Publisher) error
+// PublishOption provides structure for configuring when starting to publish to a specified topic
+type PublishOption func(msg *servicebus.Message) error
 
 // PublisherWithConnectionString configures a publisher with the information provided in a Service Bus connection string
 func PublisherWithConnectionString(connStr string) PublisherManagementOption {
@@ -98,23 +97,34 @@ func SetDuplicateDetection(window *time.Duration) PublisherManagementOption {
 }
 
 // SetMessageDelay schedules a message in the future
-func SetMessageDelay(delay time.Duration) PublisherOption {
-	return func(p *Publisher) error {
-		if p.sbMsg == nil {
-			return errors.New("cannot assign message delay")
+func SetMessageDelay(delay time.Duration) PublishOption {
+	return func(msg *servicebus.Message) error {
+		if msg == nil {
+			return errors.New("message is nil. cannot assign message delay")
 		}
-		p.sbMsg.ScheduleAt(time.Now().Add(delay))
+		msg.ScheduleAt(time.Now().Add(delay))
 		return nil
 	}
 }
 
 // SetMessageID sets the messageID of the message. Used for duplication detection
-func SetMessageID(messageID string) PublisherOption {
-	return func(p *Publisher) error {
-		if p.sbMsg == nil {
-			return errors.New("cannot assign message ID")
+func SetMessageID(messageID string) PublishOption {
+	return func(msg *servicebus.Message) error {
+		if msg == nil {
+			return errors.New("message is nil. cannot assign message ID")
 		}
-		p.sbMsg.ID = messageID
+		msg.ID = messageID
+		return nil
+	}
+}
+
+// SetCorrelationID sets the SetCorrelationID of the message.
+func SetCorrelationID(correlationID string) PublishOption {
+	return func(msg *servicebus.Message) error {
+		if msg == nil {
+			return errors.New("message is nil. cannot assign correlation ID")
+		}
+		msg.CorrelationID = correlationID
 		return nil
 	}
 }
@@ -154,7 +164,7 @@ func NewPublisher(topicName string, opts ...PublisherManagementOption) (*Publish
 }
 
 // Publish publishes to the pre-configured Service Bus topic
-func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...PublisherOption) error {
+func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...PublishOption) error {
 	msgJSON, err := json.Marshal(msg)
 
 	// adding in user properties to enable filtering on listener side
@@ -169,11 +179,10 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Publis
 			sbMsg.UserProperties[headerName] = val
 		}
 	}
-	p.sbMsg = sbMsg
 
 	// now apply publishing options
 	for _, opt := range opts {
-		err := opt(p)
+		err := opt(sbMsg)
 		if err != nil {
 			return err
 		}
