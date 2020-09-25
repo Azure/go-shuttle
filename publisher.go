@@ -15,7 +15,7 @@ import (
 // Publisher is a struct to contain service bus entities relevant to publishing to a topic
 type Publisher struct {
 	namespace              *servicebus.Namespace
-	topicSender            *servicebus.Sender
+	topic                  *servicebus.Topic
 	headers                map[string]string
 	topicManagementOptions []servicebus.TopicManagementOption
 }
@@ -150,16 +150,8 @@ func NewPublisher(topicName string, opts ...PublisherManagementOption) (*Publish
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new topic %s: %w", topicEntity.Name, err)
 	}
-	defer func() {
-		_ = topic.Close(context.Background())
-	}()
 
-	topicSender, err := topic.NewSender(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new topic sender for topic %s: %w", topicEntity.Name, err)
-	}
-	publisher.topicSender = topicSender
-
+	publisher.topic = topic
 	return publisher, nil
 }
 
@@ -189,9 +181,9 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Publis
 	}
 
 	// finally, send
-	err = p.topicSender.Send(ctx, sbMsg)
+	err = p.topic.Send(ctx, sbMsg)
 	if err != nil {
-		return fmt.Errorf("failed to send message to topic %s: %w", p.topicSender.Name, err)
+		return fmt.Errorf("failed to send message to topic %s: %w", p.topic.Name, err)
 	}
 	return nil
 }

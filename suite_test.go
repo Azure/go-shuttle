@@ -49,7 +49,7 @@ type publishReceiveTest struct {
 	listener         *Listener
 	publisher        *Publisher
 	listenerOptions  []ListenerOption
-	publisherOptions []PublisherOption
+	publisherOptions []PublishOption
 	publishCount     *int
 	shouldSucceed    bool
 }
@@ -209,7 +209,7 @@ func (suite *serviceBusSuite) duplicateDetectionTest(publisher *Publisher, liste
 			listener:         listener,
 			publisher:        publisher,
 			listenerOptions:  []ListenerOption{SetSubscriptionName("subName4")},
-			publisherOptions: []PublisherOption{SetMessageID("hi")},
+			publisherOptions: []PublishOption{SetMessageID("hi")},
 			publishCount:     &publishCount,
 			shouldSucceed:    true,
 		},

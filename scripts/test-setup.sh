@@ -8,6 +8,15 @@ az group create \
 --location ${TEST_LOCATION} \
 -o none
 
+echo "create managed identity"
+MANAGED_IDENTITY_CLIENT_ID=$(az identity create \
+--name "${SERVICEBUS_NAMESPACE_NAME}_id" \
+-g ${TEST_RESOURCE_GROUP} \
+--query clientId \
+-o tsv)
+
+MANAGED_IDENTITY_RESOURCE_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourcegroups/${TEST_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${SERVICEBUS_NAMESPACE_NAME}_id"
+
 echo "creating ACR"
 az acr create \
 --name ${REGISTRY_NAME} \
@@ -37,16 +46,6 @@ SERVICEBUS_CONNECTION_STRING=$(az servicebus namespace authorization-rule keys l
 --name "RootManageSharedAccessKey" \
 --query primaryConnectionString \
 -o tsv)
-
-
-echo "create managed identity"
-MANAGED_IDENTITY_CLIENT_ID=$(az identity create \
---name "${SERVICEBUS_NAMESPACE_NAME}_id" \
--g ${TEST_RESOURCE_GROUP} \
---query clientId \
--o tsv)
-
-MANAGED_IDENTITY_RESOURCE_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourcegroups/${TEST_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${SERVICEBUS_NAMESPACE_NAME}_id"
 
 echo "assign servicebus role to identity"
 az role assignment create \
