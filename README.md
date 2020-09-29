@@ -77,6 +77,25 @@ err := listener.Listen(
 )
 ```
 
+### Listen sample with error check and Close()
+
+```
+listener, err := pubsub.NewListener(pubsub.ListenerWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
+if err != nil {
+    return err
+}
+...
+if err := listener.Listen(ctx, handle, topicName); err != nil {
+    return err
+}
+defer func() {
+    err := listener.Close(ctx)
+    if err != nil {
+        log.Errorf("failed to close listener: %s", err)
+    }
+}
+```
+
 ## Publisher Examples
 ### Initializing a publisher with a Service Bus connection string
 ```
