@@ -134,16 +134,18 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 		return fmt.Errorf("failed to get topic: %w", err)
 	}
 	l.topicEntity = topicEntity
-	subscriptionEntity, err := getSubscriptionEntity(ctx, defaultSubscriptionName, l.namespace, topicEntity)
-	if err != nil {
-		return fmt.Errorf("failed to get subscriptionEntity: %w", err)
-	}
-	l.subscriptionEntity = subscriptionEntity
 
 	// apply listener options
 	for _, opt := range opts {
 		err := opt(l)
 		if err != nil {
+			return err
+		}
+	}
+
+	// no subscription name was set. setup default subscription
+	if l.subscriptionEntity == nil {
+		if err = SetSubscriptionName(defaultSubscriptionName)(l); err != nil {
 			return err
 		}
 	}
