@@ -23,6 +23,9 @@ type Listener struct {
 	topicEntity        *servicebus.TopicEntity
 	subscriptionEntity *servicebus.SubscriptionEntity
 	listenerHandle     *servicebus.ListenerHandle
+	topicName          string
+	subscriptionName   string
+	filterDefinitions  []*filterDefinition
 }
 
 // ListenerManagementOption provides structure for configuring a new Listener
@@ -84,14 +87,14 @@ func ListenerWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdent
 // SetSubscriptionName configures the subscription name of the subscription to listen to
 func SetSubscriptionName(name string) ListenerOption {
 	return func(l *Listener) error {
-		ctx := context.Background()
-		subscriptionEntity, err := getSubscriptionEntity(ctx, name, l.namespace, l.topicEntity)
-		if err != nil {
-			return fmt.Errorf("failed to get subscription: %w", err)
-		}
-		l.subscriptionEntity = subscriptionEntity
+		l.subscriptionName = name
 		return nil
 	}
+}
+
+type filterDefinition struct {
+	Name   string
+	Filter servicebus.FilterDescriber
 }
 
 // SetSubscriptionFilter configures a filter of the subscription to listen to
@@ -100,12 +103,8 @@ func SetSubscriptionFilter(filterName string, filter servicebus.FilterDescriber)
 		if len(filterName) == 0 || filter == nil {
 			return errors.New("filter name or filter cannot be zero value")
 		}
-		ctx := context.Background()
-		sm, err := l.namespace.NewSubscriptionManager(l.topicEntity.Name)
-		if err != nil {
-			return err
-		}
-		return ensureFilterRule(ctx, sm, l.subscriptionEntity.Name, filterName, filter)
+		l.filterDefinitions = append(l.filterDefinitions, &filterDefinition{filterName, filter})
+		return nil
 	}
 }
 
@@ -122,19 +121,55 @@ func NewListener(opts ...ListenerManagementOption) (*Listener, error) {
 			return nil, err
 		}
 	}
-
 	return listener, nil
 }
 
-// Listen waits for a message from the Service Bus Topic subscription
-func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, opts ...ListenerOption) error {
-	// default setup
-	topicEntity, err := getTopicEntity(ctx, topicName, l.namespace)
+func setTopicEntity(ctx context.Context, l *Listener) error {
+	if l.topicEntity != nil {
+		return nil
+	}
+	topicEntity, err := getTopicEntity(ctx, l.topicName, l.namespace)
 	if err != nil {
 		return fmt.Errorf("failed to get topic: %w", err)
 	}
 	l.topicEntity = topicEntity
+	return nil
+}
 
+func setSubscriptionEntity(ctx context.Context, l *Listener) error {
+	if l.subscriptionEntity != nil {
+		return nil
+	}
+	if l.subscriptionName == "" {
+		l.subscriptionName = defaultSubscriptionName
+	}
+	subscriptionEntity, err := getSubscriptionEntity(ctx, l.subscriptionName, l.namespace, l.topicEntity)
+	if err != nil {
+		return fmt.Errorf("failed to get subscription: %w", err)
+	}
+	l.subscriptionEntity = subscriptionEntity
+	return nil
+}
+
+func setSubscriptionFilters(ctx context.Context, l *Listener) error {
+	if len(l.filterDefinitions) == 0 {
+		return nil
+	}
+	sm, err := l.namespace.NewSubscriptionManager(l.topicEntity.Name)
+	if err != nil {
+		return fmt.Errorf("could no create subscription manager: %w", err)
+	}
+	for _, d := range l.filterDefinitions {
+		if err := ensureFilterRule(ctx, sm, l.subscriptionName, d.Name, d.Filter); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Listen waits for a message from the Service Bus Topic subscription
+func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, opts ...ListenerOption) error {
+	l.topicName = topicName
 	// apply listener options
 	for _, opt := range opts {
 		err := opt(l)
@@ -142,14 +177,15 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 			return err
 		}
 	}
-
-	// no subscription name was set. setup default subscription
-	if l.subscriptionEntity == nil {
-		if err = SetSubscriptionName(defaultSubscriptionName)(l); err != nil {
-			return err
-		}
+	if err := setTopicEntity(ctx, l); err != nil {
+		return err
 	}
-
+	if err := setSubscriptionEntity(ctx, l); err != nil {
+		return err
+	}
+	if err := setSubscriptionFilters(ctx, l); err != nil {
+		return err
+	}
 	// Generate new topic client
 	topic, err := l.namespace.NewTopic(l.topicEntity.Name)
 	if err != nil {
