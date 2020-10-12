@@ -55,7 +55,7 @@ func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingCustom
 	// this assumes that the testTopic was created at the start of the test suite
 	publisher, err := createNewPublisherWithManagedIdentityUsingCustomHeader(suite.TopicName, "testHeader", "Key")
 	suite.NoError(err)
-	listener, err := createNewListenerWithManagedIdentity()
+	listener, err := createNewListenerWithManagedIdentityResourceID()
 	suite.NoError(err)
 
 	suite.customHeaderFilterTest(publisher, listener)
@@ -69,8 +69,31 @@ func (suite *serviceBusSuite) TestPublishAndListenWithManagedIdentityUsingDuplic
 	dupeDetectionWindow := 5 * time.Minute
 	publisher, err := createNewPublisherWithManagedIdentityUsingDuplicateDetection(dupeDetectionTopicName, &dupeDetectionWindow)
 	suite.NoError(err)
-	listener, err := createNewListenerWithConnectionString()
+	listener, err := createNewListenerWithManagedIdentityResourceID()
 	suite.NoError(err)
 
 	suite.duplicateDetectionTest(publisher, listener, dupeDetectionTopicName)
+}
+
+func (suite *serviceBusSuite) TestPublishAndListenRetryLaterWithManagedIdentity() {
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	retryLaterTopic := testTopicName + "retrylater-managedidentity" + suite.TagID
+	publisher, err := createNewPublisherWithManagedIdentity(retryLaterTopic)
+	suite.NoError(err)
+	listener, err := createNewListenerWithConnectionString()
+	suite.NoError(err)
+	// create retryLater event. listener emits retry based on event type
+	event := &retryLaterEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	suite.publishAndReceiveMessageWithRetryAfter(publishReceiveTest{
+		topicName:       retryLaterTopic,
+		listener:        listener,
+		publisher:       publisher,
+		listenerOptions: []ListenerOption{SetSubscriptionName("retrylatersub" + suite.TagID)},
+		shouldSucceed:   true,
+	}, event)
 }

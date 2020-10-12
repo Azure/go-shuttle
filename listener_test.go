@@ -8,6 +8,7 @@ import (
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/keikumata/azure-pub-sub/message"
 )
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string
@@ -109,9 +110,9 @@ func createNewListenerWithConnectionString() (*Listener, error) {
 	return NewListener(ListenerWithConnectionString(connStr))
 }
 
-func createTestHandler() Handle {
-	return func(ctx context.Context, message string, messageType string) error {
-		return nil
+func createTestHandler() message.HandleFunc {
+	return func(ctx context.Context, message *message.Message) message.Handler {
+		return message.Complete()
 	}
 }
 

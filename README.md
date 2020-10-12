@@ -8,26 +8,34 @@ This addition is done automatically when using the publisher of this library via
 This is done so that the library user can easily filter out certain event types.
 Specifically this is what the message should look like:
 
-```
+```json
 {
-  data: <some data>,
-  userProperties: {
-     type: <name of the struct type> // used for subscription filters
+  "data": "<some data>",
+  "userProperties": {
+     "type": "<name of the struct type>" // used for subscription filters
   }
 }
 ```
+
 This is enforced by the fact that the listener handler's function signature expects the messageType to be there:
+
+```golang
+type Handle func(ctx context.Context, *message.Message message) message.Handler
 ```
-type Handle func(ctx context.Context, message, messageType string) error
-```
+
 If the `type` field from `userProperties` is missing, the listener handler will automatically throw an error saying it is not supported.
 
 In the future we will support raw listener handlers that don't have this restriction to allow for more publisher flexibility.
 
 ## Listener Examples
+
+To start receiving messages, you need to create a Listener, and start listening. 
+Creating the Listener creates the connections and initialized the token provider.
+You start receiving messages when you call Listen(...) and pass a message handler.
+
 ### Initializing a listener with a Service Bus connection string
-```
-listener, _ := pubsub.NewListener(pubsub.ListenerWithConnectionString(serviceBusConnectionString))
+```golang
+listener, err := pubsub.NewListener(pubsub.ListenerWithConnectionString(serviceBusConnectionString))
 ```
 
 ### Initializing a listener using Managed Identity
@@ -44,27 +52,58 @@ listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityResourceID(s
 
 #### Using system assigned managed identity
 Keep the clientID parameter empty
-```
+```golang
 listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityClientID(serviceBusNamespaceName, ""))
+defer listener.Close(context.Background(()) // stop receiving messages
 ```
 
-### Subscribe to a topic
+### Start listening : Subscribe to a topic
+#### The Handler
+The `Handler` is a func that takes in a context and the message, and returns another `Handler` type, represents the result of the handling.
+
+```golang
+handler := message.HandlerFunc(func(ctx context.Context, msg *message.Message) message.Handler {
+    err := DoSomething(ctx, msg)
+    if err != nil {
+        return msg.Error(err) //trace the error, and abandon the message. message will be retried
+    }
+    msg.Complete() // handling successful. remove message from topic
+})
+
+// listen blocks and handle messages from the topic
+err := listener.Listen(ctx, handler, topicName)
 ```
-err := listener.Listen(ctx, handle, topicName)
+##### Postponed handling of message
+In some cases, your message handler can detect that it is not ready to process the message, and needs to retry later: 
+```golang
+handler := message.HandlerFunc(func(ctx context.Context, msg *message.Message) message.Handler {
+    return msg.RetryLater(10*time.Minute)
+})
+
+// listen blocks and handle messages from the topic
+err := listener.Listen(ctx, handler, topicName)
+```
+
+Note that this happens in-memory in your service. The receiver is keeping your message and pushing it back to your handler after the given time.
+This will not increase the retry count of the message, as the message is not dequeued another time.
+
+#### Start Listening
+```golang
+err := listener.Listen(ctx, handler, topicName)
 ```
 
 ### Subscribe to a topic with a client-supplied name
-```
+```golang
 err := listener.Listen(
     ctx,
-    handle,
+    handler,
     topicName,
     pubsub.SetSubscriptionName("subName"),
 )
 ```
 
 ### Subscribe to a topic with a filter
-```
+```golang
 sqlFilter := fmt.Sprintf("destinationId LIKE '%s'", "test")
 err := listener.Listen(
     ctx,
@@ -85,7 +124,7 @@ if err != nil {
     return err
 }
 ...
-if err := listener.Listen(ctx, handle, topicName); err != nil {
+if err := listener.Listen(ctx, handler, topicName); err != nil {
     return err
 }
 defer func() {
