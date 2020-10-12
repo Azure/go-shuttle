@@ -10,6 +10,7 @@ import (
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/keikumata/azure-pub-sub/internal/reflection"
 	"github.com/keikumata/azure-pub-sub/internal/test"
+	"github.com/keikumata/azure-pub-sub/message"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -18,6 +19,12 @@ type serviceBusSuite struct {
 	TopicName string
 	Publisher Publisher
 	Listener  Listener
+}
+
+type retryLaterEvent struct {
+	ID    int    `json:"id"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 type testEvent struct {
@@ -32,6 +39,7 @@ const (
 )
 
 func TestPubSub(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(serviceBusSuite))
 }
 
@@ -279,17 +287,71 @@ func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceive
 	suite.NoError(err)
 }
 
-func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) Handle {
-	return func(ctx context.Context, message string, messageType string) error {
-		if publishedMsg != message {
-			ch <- false
-			return errors.New("published message and received message are different")
-		}
-		if publishedMsgType != messageType {
-			ch <- false
-			return errors.New("published message type and received message type are different")
-		}
-		ch <- true
-		return nil
+func (suite *serviceBusSuite) publishAndReceiveMessageWithRetryAfter(testConfig publishReceiveTest, event interface{}) {
+	ctx := context.Background()
+	gotMessage := make(chan bool)
+
+	// setup listener
+	go func() {
+		eventJSON, err := json.Marshal(event)
+		suite.NoError(err)
+		testConfig.listener.Listen(
+			ctx,
+			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+	}()
+	// publish after the listener is setup
+	time.Sleep(5 * time.Second)
+	publishCount := 1
+	if testConfig.publishCount != nil {
+		publishCount = *testConfig.publishCount
 	}
+	for i := 0; i < publishCount; i++ {
+		err := testConfig.publisher.Publish(
+			ctx,
+			event,
+			testConfig.publisherOptions...,
+		)
+		suite.NoError(err)
+	}
+
+	select {
+	case isSuccessful := <-gotMessage:
+		if testConfig.shouldSucceed != isSuccessful {
+			suite.FailNow("Test did not succeed")
+		}
+	case <-time.After(5 * time.Second):
+		if testConfig.shouldSucceed {
+			suite.FailNow("Test didn't finish on time")
+		}
+	}
+	err := testConfig.listener.Close(ctx)
+	suite.NoError(err)
+}
+
+func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) message.Handler {
+	var retryCount = 0
+	return message.HandleFunc(
+		func(ctx context.Context, msg *message.Message) message.Handler {
+			if publishedMsg != msg.Data() {
+				ch <- false
+				return message.Error(errors.New("published message and received message are different"))
+			}
+			if publishedMsgType != msg.Type() {
+				ch <- false
+				return message.Error(errors.New("published message type and received message type are different"))
+			}
+			if publishedMsgType == reflection.GetType(retryLaterEvent{}) {
+				if retryCount > 0 {
+					ch <- true
+					return message.Complete()
+				}
+				retryCount++
+				return message.RetryLater(1 * time.Second)
+			}
+			ch <- true
+			return message.Complete()
+		})
 }

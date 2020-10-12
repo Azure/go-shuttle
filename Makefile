@@ -31,4 +31,8 @@ scripts/containergroup.yaml:
 clean-aci:
 	az container delete \
 	--resource-group ${TEST_RESOURCE_GROUP} \
-	--name pubsubtester
+	--name pubsubtester \
+	--yes
+
+integration: build-test-image push-test-image test-aci
+

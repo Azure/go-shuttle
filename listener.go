@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/keikumata/azure-pub-sub/message"
 
 	servicebusinternal "github.com/keikumata/azure-pub-sub/internal/servicebus"
 )
@@ -13,9 +14,6 @@ import (
 const (
 	defaultSubscriptionName = "default"
 )
-
-// Handle is a func to handle the message received from a subscription
-type Handle func(ctx context.Context, message, messageType string) error
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
 type Listener struct {
@@ -121,6 +119,7 @@ func NewListener(opts ...ListenerManagementOption) (*Listener, error) {
 			return nil, err
 		}
 	}
+
 	return listener, nil
 }
 
@@ -168,7 +167,7 @@ func setSubscriptionFilters(ctx context.Context, l *Listener) error {
 }
 
 // Listen waits for a message from the Service Bus Topic subscription
-func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, opts ...ListenerOption) error {
+func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicName string, opts ...ListenerOption) error {
 	l.topicName = topicName
 	// apply listener options
 	for _, opt := range opts {
@@ -207,21 +206,17 @@ func (l *Listener) Listen(ctx context.Context, handle Handle, topicName string, 
 
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
-		func(ctx context.Context, message *servicebus.Message) error {
-			if val, ok := message.UserProperties["type"]; ok {
-				err := handle(ctx, string(message.Data), val.(string))
-				if err != nil {
-					err = message.Abandon(ctx)
-					return err
+		func(ctx context.Context, msg *servicebus.Message) error {
+			originalHandler := handler
+			for !message.IsDone(handler) {
+				handler = handler.Do(ctx, originalHandler, msg)
+				// handle nil as a Completion!
+				if handler == nil {
+					handler = message.Complete()
 				}
-				return message.Complete(ctx)
-			} else {
-				// TODO(keikumata): when logging is setup log a warning here
-				// type field in the service bus message's UserProperties should not be empty
-				return message.Abandon(ctx)
 			}
-		},
-	))
+			return nil
+		}))
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 
