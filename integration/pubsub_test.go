@@ -1,115 +1,110 @@
-package pubsub
+package integration
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"testing"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/keikumata/azure-pub-sub/internal/reflection"
-	"github.com/keikumata/azure-pub-sub/internal/test"
+	"github.com/keikumata/azure-pub-sub/listener"
 	"github.com/keikumata/azure-pub-sub/message"
-	"github.com/stretchr/testify/suite"
+	"github.com/keikumata/azure-pub-sub/publisher"
 )
-
-type serviceBusSuite struct {
-	test.BaseSuite
-	TopicName string
-	Publisher Publisher
-	Listener  Listener
-}
-
-type retryLaterEvent struct {
-	ID    int    `json:"id"`
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-type testEvent struct {
-	ID    int    `json:"id"`
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-const (
-	defaultTimeout = 60 * time.Second
-	testTopicName  = "testTopic"
-)
-
-func TestPubSub(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(serviceBusSuite))
-}
-
-func (suite *serviceBusSuite) SetupSuite() {
-	suite.BaseSuite.SetupSuite()
-	suite.TopicName = testTopicName + suite.TagID
-	_, err := suite.EnsureTopic(context.Background(), suite.TopicName)
-	if err != nil {
-		suite.T().Fatal(err)
-	}
-}
-
-type publishReceiveTest struct {
-	topicName        string
-	listener         *Listener
-	publisher        *Publisher
-	listenerOptions  []ListenerOption
-	publisherOptions []PublishOption
-	publishCount     *int
-	shouldSucceed    bool
-}
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
-func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDefault() {
-	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherWithConnectionString(suite.TopicName)
+func (suite *serviceBusSuite) TestPublishAndListenUsingDefault() {
+	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
 	suite.NoError(err)
-	listener, err := createNewListenerWithConnectionString()
+	l, err := listener.New(suite.listenerAuthOption, listener.WithSubscriptionName("defaultTestSub"))
 	suite.NoError(err)
 
-	suite.defaultTest(publisher, listener)
+	suite.defaultTest(pub, l)
 }
 
 // TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
-func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingTypeFilter() {
-	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherWithConnectionString(suite.TopicName)
+func (suite *serviceBusSuite) TestPublishAndListenUsingTypeFilter() {
+	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
 	suite.NoError(err)
-	listener, err := createNewListenerWithConnectionString()
+	successListener, err := listener.New(suite.listenerAuthOption,
+		listener.WithSubscriptionName("subTypeFilter"),
+		listener.WithFilterDescriber("testFilter", servicebus.SQLFilter{Expression: "type LIKE 'testEvent'"}))
 	suite.NoError(err)
+	failListener, err := listener.New(suite.listenerAuthOption,
+		listener.WithSubscriptionName("subTypeFilter"),
+		listener.WithFilterDescriber("testFilter", servicebus.SQLFilter{Expression: "type LIKE 'nottestEvent'"}))
 
-	suite.typeFilterTest(publisher, listener)
+	suite.typeFilterTest(pub, successListener, true)
+	suite.typeFilterTest(pub, failListener, false)
 }
 
-// TestPublishAndListenWithConnectionStringUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
-func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingCustomHeaderFilter() {
+// TestPublishAndListenUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
+func (suite *serviceBusSuite) TestPublishAndListenUsingCustomHeaderFilter() {
+	suite.T().Parallel()
 	// this assumes that the testTopic was created at the start of the test suite
-	publisher, err := createNewPublisherWithConnectionStringUsingCustomHeader(suite.TopicName, "testHeader", "Key")
+	pub, err := publisher.New(
+		suite.TopicName,
+		suite.publisherAuthOption,
+		publisher.SetDefaultHeader("testHeader", "Key"))
 	suite.NoError(err)
-	listener, err := createNewListenerWithConnectionString()
+	successListener, err := listener.New(suite.listenerAuthOption,
+		listener.WithSubscriptionName("subNameHeader"),
+		listener.WithFilterDescriber("testFilter", servicebus.SQLFilter{Expression: "testHeader LIKE 'key'"}))
+	suite.NoError(err)
+	failListener, err := listener.New(suite.listenerAuthOption,
+		listener.WithSubscriptionName("subNameHeader"),
+		listener.WithFilterDescriber("testFilter", servicebus.SQLFilter{Expression: "testHeader LIKE 'notkey'"}))
 	suite.NoError(err)
 
-	suite.customHeaderFilterTest(publisher, listener)
+	suite.customHeaderFilterTest(pub, successListener, true)
+	suite.customHeaderFilterTest(pub, failListener, false)
 }
 
 // TestPublishAndListenWithConnectionStringUsingDuplicateDetection tests both the publisher and listener with duplicate detection
-func (suite *serviceBusSuite) TestPublishAndListenWithConnectionStringUsingDuplicateDetection() {
+func (suite *serviceBusSuite) TestPublishAndListenUsingDuplicateDetection() {
+	suite.T().Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
-	dupeDetectionTopicName := testTopicName + "dupedetection" + suite.TagID
+	dupeDetectionTopicName := suite.Prefix + "deduptopic" + suite.TagID
 	dupeDetectionWindow := 5 * time.Minute
-	publisher, err := createNewPublisherWithConnectionStringUsingDuplicateDetection(dupeDetectionTopicName, &dupeDetectionWindow)
+	pub, err := publisher.New(
+		dupeDetectionTopicName,
+		suite.publisherAuthOption,
+		publisher.WithDuplicateDetection(&dupeDetectionWindow))
 	suite.NoError(err)
-	listener, err := createNewListenerWithConnectionString()
+	l, err := listener.New(suite.listenerAuthOption, listener.WithSubscriptionName("subDedup"))
 	suite.NoError(err)
-
-	suite.duplicateDetectionTest(publisher, listener, dupeDetectionTopicName)
+	suite.duplicateDetectionTest(pub, l, dupeDetectionTopicName)
 }
 
-func (suite *serviceBusSuite) defaultTest(publisher *Publisher, listener *Listener) {
+func (suite *serviceBusSuite) TestPublishAndListenRetryLater() {
+	suite.T().Parallel()
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	retryLaterTopic := suite.Prefix + "retrylater" + suite.TagID
+	pub, err := publisher.New(retryLaterTopic, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := listener.New(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionName("subRetryLater"))
+	suite.NoError(err)
+	// create retryLater event. listener emits retry based on event type
+	event := &retryLaterEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	suite.publishAndReceiveMessageWithRetryAfter(publishReceiveTest{
+		topicName:       retryLaterTopic,
+		listener:        l,
+		publisher:       pub,
+		listenerOptions: []listener.Option{},
+		shouldSucceed:   true,
+	}, event)
+}
+
+func (suite *serviceBusSuite) defaultTest(p *publisher.Publisher, l *listener.Listener) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -118,17 +113,16 @@ func (suite *serviceBusSuite) defaultTest(publisher *Publisher, listener *Listen
 	}
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			topicName:       suite.TopicName,
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName1")},
-			shouldSucceed:   true,
+			topicName:     suite.TopicName,
+			listener:      l,
+			publisher:     p,
+			shouldSucceed: true,
 		},
 		event,
 	)
 }
 
-func (suite *serviceBusSuite) typeFilterTest(publisher *Publisher, listener *Listener) {
+func (suite *serviceBusSuite) typeFilterTest(p *publisher.Publisher, l *listener.Listener, shouldSucceed bool) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -138,34 +132,16 @@ func (suite *serviceBusSuite) typeFilterTest(publisher *Publisher, listener *Lis
 	// test with a filter on the event type
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			topicName: suite.TopicName,
-			listener:  listener,
-			publisher: publisher,
-			listenerOptions: []ListenerOption{
-				SetSubscriptionName("subName2"),
-				SetSubscriptionFilter("testFilter", servicebus.SQLFilter{Expression: "type LIKE 'testEvent'"}),
-			},
-			shouldSucceed: true,
-		},
-		event,
-	)
-	// test with a filter on the the wrong type - should fail
-	suite.publishAndReceiveMessage(
-		publishReceiveTest{
-			topicName: suite.TopicName,
-			listener:  listener,
-			publisher: publisher,
-			listenerOptions: []ListenerOption{
-				SetSubscriptionName("subName2"),
-				SetSubscriptionFilter("testFilter", servicebus.SQLFilter{Expression: "type LIKE 'testEvent2'"}),
-			},
-			shouldSucceed: false,
+			topicName:     suite.TopicName,
+			listener:      l,
+			publisher:     p,
+			shouldSucceed: shouldSucceed,
 		},
 		event,
 	)
 }
 
-func (suite *serviceBusSuite) customHeaderFilterTest(publisher *Publisher, listener *Listener) {
+func (suite *serviceBusSuite) customHeaderFilterTest(pub *publisher.Publisher, l *listener.Listener, shouldSucceed bool) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -175,34 +151,16 @@ func (suite *serviceBusSuite) customHeaderFilterTest(publisher *Publisher, liste
 	// test with a filter on the custom header
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			topicName: suite.TopicName,
-			listener:  listener,
-			publisher: publisher,
-			listenerOptions: []ListenerOption{
-				SetSubscriptionName("subName3"),
-				SetSubscriptionFilter("testFilter", servicebus.SQLFilter{Expression: "testHeader LIKE 'key'"}),
-			},
-			shouldSucceed: true,
-		},
-		event,
-	)
-	// test with a filter on the custom header but wrong value
-	suite.publishAndReceiveMessage(
-		publishReceiveTest{
-			topicName: suite.TopicName,
-			listener:  listener,
-			publisher: publisher,
-			listenerOptions: []ListenerOption{
-				SetSubscriptionName("subName3"),
-				SetSubscriptionFilter("testFilter", servicebus.SQLFilter{Expression: "testHeader LIKE 'notkey'"}),
-			},
-			shouldSucceed: false,
+			topicName:     suite.TopicName,
+			listener:      l,
+			publisher:     pub,
+			shouldSucceed: shouldSucceed,
 		},
 		event,
 	)
 }
 
-func (suite *serviceBusSuite) duplicateDetectionTest(publisher *Publisher, listener *Listener, topicName string) {
+func (suite *serviceBusSuite) duplicateDetectionTest(pub *publisher.Publisher, l *listener.Listener, topicName string) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -214,10 +172,9 @@ func (suite *serviceBusSuite) duplicateDetectionTest(publisher *Publisher, liste
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
 			topicName:        topicName,
-			listener:         listener,
-			publisher:        publisher,
-			listenerOptions:  []ListenerOption{SetSubscriptionName("subName4")},
-			publisherOptions: []PublishOption{SetMessageID("hi")},
+			listener:         l,
+			publisher:        pub,
+			publisherOptions: []publisher.Option{publisher.SetMessageID("hi")},
 			publishCount:     &publishCount,
 			shouldSucceed:    true,
 		},
@@ -233,11 +190,10 @@ func (suite *serviceBusSuite) duplicateDetectionTest(publisher *Publisher, liste
 	}
 	suite.publishAndReceiveMessage(
 		publishReceiveTest{
-			topicName:       topicName,
-			listener:        listener,
-			publisher:       publisher,
-			listenerOptions: []ListenerOption{SetSubscriptionName("subName4")},
-			shouldSucceed:   true,
+			topicName:     topicName,
+			listener:      l,
+			publisher:     pub,
+			shouldSucceed: true,
 		},
 		event2,
 	)
@@ -246,12 +202,18 @@ func (suite *serviceBusSuite) duplicateDetectionTest(publisher *Publisher, liste
 func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceiveTest, event interface{}) {
 	ctx := context.Background()
 	gotMessage := make(chan bool)
+	if testConfig.listenerOptions == nil {
+		testConfig.listenerOptions = []listener.Option{}
+	}
+	if testConfig.publisherOptions == nil {
+		testConfig.publisherOptions = []publisher.Option{}
+	}
 
 	// setup listener
 	go func() {
 		eventJSON, err := json.Marshal(event)
 		suite.NoError(err)
-		testConfig.listener.Listen(
+		err = testConfig.listener.Listen(
 			ctx,
 			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
 			testConfig.topicName,

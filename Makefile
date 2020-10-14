@@ -25,6 +25,13 @@ test-aci: clean-aci scripts/containergroup.yaml
 	--query id -o tsv) ;\
 	az container logs --ids $${containerId} --follow
 
+shell-aci: clean-aci
+	az container create --file scripts/containergroup.yaml \
+	--resource-group ${TEST_RESOURCE_GROUP} \
+	--command-line "/bin/bash"; \
+	az container attach --name "pubsubtester" --resource-group "${TEST_RESOURCE_GROUP}"
+
+
 scripts/containergroup.yaml:
 	envsubst < scripts/containergroup.template.yaml > scripts/containergroup.yaml
 
@@ -35,4 +42,7 @@ clean-aci:
 	--yes
 
 integration: build-test-image push-test-image test-aci
+
+integration-local: build-test-image
+	@docker run --env-file .env --rm --entrypoint go test -run TestConnectionString -v ./integration ${IMAGE}
 
