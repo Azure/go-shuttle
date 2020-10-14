@@ -20,7 +20,7 @@ Specifically this is what the message should look like:
 This is enforced by the fact that the listener handler's function signature expects the messageType to be there:
 
 ```golang
-type Handle func(ctx context.Context, *message.Message message) message.Handler
+type Handle func(ctx context.Context, msg *message.Message) message.Handler
 ```
 
 If the `type` field from `userProperties` is missing, the listener handler will automatically throw an error saying it is not supported.
@@ -35,7 +35,7 @@ You start receiving messages when you call Listen(...) and pass a message handle
 
 ### Initializing a listener with a Service Bus connection string
 ```golang
-listener, err := pubsub.NewListener(pubsub.ListenerWithConnectionString(serviceBusConnectionString))
+l, err := listener.New(listener.WithConnectionString(serviceBusConnectionString))
 ```
 
 ### Initializing a listener using Managed Identity
@@ -43,17 +43,17 @@ To configure using managed identity with Service Bus, refer to this [link](https
 Note if you see errors for certain operation, you may have an RBAC issue. Refer to the built-in RBAC roles [here](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity#built-in-rbac-roles-for-azure-service-bus).
 #### Using user assigned managed identity
 ```
-listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID))
+l, _ := listener.New(listener.WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID))
 ```
 Or using the resource id:
 ```
-listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
+l, _ := listener.New(listener.WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
 ```
 
 #### Using system assigned managed identity
 Keep the clientID parameter empty
 ```golang
-listener, _ := pubsub.NewListener(pubsub.ListenerWithManagedIdentityClientID(serviceBusNamespaceName, ""))
+l, _ := listener.New(listener.WithManagedIdentityClientID(serviceBusNamespaceName, ""))
 defer listener.Close(context.Background(()) // stop receiving messages
 ```
 
@@ -67,11 +67,15 @@ handler := message.HandlerFunc(func(ctx context.Context, msg *message.Message) m
     if err != nil {
         return msg.Error(err) //trace the error, and abandon the message. message will be retried
     }
-    msg.Complete() // handling successful. remove message from topic
+    return msg.Complete() // handling successful. remove message from topic
 })
 
 // listen blocks and handle messages from the topic
-err := listener.Listen(ctx, handler, topicName)
+err := l.Listen(ctx, handler, topicName)
+
+// Note that err occurs when calling l.Close(), because it closes the context, to shut down the listener.
+// This is expected as it is the only way to get out of the blocking Lister call.
+
 ```
 ##### Postponed handling of message
 In some cases, your message handler can detect that it is not ready to process the message, and needs to retry later: 
@@ -81,7 +85,7 @@ handler := message.HandlerFunc(func(ctx context.Context, msg *message.Message) m
 })
 
 // listen blocks and handle messages from the topic
-err := listener.Listen(ctx, handler, topicName)
+err := l.Listen(ctx, handler, topicName)
 ```
 
 Note that this happens in-memory in your service. The receiver is keeping your message and pushing it back to your handler after the given time.
@@ -89,27 +93,27 @@ This will not increase the retry count of the message, as the message is not deq
 
 #### Start Listening
 ```golang
-err := listener.Listen(ctx, handler, topicName)
+err := l.Listen(ctx, handler, topicName)
 ```
 
 ### Subscribe to a topic with a client-supplied name
 ```golang
-err := listener.Listen(
+err := l.Listen(
     ctx,
     handler,
     topicName,
-    pubsub.SetSubscriptionName("subName"),
+    listener.SetSubscriptionName("subName"),
 )
 ```
 
 ### Subscribe to a topic with a filter
 ```golang
 sqlFilter := fmt.Sprintf("destinationId LIKE '%s'", "test")
-err := listener.Listen(
+err := l.Listen(
     ctx,
     handle,
     topicName,
-    pubsub.SetSubscriptionFilter(
+    listener.SetSubscriptionFilter(
         "testFilter",
         servicebus.SQLFilter{Expression: sqlFilter},
     ),
@@ -119,16 +123,16 @@ err := listener.Listen(
 ### Listen sample with error check and Close()
 
 ```
-listener, err := pubsub.NewListener(pubsub.ListenerWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
+l, err := listener.New(listener.WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
 if err != nil {
     return err
 }
 ...
-if err := listener.Listen(ctx, handler, topicName); err != nil {
+if err := l.Listen(ctx, handler, topicName); err != nil {
     return err
 }
 defer func() {
-    err := listener.Close(ctx)
+    err := l.Close(ctx)
     if err != nil {
         log.Errorf("failed to close listener: %s", err)
     }
@@ -139,9 +143,9 @@ defer func() {
 ### Initializing a publisher with a Service Bus connection string
 ```
 topicName := "topic"
-publisher, _ := pubsub.NewPublisher(
+pub, _ := publisher.New(
     topicName,
-    pubsub.PublisherWithConnectionString(serviceBusConnectionString),
+    publisher.PublisherWithConnectionString(serviceBusConnectionString),
 )
 ```
 
@@ -152,17 +156,17 @@ Note if you see errors for certain operation, you may have an RBAC issue. Refer 
 Using Identity ClientID
 ```
 topicName := "topic"
-publisher, _ := pubsub.NewPublisher(
+pub, _ := publisher.New(
     topicName,
-    pubsub.PublisherWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID),
+    publisher.WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID),
 )
 ```
 Using Identity ResourceID
 ```
 topicName := "topic"
-publisher, _ := pubsub.NewPublisher(
+pub, _ := publisher.New(
     topicName,
-    pubsub.PublisherWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID),
+    publisher.WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID),
 )
 ```
 
@@ -170,20 +174,20 @@ publisher, _ := pubsub.NewPublisher(
 Keep the clientID parameter empty
 ```
 topicName := "topic"
-publisher, _ := pubsub.NewPublisher(
+pub, _ := publisher.NewPublisher(
     topicName,
-    pubsub.PublisherWithManagedIdentityClientID(serviceBusNamespaceName, ""),
+    publisher.WithManagedIdentityClientID(serviceBusNamespaceName, ""),
 )
 ```
 
 ### Initializing a publisher with a header
 ```
 topicName := "topic"
-publisher, _ := pubsub.NewPublisher(
+pub, _ := publisher.New(
     topicName,
-    pubsub.PublisherWithConnectionString(serviceBusConnectionString),
+    publisher.WithConnectionString(serviceBusConnectionString),
     // msgs will have a header with the name "headerName" and value from the msg body field "Id"
-    pubsub.SetDefaultHeader("headerName", "Id"),
+    publisher.SetDefaultHeader("headerName", "Id"),
 )
 ```
 
@@ -197,10 +201,10 @@ Refer to the [Publishing a message with a message ID section](#publishing-a-mess
 ```
 topicName := "topic"
 dupeDetectionWindow := 5 * time.Minute
-publisher, _ := pubsub.NewPublisher(
+pub, _ := publisher.New(
     topicName,
-    pubsub.PublisherWithConnectionString(serviceBusConnectionString),
-    pubsub.SetDuplicateDetection(&dupeDetectionWindow), // if window is null then a default of 30 seconds is used
+    publisher.WithConnectionString(serviceBusConnectionString),
+    publisher.SetDuplicateDetection(&dupeDetectionWindow), // if window is null then a default of 30 seconds is used
 )
 ```
 
@@ -211,7 +215,7 @@ cmd := &SomethingHappenedEvent{
     SomeStringField: "value",
 }
 // by default the msg header will have "type" == "SomethingHappenedEvent"
-err := publisher.Publish(ctx, cmd)
+err := pub.Publish(ctx, cmd)
 ```
 
 ### Publishing a message with a delay
@@ -220,10 +224,10 @@ cmd := &SomethingHappenedEvent{
     Id: uuid.New(),
     SomeStringField: "value",
 }
-err := publisher.Publish(
+err := pub.Publish(
     ctx,
     cmd,
-    pubsub.SetMessageDelay(5*time.Second),
+    publisher.SetMessageDelay(5*time.Second),
 )
 ```
 
@@ -236,10 +240,10 @@ cmd := &SomethingHappenedEvent{
     SomeStringField: "value",
 }
 messageID := "someMessageIDWithBusinessContext"
-err := publisher.Publish(
+err := pub.Publish(
     ctx,
     cmd,
-    pubsub.SetMessageID(messageID),
+    publisher.SetMessageID(messageID),
 )
 ```
 ## Dev environment and integration tests
@@ -247,5 +251,4 @@ err := publisher.Publish(
 1. copy the `.env.template` to a `.env` at the root of the repository
 2. fill in the environment variable in the .env file 
 3. run `make test-setup`. that will create the necessary azure resources.
-4. run `make build-test-image` and `make push-test-image`. that will build and push the test image to the create private registry
-5. run `make test-aci`
+4. run `make integration`. <- build & push image + start integration test run on ACI

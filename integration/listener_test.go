@@ -1,27 +1,23 @@
-package pubsub
+package integration
 
 import (
 	"context"
-	"errors"
-	"os"
 	"strings"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/keikumata/azure-pub-sub/listener"
 	"github.com/keikumata/azure-pub-sub/message"
 )
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string
-func (suite *serviceBusSuite) TestCreateNewListenerWithConnectionString() {
-	listener, err := createNewListenerWithConnectionString()
-	if suite.NoError(err) {
-		connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING")
-		suite.Contains(connStr, listener.namespace.Name)
-	}
+func (suite *serviceBusSuite) TestCreateNewListener() {
+	_, err := listener.New(suite.listenerAuthOption)
+	suite.NoError(err)
 }
 
 func (suite *serviceBusSuite) TestListenWithDefault() {
-	listener, err := createNewListenerWithConnectionString()
+	listener, err := listener.New(suite.listenerAuthOption)
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		go func() {
@@ -34,12 +30,14 @@ func (suite *serviceBusSuite) TestListenWithDefault() {
 			suite.TopicName,
 		)
 		suite.True(contextCanceledError(err), "listener listen function failed", err.Error())
-		suite.EqualValues(listener.subscriptionEntity.Name, "default")
+		suite.EqualValues(listener.Subscription().Name, "default")
 	}
 }
 
 func (suite *serviceBusSuite) TestListenWithCustomSubscription() {
-	listener, err := createNewListenerWithConnectionString()
+	listener, err := listener.New(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionName("subName"))
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		go func() {
@@ -50,64 +48,61 @@ func (suite *serviceBusSuite) TestListenWithCustomSubscription() {
 			ctx,
 			createTestHandler(),
 			suite.TopicName,
-			SetSubscriptionName("subName"),
 		)
 		suite.True(contextCanceledError(err), "listener listen function failed", err.Error())
-		suite.EqualValues(listener.subscriptionEntity.Name, "subName")
+		suite.EqualValues(listener.Subscription().Name, "subName")
 	}
 }
 
 func (suite *serviceBusSuite) TestListenWithCustomFilter() {
-	listener, err := createNewListenerWithConnectionString()
+	createRule, err := listener.New(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionName("default"),
+		listener.WithFilterDescriber("testFilter",
+			servicebus.SQLFilter{Expression: "destinationId LIKE test"}))
 	if suite.NoError(err) {
 		suite.startListenAndCheckForFilter(
-			listener,
+			createRule,
 			"testFilter",
 			servicebus.SQLFilter{Expression: "destinationId LIKE test"},
-			"default",
 		)
 		// check if it correctly replaces an existing rule
-		suite.startListenAndCheckForFilter(
-			listener,
-			"testFilter",
-			servicebus.SQLFilter{Expression: "destinationId LIKE test2"},
-			"default",
-		)
+		replaceRuleSub, err := listener.New(
+			suite.listenerAuthOption,
+			listener.WithSubscriptionName("default"),
+			listener.WithFilterDescriber("testFilter",
+				servicebus.SQLFilter{Expression: "destinationId LIKE test2"}))
+		if suite.NoError(err) {
+			suite.startListenAndCheckForFilter(
+				replaceRuleSub,
+				"testFilter",
+				servicebus.SQLFilter{Expression: "destinationId LIKE test2"},
+			)
+		}
 	}
 }
 
 // startListenAndCheckForFilter starts the listener and makes sure that the correct rules were created
 func (suite *serviceBusSuite) startListenAndCheckForFilter(
-	listener *Listener,
+	l *listener.Listener,
 	filterName string,
-	filter servicebus.FilterDescriber,
-	subName string) {
+	filter servicebus.FilterDescriber) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	go func() {
 		time.Sleep(10 * time.Second)
 		cancel()
 	}()
-	err := listener.Listen(
+	err := l.Listen(
 		ctx,
 		createTestHandler(),
 		suite.TopicName,
-		SetSubscriptionFilter(filterName, filter),
 	)
 	suite.True(contextCanceledError(err), "listener listen function failed", err.Error())
-	ruleExists, err := suite.checkRule(listener.namespace, subName, filterName, filter)
+	ruleExists, err := suite.checkRule(l.Namespace(), l.Subscription().Name, filterName, filter)
 	if suite.NoError(err) {
-		suite.True(*ruleExists)
+		suite.True(ruleExists)
 	}
-}
-
-func createNewListenerWithConnectionString() (*Listener, error) {
-	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
-	if connStr == "" {
-		return nil, errors.New("environment variable SERVICEBUS_CONNECTION_STRING was not set")
-	}
-
-	return NewListener(ListenerWithConnectionString(connStr))
 }
 
 func createTestHandler() message.HandleFunc {
@@ -121,23 +116,30 @@ func contextCanceledError(err error) bool {
 		strings.Contains(err.Error(), "context canceled")
 }
 
-func (suite *serviceBusSuite) checkRule(ns *servicebus.Namespace, subName, filterName string, filter servicebus.FilterDescriber) (*bool, error) {
+func (suite *serviceBusSuite) checkRule(ns *servicebus.Namespace, subName, filterName string, filter servicebus.FilterDescriber) (bool, error) {
 	sm, err := ns.NewSubscriptionManager(suite.TopicName)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	rules, err := sm.ListRules(context.Background(), subName)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	for _, rule := range rules {
 		if rule.Name == filterName {
 			if compareFilter(rule.Filter, filter.ToFilterDescription()) {
-				t := true
-				return &t, nil
+				return true, nil
 			}
 		}
 	}
-	f := false
-	return &f, nil
+	return false, nil
+}
+
+func compareFilter(f1, f2 servicebus.FilterDescription) bool {
+	if f1.Type == "CorrelationFilter" {
+		return f1.CorrelationFilter.CorrelationID == f2.CorrelationFilter.CorrelationID &&
+			f1.CorrelationFilter.Label == f2.CorrelationFilter.Label
+	}
+	// other than CorrelationFilter all other filters use a SQLExpression
+	return *f1.SQLExpression == *f2.SQLExpression
 }

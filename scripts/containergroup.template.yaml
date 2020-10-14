@@ -10,10 +10,6 @@ properties:
   - name: tester
     properties:
       image: ${IMAGE}
-      command:
-      - go
-      - test
-      - -v
       resources: # Resource requirements of the instance
         requests:
           memoryInGB: 2

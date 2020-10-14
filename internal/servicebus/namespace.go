@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	// TODO:take this value from config or environment
 	serviceBusResourceURI = "https://servicebus.azure.net/"
 )
 
@@ -58,11 +57,4 @@ func NamespaceWithTokenProvider(serviceBusNamespaceName string, provider auth.To
 		ns.Name = serviceBusNamespaceName
 		return nil
 	}
-}
-
-// NamespaceWithManagedIdentity is deprecated. use NamespaceWithManagedIdentityClientID or NamespaceWithManagedIdentityResourceID
-// managed identity
-// Deprecated
-func NamespaceWithManagedIdentity(serviceBusNamespaceName, managedIdentityClientID string) servicebussdk.NamespaceOption {
-	return NamespaceWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID)
 }
