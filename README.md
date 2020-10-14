@@ -8,7 +8,7 @@ This addition is done automatically when using the publisher of this library via
 This is done so that the library user can easily filter out certain event types.
 Specifically this is what the message should look like:
 
-```json
+```javascript
 {
   "data": "<some data>",
   "userProperties": {
