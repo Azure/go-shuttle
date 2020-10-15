@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Azure/azure-amqp-common-go/v3/auth"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/keikumata/azure-pub-sub/internal/aad"
 	"github.com/keikumata/azure-pub-sub/internal/reflection"
 	servicebusinternal "github.com/keikumata/azure-pub-sub/internal/servicebus"
 )
@@ -76,12 +77,12 @@ func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientI
 	}
 }
 
-func WithTokenProvider(serviceBusNamespaceName string, tokenProvider auth.TokenProvider) ManagementOption {
+func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) ManagementOption {
 	return func(p *Publisher) error {
-		if tokenProvider == nil {
-			return errors.New("cannot provide a nil token provider")
+		if spt == nil {
+			return errors.New("cannot provide a nil token")
 		}
-		ns, err := servicebus.NewNamespace(servicebusinternal.NamespaceWithTokenProvider(serviceBusNamespaceName, tokenProvider))
+		ns, err := servicebus.NewNamespace(servicebusinternal.NamespaceWithTokenProvider(serviceBusNamespaceName, aad.AsJWTTokenProvider(spt)))
 		if err != nil {
 			return err
 		}

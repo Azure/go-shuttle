@@ -38,6 +38,21 @@ You start receiving messages when you call Listen(...) and pass a message handle
 l, err := listener.New(listener.WithConnectionString(serviceBusConnectionString))
 ```
 
+### Initializing a listener with an adal.ServicePrincipalToken
+
+This is useful when the consumer needs to control the creation of the token or when multiple publishers/listeners in a single process
+can share the same token. It allows to reduce the number of request to refresh the token since the cache is shared.
+
+```golang
+"github.com/Azure/go-autorest/autorest/adal"
+
+spt, err := adal.NewServicePrincipalTokenFromMSIWithIdentityResourceID(...)
+if err != nil {
+    // handle
+}
+l, err := listener.New(listener.WithToken(sbNamespaceName, spt))
+```
+
 ### Initializing a listener using Managed Identity
 To configure using managed identity with Service Bus, refer to this [link](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity).
 Note if you see errors for certain operation, you may have an RBAC issue. Refer to the built-in RBAC roles [here](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity#built-in-rbac-roles-for-azure-service-bus).

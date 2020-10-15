@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Azure/azure-amqp-common-go/v3/aad"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"golang.org/x/crypto/pkcs12"
@@ -282,4 +283,10 @@ func azureEnvFromEnvironment(envName string) (*azure.Environment, error) {
 		}
 	}
 	return &env, nil
+}
+
+func AsJWTTokenProvider(t *adal.ServicePrincipalToken) auth.TokenProvider {
+	// we can safely ignore the error because we provide the token
+	provider, _ := aad.NewJWTProvider(aad.JWTProviderWithAADToken(t))
+	return provider
 }

@@ -2,11 +2,12 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/keikumata/azure-pub-sub/internal/aad"
+	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/keikumata/azure-pub-sub/internal/test"
 	"github.com/keikumata/azure-pub-sub/listener"
 	"github.com/keikumata/azure-pub-sub/publisher"
@@ -45,8 +46,8 @@ func TestConnectionString(t *testing.T) {
 	t.Parallel()
 	connectionStringSuite := &serviceBusSuite{
 		Prefix:              "conn-",
-		listenerAuthOption:  withEnvConnectionString(),
-		publisherAuthOption: withEnvPublisherConnectionString(),
+		listenerAuthOption:  withListenerConnectionString(),
+		publisherAuthOption: withPublisherConnectionString(),
 	}
 	suite.Run(t, connectionStringSuite)
 }
@@ -55,8 +56,8 @@ func TestClientId(t *testing.T) {
 	t.Parallel()
 	clientIdSuite := &serviceBusSuite{
 		Prefix:              "cid-",
-		listenerAuthOption:  withEnvManagedIdentityClientID(),
-		publisherAuthOption: withPublisherEnvManagedIdentityClientID(),
+		listenerAuthOption:  withListenerManagedIdentityClientID(),
+		publisherAuthOption: withPublisherManagedIdentityClientID(),
 	}
 	suite.Run(t, clientIdSuite)
 }
@@ -65,13 +66,13 @@ func TestResourceID(t *testing.T) {
 	t.Parallel()
 	resourceIdSuite := &serviceBusSuite{
 		Prefix:              "rid-",
-		listenerAuthOption:  withEnvManagedIdentityResourceID(),
-		publisherAuthOption: withPublisherEnvManagedIdentityResourceID(),
+		listenerAuthOption:  withListenerManagedIdentityResourceID(),
+		publisherAuthOption: withPublisherManagedIdentityResourceID(),
 	}
 	suite.Run(t, resourceIdSuite)
 }
 
-func withEnvConnectionString() listener.ManagementOption {
+func withListenerConnectionString() listener.ManagementOption {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		panic("environment variable SERVICEBUS_CONNECTION_STRING was not set")
@@ -79,7 +80,7 @@ func withEnvConnectionString() listener.ManagementOption {
 	return listener.WithConnectionString(connStr)
 }
 
-func withEnvPublisherConnectionString() publisher.ManagementOption {
+func withPublisherConnectionString() publisher.ManagementOption {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		panic("environment variable SERVICEBUS_CONNECTION_STRING was not set")
@@ -88,27 +89,24 @@ func withEnvPublisherConnectionString() publisher.ManagementOption {
 	return publisher.WithConnectionString(connStr)
 }
 
-func withEnvManagedIdentityClientID() listener.ManagementOption {
+func withListenerManagedIdentityClientID() listener.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
 	}
-
 	// if managedIdentityClientID is empty then library will assume system assigned managed identity
 	managedIdentityClientID := os.Getenv("MANAGED_IDENTITY_CLIENT_ID")
 	if managedIdentityClientID == "" {
 		panic("environment variable MANAGED_IDENTITY_CLIENT_ID was not set")
 	}
-	provider, err := aad.NewJWTProvider(
-		aad.JWTProviderWithManagedIdentityClientID(managedIdentityClientID, ""),
-		aad.JWTProviderWithResourceURI(serviceBusResourceURI))
+	spt, err := adalToken(managedIdentityClientID, adal.NewServicePrincipalTokenFromMSIWithUserAssignedID)
 	if err != nil {
 		panic(err.Error())
 	}
-	return listener.WithTokenProvider(serviceBusNamespaceName, provider)
+	return listener.WithToken(serviceBusNamespaceName, spt)
 }
 
-func withEnvManagedIdentityResourceID() listener.ManagementOption {
+func withListenerManagedIdentityResourceID() listener.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -120,16 +118,32 @@ func withEnvManagedIdentityResourceID() listener.ManagementOption {
 		panic("environment variable MANAGED_IDENTITY_RESOURCE_ID was not set")
 	}
 
-	provider, err := aad.NewJWTProvider(
-		aad.JWTProviderWithManagedIdentityResourceID(managedIdentityResourceID, ""),
-		aad.JWTProviderWithResourceURI(serviceBusResourceURI))
+	spt, err := adalToken(managedIdentityResourceID, adal.NewServicePrincipalTokenFromMSIWithIdentityResourceID)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
-	return listener.WithTokenProvider(serviceBusNamespaceName, provider)
+	return listener.WithToken(serviceBusNamespaceName, spt)
 }
 
-func withPublisherEnvManagedIdentityClientID() publisher.ManagementOption {
+type withSpecificIdFunc func(msiEndpoint, resource string, identityResourceID string, callbacks ...adal.TokenRefreshCallback) (*adal.ServicePrincipalToken, error)
+
+func adalToken(id string, getToken withSpecificIdFunc) (*adal.ServicePrincipalToken, error) {
+	msiEndpoint, err := adal.GetMSIVMEndpoint()
+	if err != nil {
+		return nil, err
+	}
+	logrefresh := func(t adal.Token) error {
+		fmt.Printf("refreshing token: %s", t.Expires())
+		return nil
+	}
+	spt, err := getToken(msiEndpoint, serviceBusResourceURI, id, logrefresh)
+	if err != nil {
+		return nil, err
+	}
+	return spt, nil
+}
+
+func withPublisherManagedIdentityClientID() publisher.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -138,16 +152,14 @@ func withPublisherEnvManagedIdentityClientID() publisher.ManagementOption {
 	// if managedIdentityClientID is empty then library will assume system assigned managed identity
 	managedIdentityClientID := os.Getenv("MANAGED_IDENTITY_CLIENT_ID")
 
-	provider, err := aad.NewJWTProvider(
-		aad.JWTProviderWithManagedIdentityClientID(managedIdentityClientID, ""),
-		aad.JWTProviderWithResourceURI(serviceBusResourceURI))
+	token, err := adalToken(managedIdentityClientID, adal.NewServicePrincipalTokenFromMSIWithUserAssignedID)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
-	return publisher.WithTokenProvider(serviceBusNamespaceName, provider)
+	return publisher.WithToken(serviceBusNamespaceName, token)
 }
 
-func withPublisherEnvManagedIdentityResourceID() publisher.ManagementOption {
+func withPublisherManagedIdentityResourceID() publisher.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -157,14 +169,11 @@ func withPublisherEnvManagedIdentityResourceID() publisher.ManagementOption {
 	if managedIdentityResourceID == "" {
 		panic("environment variable MANAGED_IDENTITY_RESOURCE_ID was not set")
 	}
-
-	provider, err := aad.NewJWTProvider(
-		aad.JWTProviderWithManagedIdentityResourceID(managedIdentityResourceID, ""),
-		aad.JWTProviderWithResourceURI(serviceBusResourceURI))
+	token, err := adalToken(managedIdentityResourceID, adal.NewServicePrincipalTokenFromMSIWithIdentityResourceID)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
-	return publisher.WithTokenProvider(serviceBusNamespaceName, provider)
+	return publisher.WithToken(serviceBusNamespaceName, token)
 }
 
 func (suite *serviceBusSuite) SetupSuite() {
