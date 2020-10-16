@@ -4,7 +4,6 @@ go 1.14
 
 require (
 	github.com/Azure/azure-amqp-common-go/v3 v3.0.1
-	github.com/Azure/azure-sdk-for-go v37.1.0+incompatible
 	github.com/Azure/azure-service-bus-go v0.10.6
 	github.com/Azure/go-autorest/autorest v0.11.6
 	github.com/Azure/go-autorest/autorest/adal v0.9.4
