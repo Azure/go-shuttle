@@ -1,7 +1,7 @@
-package pubsub
+package shuttle
 
 import (
-	"github.com/keikumata/azure-pub-sub/publisher"
+	"github.com/Azure/go-shuttle/publisher"
 )
 
 // NewPublisher creates a new service bus publisher

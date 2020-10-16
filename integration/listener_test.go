@@ -6,8 +6,8 @@ import (
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/keikumata/azure-pub-sub/listener"
-	"github.com/keikumata/azure-pub-sub/message"
+	"github.com/Azure/go-shuttle/listener"
+	"github.com/Azure/go-shuttle/message"
 )
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string

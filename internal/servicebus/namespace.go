@@ -6,7 +6,7 @@ import (
 	"github.com/Azure/azure-amqp-common-go/v3/auth"
 	servicebussdk "github.com/Azure/azure-service-bus-go"
 
-	"github.com/keikumata/azure-pub-sub/internal/aad"
+	"github.com/Azure/go-shuttle/internal/aad"
 )
 
 const (

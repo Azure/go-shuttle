@@ -7,7 +7,7 @@ import (
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/keikumata/azure-pub-sub/message"
+	"github.com/Azure/go-shuttle/message"
 	. "github.com/onsi/gomega"
 )
 

@@ -1,4 +1,4 @@
-module github.com/keikumata/azure-pub-sub
+module github.com/Azure/go-shuttle
 
 go 1.14
 

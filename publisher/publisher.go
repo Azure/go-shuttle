@@ -9,9 +9,9 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/keikumata/azure-pub-sub/internal/aad"
-	"github.com/keikumata/azure-pub-sub/internal/reflection"
-	servicebusinternal "github.com/keikumata/azure-pub-sub/internal/servicebus"
+	"github.com/Azure/go-shuttle/internal/aad"
+	"github.com/Azure/go-shuttle/internal/reflection"
+	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
 )
 
 // Publisher is a struct to contain service bus entities relevant to publishing to a topic

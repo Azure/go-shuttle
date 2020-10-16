@@ -3,7 +3,7 @@ package integration
 import (
 	"context"
 
-	"github.com/keikumata/azure-pub-sub/publisher"
+	"github.com/Azure/go-shuttle/publisher"
 )
 
 // TestCreatePublisherWithNewTopic tests the creation of a publisher for a new topic

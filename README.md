@@ -1,5 +1,8 @@
 # go-shuttle
-This golang library serves as a wrapper around the [azure-service-bus-go SDK](https://github.com/Azure/azure-service-bus-go) to facilitate the implementation of a pub-sub system on Azure using service bus.
+go-shuttle serves as a wrapper around the [azure-service-bus-go SDK](https://github.com/Azure/azure-service-bus-go) to facilitate the implementation of a pub-sub pattern on Azure using service bus.
+
+> NOTE: This library is in early development and should be considered experimental. The api is still moving and can change. 
+> We do have breaking changes in v0.*. Use at your own risks.
 
 ## Conventions & Assumptions
 Currently we are assuming that both the publisher and the listener will both use this azure-pub-sub library.
@@ -267,7 +270,6 @@ err := pub.Publish(
 2. fill in the environment variable in the .env file 
 3. run `make test-setup`. that will create the necessary azure resources.
 4. run `make integration`. <- build & push image + start integration test run on ACI
-
 
 ## Contributing
 

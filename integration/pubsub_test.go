@@ -7,10 +7,10 @@ import (
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/keikumata/azure-pub-sub/internal/reflection"
-	"github.com/keikumata/azure-pub-sub/listener"
-	"github.com/keikumata/azure-pub-sub/message"
-	"github.com/keikumata/azure-pub-sub/publisher"
+	"github.com/Azure/go-shuttle/internal/reflection"
+	"github.com/Azure/go-shuttle/listener"
+	"github.com/Azure/go-shuttle/message"
+	"github.com/Azure/go-shuttle/publisher"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations

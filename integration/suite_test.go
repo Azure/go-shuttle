@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/keikumata/azure-pub-sub/internal/test"
-	"github.com/keikumata/azure-pub-sub/listener"
-	"github.com/keikumata/azure-pub-sub/publisher"
+	"github.com/Azure/go-shuttle/internal/test"
+	"github.com/Azure/go-shuttle/listener"
+	"github.com/Azure/go-shuttle/publisher"
 	"github.com/stretchr/testify/suite"
 )
 

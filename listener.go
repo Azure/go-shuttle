@@ -1,7 +1,7 @@
-package pubsub
+package shuttle
 
 import (
-	"github.com/keikumata/azure-pub-sub/listener"
+	"github.com/Azure/go-shuttle/listener"
 )
 
 // NewListener creates a new service bus listener

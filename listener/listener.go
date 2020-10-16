@@ -7,10 +7,10 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/keikumata/azure-pub-sub/message"
+	"github.com/Azure/go-shuttle/message"
 
-	aad "github.com/keikumata/azure-pub-sub/internal/aad"
-	servicebusinternal "github.com/keikumata/azure-pub-sub/internal/servicebus"
+	aad "github.com/Azure/go-shuttle/internal/aad"
+	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
 )
 
 const (
