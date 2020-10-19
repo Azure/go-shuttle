@@ -79,6 +79,7 @@ func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientI
 	}
 }
 
+// WithToken configures a listener with a AAD token
 func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) ManagementOption {
 	return func(l *Listener) error {
 		if spt == nil {
@@ -156,7 +157,7 @@ func setTopicEntity(ctx context.Context, l *Listener) error {
 	if l.topicEntity != nil {
 		return nil
 	}
-	topicEntity, err := getTopicEntity(ctx, l.topicName, l.namespace)
+	topicEntity, err := GetTopicEntity(ctx, l.topicName, l.namespace)
 	if err != nil {
 		return fmt.Errorf("failed to get topic: %w", err)
 	}
@@ -267,7 +268,8 @@ func (l *Listener) Close(ctx context.Context) error {
 	return nil
 }
 
-func getTopicEntity(ctx context.Context, topicName string, namespace *servicebus.Namespace) (*servicebus.TopicEntity, error) {
+// GetTopicEntity gets the real time TopicEntity
+func GetTopicEntity(ctx context.Context, topicName string, namespace *servicebus.Namespace) (*servicebus.TopicEntity, error) {
 	tm := namespace.NewTopicManager()
 	return tm.Get(ctx, topicName)
 }
