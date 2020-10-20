@@ -157,7 +157,7 @@ func setTopicEntity(ctx context.Context, l *Listener) error {
 	if l.topicEntity != nil {
 		return nil
 	}
-	topicEntity, err := GetTopicEntity(ctx, l.topicName, l.namespace)
+	topicEntity, err := getTopicEntity(ctx, l.topicName, l.namespace)
 	if err != nil {
 		return fmt.Errorf("failed to get topic: %w", err)
 	}
@@ -268,8 +268,31 @@ func (l *Listener) Close(ctx context.Context) error {
 	return nil
 }
 
-// GetTopicEntity gets the real time TopicEntity
-func GetTopicEntity(ctx context.Context, topicName string, namespace *servicebus.Namespace) (*servicebus.TopicEntity, error) {
+// GetActiveMessageCount gets the active message count of a topic subscription
+func (l *Listener) GetActiveMessageCount(ctx context.Context, topicName, subscriptionName string) (int32, error) {
+	topicEntity, err := getTopicEntity(ctx, topicName, l.namespace)
+	if err != nil {
+		return 0, fmt.Errorf("error to get entity of topic %q: %s", topicName, err)
+	}
+	if topicEntity == nil {
+		return 0, fmt.Errorf("entity of topic %q returned is nil", topicName)
+	}
+
+	subscriptionEntity, err := getSubscriptionEntity(ctx, subscriptionName, l.namespace, topicEntity)
+	if err != nil {
+		return 0, fmt.Errorf("error to get entity of subscription %q of topic %q: %s", subscriptionName, topicName, err)
+	}
+	if subscriptionEntity == nil {
+		return 0, fmt.Errorf("entity of subscription %q of topic %q returned is nil", subscriptionName, topicName)
+	}
+	if subscriptionEntity.CountDetails == nil || subscriptionEntity.CountDetails.ActiveMessageCount == nil {
+		return 0, fmt.Errorf("active message count is not available in the entity of subscription %q of topic %q", subscriptionName, topicName)
+	}
+
+	return *subscriptionEntity.CountDetails.ActiveMessageCount, nil
+}
+
+func getTopicEntity(ctx context.Context, topicName string, namespace *servicebus.Namespace) (*servicebus.TopicEntity, error) {
 	tm := namespace.NewTopicManager()
 	return tm.Get(ctx, topicName)
 }
