@@ -269,16 +269,16 @@ func (l *Listener) Close(ctx context.Context) error {
 }
 
 // GetActiveMessageCount gets the active message count of a topic subscription
+// WARNING: GetActiveMessageCount is 10 times expensive than a call to receive a message
 func (l *Listener) GetActiveMessageCount(ctx context.Context, topicName, subscriptionName string) (int32, error) {
-	topicEntity, err := getTopicEntity(ctx, topicName, l.namespace)
-	if err != nil {
-		return 0, fmt.Errorf("error to get entity of topic %q: %s", topicName, err)
+	if l.topicEntity == nil {
+		return 0, fmt.Errorf("entity of topic is nil")
 	}
-	if topicEntity == nil {
-		return 0, fmt.Errorf("entity of topic %q returned is nil", topicName)
+	if l.topicName != topicName {
+		return 0, fmt.Errorf("topic name %q doesn't match %q", topicName, l.topicName)
 	}
 
-	subscriptionEntity, err := getSubscriptionEntity(ctx, subscriptionName, l.namespace, topicEntity)
+	subscriptionEntity, err := getSubscriptionEntity(ctx, subscriptionName, l.namespace, l.topicEntity)
 	if err != nil {
 		return 0, fmt.Errorf("error to get entity of subscription %q of topic %q: %s", subscriptionName, topicName, err)
 	}
