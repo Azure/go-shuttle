@@ -79,6 +79,7 @@ func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientI
 	}
 }
 
+// WithToken configures a listener with a AAD token
 func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) ManagementOption {
 	return func(l *Listener) error {
 		if spt == nil {
@@ -265,6 +266,30 @@ func (l *Listener) Close(ctx context.Context) error {
 		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
 	return nil
+}
+
+// GetActiveMessageCount gets the active message count of a topic subscription
+// WARNING: GetActiveMessageCount is 10 times expensive than a call to receive a message
+func (l *Listener) GetActiveMessageCount(ctx context.Context, topicName, subscriptionName string) (int32, error) {
+	if l.topicEntity == nil {
+		return 0, fmt.Errorf("entity of topic is nil")
+	}
+	if l.topicName != topicName {
+		return 0, fmt.Errorf("topic name %q doesn't match %q", topicName, l.topicName)
+	}
+
+	subscriptionEntity, err := getSubscriptionEntity(ctx, subscriptionName, l.namespace, l.topicEntity)
+	if err != nil {
+		return 0, fmt.Errorf("error to get entity of subscription %q of topic %q: %s", subscriptionName, topicName, err)
+	}
+	if subscriptionEntity == nil {
+		return 0, fmt.Errorf("entity of subscription %q of topic %q returned is nil", subscriptionName, topicName)
+	}
+	if subscriptionEntity.CountDetails == nil || subscriptionEntity.CountDetails.ActiveMessageCount == nil {
+		return 0, fmt.Errorf("active message count is not available in the entity of subscription %q of topic %q", subscriptionName, topicName)
+	}
+
+	return *subscriptionEntity.CountDetails.ActiveMessageCount, nil
 }
 
 func getTopicEntity(ctx context.Context, topicName string, namespace *servicebus.Namespace) (*servicebus.TopicEntity, error) {
