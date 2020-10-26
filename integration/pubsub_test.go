@@ -23,6 +23,16 @@ func (suite *serviceBusSuite) TestPublishAndListenUsingDefault() {
 	suite.defaultTest(pub, l)
 }
 
+// TestPublishAndListenMessageTwice tests publish and listen the same messages twice
+func (suite *serviceBusSuite) TestPublishAndListenMessageTwice() {
+	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := listener.New(suite.listenerAuthOption, listener.WithSubscriptionName("testTwoMessages"))
+	suite.NoError(err)
+
+	suite.defaultTestWithMessageTwice(pub, l)
+}
+
 // TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
 func (suite *serviceBusSuite) TestPublishAndListenUsingTypeFilter() {
 	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
@@ -112,6 +122,24 @@ func (suite *serviceBusSuite) defaultTest(p *publisher.Publisher, l *listener.Li
 		Value: "value",
 	}
 	suite.publishAndReceiveMessage(
+		publishReceiveTest{
+			topicName:     suite.TopicName,
+			listener:      l,
+			publisher:     p,
+			shouldSucceed: true,
+		},
+		event,
+	)
+}
+
+func (suite *serviceBusSuite) defaultTestWithMessageTwice(p *publisher.Publisher, l *listener.Listener) {
+	// create test event
+	event := &testEvent{
+		ID:    1,
+		Key:   "key1",
+		Value: "value1",
+	}
+	suite.publishAndReceiveMessageTwice(
 		publishReceiveTest{
 			topicName:     suite.TopicName,
 			listener:      l,
@@ -290,6 +318,73 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithRetryAfter(testConfig 
 		}
 	}
 	err := testConfig.listener.Close(ctx)
+	suite.NoError(err)
+}
+
+func (suite *serviceBusSuite) publishAndReceiveMessageTwice(testConfig publishReceiveTest, event interface{}) {
+	ctx := context.Background()
+	gotMessage := make(chan bool)
+	if testConfig.listenerOptions == nil {
+		testConfig.listenerOptions = []listener.Option{}
+	}
+	if testConfig.publisherOptions == nil {
+		testConfig.publisherOptions = []publisher.Option{}
+	}
+
+	// setup listener
+	go func() {
+		eventJSON, err := json.Marshal(event)
+		suite.NoError(err)
+		err = testConfig.listener.Listen(
+			ctx,
+			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+	}()
+
+	// publish after the listener is setup
+	time.Sleep(5 * time.Second)
+
+	err := testConfig.publisher.Publish(
+		ctx,
+		event,
+		testConfig.publisherOptions...,
+	)
+	suite.NoError(err)
+
+	select {
+	case isSuccessful := <-gotMessage:
+		if testConfig.shouldSucceed != isSuccessful {
+			suite.FailNow("Test did not succeed")
+		}
+	case <-time.After(10 * time.Second):
+		if testConfig.shouldSucceed {
+			suite.FailNow("Test didn't finish on time")
+		}
+	}
+
+	// publish same message again
+	time.Sleep(5 * time.Second)
+	err = testConfig.publisher.Publish(
+		ctx,
+		event,
+		testConfig.publisherOptions...,
+	)
+	suite.NoError(err)
+
+	select {
+	case isSuccessful := <-gotMessage:
+		if testConfig.shouldSucceed != isSuccessful {
+			suite.FailNow("Test did not succeed")
+		}
+	case <-time.After(10 * time.Second):
+		if testConfig.shouldSucceed {
+			suite.FailNow("Test didn't finish on time")
+		}
+	}
+
+	err = testConfig.listener.Close(ctx)
 	suite.NoError(err)
 }
 
