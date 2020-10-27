@@ -237,12 +237,12 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
 		func(ctx context.Context, msg *servicebus.Message) error {
-			originalHandler := handler
-			for !message.IsDone(handler) {
-				handler = handler.Do(ctx, originalHandler, msg)
+			currentHandler := handler
+			for !message.IsDone(currentHandler) {
+				currentHandler = currentHandler.Do(ctx, handler, msg)
 				// handle nil as a Completion!
-				if handler == nil {
-					handler = message.Complete()
+				if currentHandler == nil {
+					currentHandler = message.Complete()
 				}
 			}
 			return nil
