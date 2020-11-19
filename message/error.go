@@ -20,7 +20,9 @@ func (a *errorHandler) Do(ctx context.Context, _ Handler, msg *servicebus.Messag
 	ctx, span := startSpanFromMessageAndContext(ctx, "go-shuttle.errorHandler.Do", msg)
 	defer span.End()
 
-	span.AddAttributes(tab.StringAttribute("errorDetails", a.err.Error()))
+	if a.err != nil {
+		tab.For(ctx).Debug(a.err.Error())
+	}
 
 	return Abandon()
 }
