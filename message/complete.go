@@ -4,7 +4,7 @@ import (
 	"context"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/devigned/tab"
+	"github.com/devigned/tab" // same way as service-bus to log errors
 )
 
 // Complete will notify Azure Service Bus that the message was successfully handled and should be deleted from the queue
@@ -20,7 +20,7 @@ func (a *complete) Do(ctx context.Context, _ Handler, message *servicebus.Messag
 	defer span.End()
 
 	if err := message.Complete(ctx); err != nil {
-		tab.For(ctx).Debug(err.Error())
+		tab.For(ctx).Error(err)
 		return Error(err)
 	}
 	return done()

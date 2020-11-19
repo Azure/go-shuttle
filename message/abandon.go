@@ -4,7 +4,7 @@ import (
 	"context"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/devigned/tab"
+	"github.com/devigned/tab" // same way as service-bus to log errors
 )
 
 // Abandon stops processing the message and releases the lock on it.
@@ -20,7 +20,7 @@ func (a *abandon) Do(ctx context.Context, _ Handler, message *servicebus.Message
 	defer span.End()
 
 	if err := message.Abandon(ctx); err != nil {
-		tab.For(ctx).Debug(err.Error())
+		tab.For(ctx).Error(err)
 
 		// the processing will terminate and the lock on the message will be released after messageLockDuration
 	}

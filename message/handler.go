@@ -4,7 +4,7 @@ import (
 	"context"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/devigned/tab"
+	"github.com/devigned/tab" // same way as service-bus to log errors
 )
 
 // HandleFunc is a func to handle the message received from a subscription
@@ -17,7 +17,7 @@ func (h HandleFunc) Do(ctx context.Context, _ Handler, msg *servicebus.Message) 
 
 	wrapped, err := New(msg)
 	if err != nil {
-		tab.For(ctx).Debug(err.Error())
+		tab.For(ctx).Error(err)
 		return Error(err)
 	}
 	return h(ctx, wrapped)

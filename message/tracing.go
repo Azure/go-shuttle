@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"fmt"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/devigned/tab"
@@ -18,6 +19,8 @@ func startSpanFromMessageAndContext(ctx context.Context, operationName string, m
 		}
 
 		span.AddAttributes(attrs...)
+	} else {
+		span.Logger().Error(fmt.Errorf("message is nil"))
 	}
 
 	return ctx, span
