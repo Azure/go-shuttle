@@ -7,11 +7,13 @@ import (
 	servicebus "github.com/Azure/azure-service-bus-go"
 )
 
+// Message is the wrapping type of service bus message with a type
 type Message struct {
 	msg         *servicebus.Message
 	messageType string
 }
 
+// New creates a message, validating type first
 func New(msg *servicebus.Message) (*Message, error) {
 	messageType, ok := msg.UserProperties["type"]
 	if !ok {
