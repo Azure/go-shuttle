@@ -20,7 +20,7 @@ func (a *complete) Do(ctx context.Context, _ Handler, message *servicebus.Messag
 	defer span.End()
 
 	if err := message.Complete(ctx); err != nil {
-		tab.For(ctx).Error(err)
+		span.AddAttributes(tab.StringAttribute("eventMessage", err.Error()), tab.StringAttribute("eventLevel", "error"))
 		return Error(err)
 	}
 	return done()
