@@ -20,7 +20,7 @@ func (a *abandon) Do(ctx context.Context, _ Handler, message *servicebus.Message
 	defer span.End()
 
 	if err := message.Abandon(ctx); err != nil {
-		tab.For(ctx).Error(err)
+		span.AddAttributes(tab.StringAttribute("eventMessage", err.Error()), tab.StringAttribute("eventLevel", "error"))
 
 		// the processing will terminate and the lock on the message will be released after messageLockDuration
 	}

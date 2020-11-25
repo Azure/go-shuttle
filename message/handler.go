@@ -17,7 +17,7 @@ func (h HandleFunc) Do(ctx context.Context, _ Handler, msg *servicebus.Message) 
 
 	wrapped, err := New(msg)
 	if err != nil {
-		tab.For(ctx).Error(err)
+		span.AddAttributes(tab.StringAttribute("eventMessage", err.Error()), tab.StringAttribute("eventLevel", "error"))
 		return Error(err)
 	}
 	return h(ctx, wrapped)
