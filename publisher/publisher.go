@@ -212,3 +212,22 @@ func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespa
 
 	return tm.Put(ctx, name, opts...)
 }
+
+// Delete the given topic
+func DeleteTopic(topicName string, opts ...ManagementOption) error {
+	ns, err := servicebus.NewNamespace()
+	if err != nil {
+		return err
+	}
+	publisher := &Publisher{namespace: ns}
+	for _, opt := range opts {
+		err := opt(publisher)
+		if err != nil {
+			return err
+		}
+	}
+
+	tm := publisher.namespace.NewTopicManager()
+
+	return tm.Delete(context.Background(), topicName)
+}
