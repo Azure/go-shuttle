@@ -259,6 +259,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 			}
 		}()
 	}
+	defer close(msgChan)
 
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, concurrentHandler)
