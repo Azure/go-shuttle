@@ -26,6 +26,7 @@ type Listener struct {
 	topicName          string
 	subscriptionName   string
 	filterDefinitions  []*filterDefinition
+	concurrency        uint
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -124,6 +125,14 @@ func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) M
 			return errors.New("filter name or filter cannot be zero value")
 		}
 		l.filterDefinitions = append(l.filterDefinitions, &filterDefinition{filterName, filter})
+		return nil
+	}
+}
+
+//process c messages in parallel
+func WithConcurrency(c uint) Option {
+	return func(l *Listener) error {
+		l.concurrency = c
 		return nil
 	}
 }
@@ -234,18 +243,19 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
 
-	//blantantlys stolen from https://github.com/Azure/azure-service-bus-go/pull/117/files
-	const concurrentNum = 5
-	// Define msg chan
-	msgChan := make(chan *servicebus.Message, concurrentNum)
+	//blantantly stolen from https://github.com/Azure/azure-service-bus-go/pull/117/files
+	msgChan := make(chan *servicebus.Message, l.concurrency)
 	// Define a function that should be executed when a message is received.
 	var concurrentHandler servicebus.HandlerFunc = func(ctx context.Context, msg *servicebus.Message) error {
 		msgChan <- msg
 		return nil
 	}
+	if l.concurrency == 0 {
+		l.concurrency = 5 //what's the right default? 1? something higher?
+	}
 
 	// Define msg workers
-	for i := 0; i < concurrentNum; i++ {
+	for i := 0; i < int(l.concurrency); i++ {
 		go func() {
 			for msg := range msgChan {
 				currentHandler := handler
