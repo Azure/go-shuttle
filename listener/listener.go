@@ -249,7 +249,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		go func() {
 			for msg := range msgChan {
 				currentHandler := handler
-				if !message.IsDone(currentHandler) {
+				for !message.IsDone(currentHandler) {
 					currentHandler = currentHandler.Do(ctx, handler, msg)
 					// handle nil as a Completion!
 					if currentHandler == nil {
