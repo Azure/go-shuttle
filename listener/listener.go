@@ -234,19 +234,34 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
 
-	// Create a handle class that has that function
-	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
-		func(ctx context.Context, msg *servicebus.Message) error {
-			currentHandler := handler
-			for !message.IsDone(currentHandler) {
-				currentHandler = currentHandler.Do(ctx, handler, msg)
-				// handle nil as a Completion!
-				if currentHandler == nil {
-					currentHandler = message.Complete()
+	//blantantlys stolen from https://github.com/Azure/azure-service-bus-go/pull/117/files
+	const concurrentNum = 5
+	// Define msg chan
+	msgChan := make(chan *servicebus.Message, concurrentNum)
+	// Define a function that should be executed when a message is received.
+	var concurrentHandler servicebus.HandlerFunc = func(ctx context.Context, msg *servicebus.Message) error {
+		msgChan <- msg
+		return nil
+	}
+
+	// Define msg workers
+	for i := 0; i < concurrentNum; i++ {
+		go func() {
+			for msg := range msgChan {
+				currentHandler := handler
+				if !message.IsDone(currentHandler) {
+					currentHandler = currentHandler.Do(ctx, handler, msg)
+					// handle nil as a Completion!
+					if currentHandler == nil {
+						currentHandler = message.Complete()
+					}
 				}
 			}
-			return nil
-		}))
+		}()
+	}
+
+	// Create a handle class that has that function
+	listenerHandle := subReceiver.Listen(ctx, concurrentHandler)
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 
