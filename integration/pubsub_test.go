@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -12,6 +13,7 @@ import (
 	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/Azure/go-shuttle/publisher"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
@@ -129,7 +131,7 @@ func (suite *serviceBusSuite) TestPublishAndConcurrentListen() {
 		listener.WithSubscriptionName("concurrentListen"))
 	suite.NoError(err)
 
-	numOfMsgs := 3
+	numOfMsgs := 6
 	suite.publishAndConcurrentReceiveMessage(publishReceiveTest{
 		topicName:       concurrentListenTopic,
 		listener:        l,
@@ -254,7 +256,6 @@ func (suite *serviceBusSuite) duplicateDetectionTest(pub *publisher.Publisher, l
 
 func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publishReceiveTest, numOfEvents int) {
 	ctx := context.Background()
-	gotMessage := make(chan bool)
 	if testConfig.listenerOptions == nil {
 		testConfig.listenerOptions = []listener.Option{}
 	}
@@ -273,11 +274,14 @@ func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publ
 		events = append(events, event)
 	}
 
+	testConfig.listenerOptions = append(testConfig.listenerOptions, listener.WithConcurrency(3))
+
 	// setup listener
+	gotMessage := make(chan string)
 	go func() {
 		err := testConfig.listener.Listen(
 			ctx,
-			checkConcurrentResultHandler(reflection.GetType(events[0]), gotMessage),
+			checkConcurrentResultHandler(gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
@@ -296,19 +300,43 @@ func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publ
 		)
 		suite.NoError(err)
 	}
+	var msgstatus []string
+	expected := []string{
+		"recieved1",
+		"recieved2",
+		"recieved3",
+		"completed1",
+		"recieved4",
+		"completed2",
+		"recieved5",
+		"completed3",
+		"recieved6",
+		"completed4",
+		"completed5",
+		"completed6",
+	}
 
-	select {
-	case isSuccessful := <-gotMessage:
-		if testConfig.shouldSucceed != isSuccessful {
-			suite.FailNow("Test did not succeed")
+	for {
+		select {
+		case status := <-gotMessage:
+			if status == "error" && testConfig.shouldSucceed {
+				suite.FailNow("unhappy response")
+			}
+			msgstatus = append(msgstatus, status)
+
+		case <-time.After(10 * time.Second):
+			if testConfig.shouldSucceed {
+				suite.FailNow("Test didn't finish on time %v", msgstatus)
+			}
 		}
-	case <-time.After(20 * time.Second):
-		if testConfig.shouldSucceed {
-			suite.FailNow("Test didn't finish on time")
+		if len(msgstatus) >= len(expected) {
+			break
 		}
 	}
 
-	time.Sleep(20 * time.Second)
+	assert.Equal(suite.T(), msgstatus, expected)
+
+	//time.Sleep(20 * time.Second)
 	err := testConfig.listener.Close(ctx)
 	suite.NoError(err)
 }
@@ -499,24 +527,17 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 		})
 }
 
-func checkConcurrentResultHandler(publishedMsgType string, ch chan<- bool) message.Handler {
-	var retryCount = 0
+var recieved int32 = 0
+
+func checkConcurrentResultHandler(ch chan<- string) message.Handler {
 	return message.HandleFunc(
 		func(ctx context.Context, msg *message.Message) message.Handler {
-			fmt.Printf("checkConcurrentResultHandler Got a new Msg: %s, %v\n", msg.Data(), time.Now())
-			if publishedMsgType != msg.Type() {
-				ch <- false
-				return message.Error(errors.New("published message type and received message type are different"))
-			}
-			if publishedMsgType == reflection.GetType(retryLaterEvent{}) {
-				if retryCount > 0 {
-					ch <- true
-					return message.Complete()
-				}
-				retryCount++
-				return message.RetryLater(3 * time.Second)
-			}
-			ch <- true
+			order := atomic.AddInt32(&recieved, 1)
+			ch <- fmt.Sprintf("recieved%d", order)
+			//fmt.Printf("concurrent Got a new Msg : %d, %v, %s\n", order, time.Now(), msg.Data())
+			time.Sleep(time.Duration(order) * time.Second)
+			ch <- fmt.Sprintf("completed%d", order)
+			//fmt.Printf("concurrent completed : %d, %v, %s\n", order, time.Now(), msg.Data())
 			return message.Complete()
 		})
 }
