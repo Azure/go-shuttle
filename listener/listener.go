@@ -26,7 +26,6 @@ type Listener struct {
 	topicName          string
 	subscriptionName   string
 	filterDefinitions  []*filterDefinition
-	concurrency        uint
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -129,14 +128,6 @@ func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) M
 	}
 }
 
-//process c messages in parallel
-func WithConcurrency(c uint) Option {
-	return func(l *Listener) error {
-		l.concurrency = c
-		return nil
-	}
-}
-
 type filterDefinition struct {
 	Name   string
 	Filter servicebus.FilterDescriber
@@ -233,13 +224,8 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		_ = topic.Close(ctx)
 	}()
 
-	if l.concurrency == 0 {
-		l.concurrency = 5 //what's the right default? 1? something higher?
-	}
-	prefetch := servicebus.SubscriptionWithPrefetchCount(uint32(l.concurrency))
-
 	// Generate new subscription client
-	sub, err := topic.NewSubscription(l.subscriptionEntity.Name, prefetch)
+	sub, err := topic.NewSubscription(l.subscriptionEntity.Name)
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription %s: %w", l.subscriptionEntity.Name, err)
 	}
@@ -248,33 +234,19 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
 
-	//blantantly stolen from https://github.com/Azure/azure-service-bus-go/pull/117/files
-	msgChan := make(chan *servicebus.Message, l.concurrency)
-	// Define a function that should be executed when a message is received.
-	var concurrentHandler servicebus.HandlerFunc = func(ctx context.Context, msg *servicebus.Message) error {
-		msgChan <- msg
-		return nil
-	}
-
-	// Define msg workers
-	for i := 0; i < int(l.concurrency); i++ {
-		go func() {
-			for msg := range msgChan {
-				currentHandler := handler
-				for !message.IsDone(currentHandler) {
-					currentHandler = currentHandler.Do(ctx, handler, msg)
-					// handle nil as a Completion!
-					if currentHandler == nil {
-						currentHandler = message.Complete()
-					}
+	// Create a handle class that has that function
+	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
+		func(ctx context.Context, msg *servicebus.Message) error {
+			currentHandler := handler
+			for !message.IsDone(currentHandler) {
+				currentHandler = currentHandler.Do(ctx, handler, msg)
+				// handle nil as a Completion!
+				if currentHandler == nil {
+					currentHandler = message.Complete()
 				}
 			}
-		}()
-	}
-	defer close(msgChan)
-
-	// Create a handle class that has that function
-	listenerHandle := subReceiver.Listen(ctx, concurrentHandler)
+			return nil
+		}))
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 
