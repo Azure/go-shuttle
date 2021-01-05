@@ -115,6 +115,8 @@ func (suite *serviceBusSuite) TestPublishAndListenRetryLater() {
 	}, event)
 }
 
+// Note that, this test need manually verify, you should be able to see 3 msgs are receievd in a row from the test log
+// if the listener concurrency is working well.
 func (suite *serviceBusSuite) TestPublishAndConcurrentListen() {
 	suite.T().Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
@@ -126,12 +128,7 @@ func (suite *serviceBusSuite) TestPublishAndConcurrentListen() {
 		suite.listenerAuthOption,
 		listener.WithSubscriptionName("concurrentListen"))
 	suite.NoError(err)
-	// // create retryLater event. listener emits retry based on event type
-	// event := &retryLaterEvent{
-	// 	ID:    1,
-	// 	Key:   "key",
-	// 	Value: "value",
-	// }
+
 	numOfMsgs := 3
 	suite.publishAndConcurrentReceiveMessage(publishReceiveTest{
 		topicName:       concurrentListenTopic,
@@ -291,9 +288,6 @@ func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publ
 	// publish after the listener is setup
 	time.Sleep(5 * time.Second)
 	publishCount := numOfEvents
-	// if testConfig.publishCount != nil {
-	// 	publishCount = *testConfig.publishCount
-	// }
 	for i := 0; i < publishCount; i++ {
 		err := testConfig.publisher.Publish(
 			ctx,
@@ -308,11 +302,13 @@ func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publ
 		if testConfig.shouldSucceed != isSuccessful {
 			suite.FailNow("Test did not succeed")
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(20 * time.Second):
 		if testConfig.shouldSucceed {
 			suite.FailNow("Test didn't finish on time")
 		}
 	}
+
+	time.Sleep(20 * time.Second)
 	err := testConfig.listener.Close(ctx)
 	suite.NoError(err)
 }

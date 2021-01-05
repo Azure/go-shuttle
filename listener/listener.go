@@ -233,8 +233,13 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		_ = topic.Close(ctx)
 	}()
 
+	if l.concurrency == 0 {
+		l.concurrency = 5 //what's the right default? 1? something higher?
+	}
+	prefetch := servicebus.SubscriptionWithPrefetchCount(uint32(l.concurrency))
+
 	// Generate new subscription client
-	sub, err := topic.NewSubscription(l.subscriptionEntity.Name)
+	sub, err := topic.NewSubscription(l.subscriptionEntity.Name, prefetch)
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription %s: %w", l.subscriptionEntity.Name, err)
 	}
@@ -249,9 +254,6 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	var concurrentHandler servicebus.HandlerFunc = func(ctx context.Context, msg *servicebus.Message) error {
 		msgChan <- msg
 		return nil
-	}
-	if l.concurrency == 0 {
-		l.concurrency = 5 //what's the right default? 1? something higher?
 	}
 
 	// Define msg workers
