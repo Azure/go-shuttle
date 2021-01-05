@@ -263,25 +263,15 @@ func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publ
 		testConfig.publisherOptions = []publisher.Option{}
 	}
 
-	events := []testEvent{}
-	for i := 0; i < numOfEvents; i++ {
-		j := i + 1
-		event := testEvent{
-			ID:    j,
-			Key:   fmt.Sprintf("key%d", j),
-			Value: fmt.Sprintf("value%d", j),
-		}
-		events = append(events, event)
-	}
-
 	testConfig.listenerOptions = append(testConfig.listenerOptions, listener.WithConcurrency(3))
 
 	// setup listener
 	gotMessage := make(chan string)
+	var order int32
 	go func() {
 		err := testConfig.listener.Listen(
 			ctx,
-			checkConcurrentResultHandler(gotMessage),
+			checkConcurrentResultHandler(gotMessage, &order),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
@@ -291,11 +281,10 @@ func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publ
 	}()
 	// publish after the listener is setup
 	time.Sleep(5 * time.Second)
-	publishCount := numOfEvents
-	for i := 0; i < publishCount; i++ {
+	for i := 0; i < numOfEvents; i++ {
 		err := testConfig.publisher.Publish(
 			ctx,
-			events[i],
+			testEvent{ID: i + 1},
 			testConfig.publisherOptions...,
 		)
 		suite.NoError(err)
@@ -334,7 +323,9 @@ func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publ
 		}
 	}
 
-	assert.Equal(suite.T(), msgstatus, expected)
+	//first three can be any order but after that should be same order.
+	assert.Subset(suite.T(), expected, msgstatus)
+	assert.Equal(suite.T(), msgstatus[3:], expected[3:])
 
 	//time.Sleep(20 * time.Second)
 	err := testConfig.listener.Close(ctx)
@@ -527,12 +518,10 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 		})
 }
 
-var recieved int32 = 0
-
-func checkConcurrentResultHandler(ch chan<- string) message.Handler {
+func checkConcurrentResultHandler(ch chan<- string, order *int32) message.Handler {
 	return message.HandleFunc(
 		func(ctx context.Context, msg *message.Message) message.Handler {
-			order := atomic.AddInt32(&recieved, 1)
+			order := atomic.AddInt32(order, 1)
 			ch <- fmt.Sprintf("recieved%d", order)
 			//fmt.Printf("concurrent Got a new Msg : %d, %v, %s\n", order, time.Now(), msg.Data())
 			time.Sleep(time.Duration(order) * time.Second)

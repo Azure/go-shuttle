@@ -234,7 +234,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	}()
 
 	if l.concurrency == 0 {
-		l.concurrency = 5 //what's the right default? 1? something higher?
+		l.concurrency = 1 //RetryLater won't work with this. Come back and change after talking to strebec?
 	}
 	prefetch := servicebus.SubscriptionWithPrefetchCount(uint32(l.concurrency))
 	// Generate new subscription client
