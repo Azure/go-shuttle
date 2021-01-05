@@ -27,9 +27,9 @@ az acr create \
 -o none
 
 echo "getting ACR credentials"
-REGISTRY=$(az acr show --name ${REGISTRY_NAME} --query loginServer -o tsv)
-REGISTRY_USER=$(az acr credential show --name ${REGISTRY_NAME} --query username -o tsv)
-REGISTRY_PASSWORD=$(az acr credential show --name ${REGISTRY_NAME} --query "passwords | [0].value" -o tsv)
+REGISTRY=$(az acr show --resource-group ${TEST_RESOURCE_GROUP} --name ${REGISTRY_NAME} --query loginServer -o tsv)
+REGISTRY_USER=$(az acr credential show --resource-group ${TEST_RESOURCE_GROUP} --name ${REGISTRY_NAME} --query username -o tsv)
+REGISTRY_PASSWORD=$(az acr credential show --resource-group ${TEST_RESOURCE_GROUP} --name ${REGISTRY_NAME} --query "passwords | [0].value" -o tsv)
 
 echo "create ServiceBus namespace"
 SERVICEBUS_ID=$(az servicebus namespace create \
@@ -56,12 +56,12 @@ az role assignment create \
 
 echo "adding config to .env"
 DOTENV=$1
-sed -i .bak "s|MANAGED_IDENTITY_CLIENT_ID=.*|MANAGED_IDENTITY_CLIENT_ID=${MANAGED_IDENTITY_CLIENT_ID}|g" ${DOTENV}
-sed -i .bak "s|MANAGED_IDENTITY_RESOURCE_ID=.*|MANAGED_IDENTITY_RESOURCE_ID=${MANAGED_IDENTITY_RESOURCE_ID}|g" ${DOTENV}
-sed -i .bak "s|REGISTRY_USER=.*|REGISTRY_USER=${REGISTRY_USER}|g" ${DOTENV}
-sed -i .bak "s|REGISTRY_PASSWORD=.*|REGISTRY_PASSWORD=${REGISTRY_PASSWORD}|g" ${DOTENV}
-sed -i .bak "s|REGISTRY=.*|REGISTRY=${REGISTRY}|g" ${DOTENV}
-sed -i .bak "s|SERVICEBUS_ID=.*|SERVICEBUS_ID=${SERVICEBUS_ID}|g" ${DOTENV}
-sed -i .bak "s|SERVICEBUS_CONNECTION_STRING=.*|SERVICEBUS_CONNECTION_STRING=${SERVICEBUS_CONNECTION_STRING}|g" ${DOTENV}
+sed -i.bak "s|MANAGED_IDENTITY_CLIENT_ID=.*|MANAGED_IDENTITY_CLIENT_ID=${MANAGED_IDENTITY_CLIENT_ID}|g" ${DOTENV}
+sed -i.bak "s|MANAGED_IDENTITY_RESOURCE_ID=.*|MANAGED_IDENTITY_RESOURCE_ID=${MANAGED_IDENTITY_RESOURCE_ID}|g" ${DOTENV}
+sed -i.bak "s|REGISTRY_USER=.*|REGISTRY_USER=${REGISTRY_USER}|g" ${DOTENV}
+sed -i.bak "s|REGISTRY_PASSWORD=.*|REGISTRY_PASSWORD=${REGISTRY_PASSWORD}|g" ${DOTENV}
+sed -i.bak "s|REGISTRY=.*|REGISTRY=${REGISTRY}|g" ${DOTENV}
+sed -i.bak "s|SERVICEBUS_ID=.*|SERVICEBUS_ID=${SERVICEBUS_ID}|g" ${DOTENV}
+sed -i.bak "s|SERVICEBUS_CONNECTION_STRING=.*|SERVICEBUS_CONNECTION_STRING=${SERVICEBUS_CONNECTION_STRING}|g" ${DOTENV}
 
 rm "${DOTENV}.bak"
