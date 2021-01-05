@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -112,6 +113,30 @@ func (suite *serviceBusSuite) TestPublishAndListenRetryLater() {
 		listenerOptions: []listener.Option{},
 		shouldSucceed:   true,
 	}, event)
+}
+
+// Note that, this test need manually verify, you should be able to see 3 msgs are receievd in a row from the test log
+// if the listener concurrency is working well.
+func (suite *serviceBusSuite) TestPublishAndConcurrentListen() {
+	suite.T().Parallel()
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	concurrentListenTopic := suite.Prefix + "concurrentlisten" + suite.TagID
+	pub, err := publisher.New(concurrentListenTopic, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := listener.New(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionName("concurrentListen"))
+	suite.NoError(err)
+
+	numOfMsgs := 3
+	suite.publishAndConcurrentReceiveMessage(publishReceiveTest{
+		topicName:       concurrentListenTopic,
+		listener:        l,
+		publisher:       pub,
+		listenerOptions: []listener.Option{},
+		shouldSucceed:   true,
+	}, numOfMsgs)
 }
 
 func (suite *serviceBusSuite) defaultTest(p *publisher.Publisher, l *listener.Listener) {
@@ -225,6 +250,67 @@ func (suite *serviceBusSuite) duplicateDetectionTest(pub *publisher.Publisher, l
 		},
 		event2,
 	)
+}
+
+func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publishReceiveTest, numOfEvents int) {
+	ctx := context.Background()
+	gotMessage := make(chan bool)
+	if testConfig.listenerOptions == nil {
+		testConfig.listenerOptions = []listener.Option{}
+	}
+	if testConfig.publisherOptions == nil {
+		testConfig.publisherOptions = []publisher.Option{}
+	}
+
+	events := []testEvent{}
+	for i := 0; i < numOfEvents; i++ {
+		j := i + 1
+		event := testEvent{
+			ID:    j,
+			Key:   fmt.Sprintf("key%d", j),
+			Value: fmt.Sprintf("value%d", j),
+		}
+		events = append(events, event)
+	}
+
+	// setup listener
+	go func() {
+		err := testConfig.listener.Listen(
+			ctx,
+			checkConcurrentResultHandler(reflection.GetType(events[0]), gotMessage),
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+		if err != nil {
+			fmt.Printf("listener error: %s", err)
+		}
+	}()
+	// publish after the listener is setup
+	time.Sleep(5 * time.Second)
+	publishCount := numOfEvents
+	for i := 0; i < publishCount; i++ {
+		err := testConfig.publisher.Publish(
+			ctx,
+			events[i],
+			testConfig.publisherOptions...,
+		)
+		suite.NoError(err)
+	}
+
+	select {
+	case isSuccessful := <-gotMessage:
+		if testConfig.shouldSucceed != isSuccessful {
+			suite.FailNow("Test did not succeed")
+		}
+	case <-time.After(20 * time.Second):
+		if testConfig.shouldSucceed {
+			suite.FailNow("Test didn't finish on time")
+		}
+	}
+
+	time.Sleep(20 * time.Second)
+	err := testConfig.listener.Close(ctx)
+	suite.NoError(err)
 }
 
 func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceiveTest, event interface{}) {
@@ -407,6 +493,28 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				}
 				retryCount++
 				return message.RetryLater(1 * time.Second)
+			}
+			ch <- true
+			return message.Complete()
+		})
+}
+
+func checkConcurrentResultHandler(publishedMsgType string, ch chan<- bool) message.Handler {
+	var retryCount = 0
+	return message.HandleFunc(
+		func(ctx context.Context, msg *message.Message) message.Handler {
+			fmt.Printf("checkConcurrentResultHandler Got a new Msg: %s, %v\n", msg.Data(), time.Now())
+			if publishedMsgType != msg.Type() {
+				ch <- false
+				return message.Error(errors.New("published message type and received message type are different"))
+			}
+			if publishedMsgType == reflection.GetType(retryLaterEvent{}) {
+				if retryCount > 0 {
+					ch <- true
+					return message.Complete()
+				}
+				retryCount++
+				return message.RetryLater(3 * time.Second)
 			}
 			ch <- true
 			return message.Complete()
