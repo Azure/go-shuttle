@@ -239,7 +239,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		func(ctx context.Context, msg *servicebus.Message) error {
 			currentHandler := handler
 			for !message.IsDone(currentHandler) {
-				currentHandler = currentHandler.Do(ctx, handler, msg)
+				currentHandler = currentHandler.Do(ctx, handler, msg, sub)
 				// handle nil as a Completion!
 				if currentHandler == nil {
 					currentHandler = message.Complete()

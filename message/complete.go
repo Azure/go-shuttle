@@ -15,7 +15,7 @@ func Complete() Handler {
 type complete struct {
 }
 
-func (a *complete) Do(ctx context.Context, _ Handler, message *servicebus.Message) Handler {
+func (a *complete) Do(ctx context.Context, _ Handler, message *servicebus.Message, _ *servicebus.Subscription) Handler {
 	ctx, span := startSpanFromMessageAndContext(ctx, "go-shuttle.complete.Do", message)
 	defer span.End()
 

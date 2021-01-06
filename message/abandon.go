@@ -15,7 +15,7 @@ func Abandon() Handler {
 type abandon struct {
 }
 
-func (a *abandon) Do(ctx context.Context, _ Handler, message *servicebus.Message) Handler {
+func (a *abandon) Do(ctx context.Context, _ Handler, message *servicebus.Message, _ *servicebus.Subscription) Handler {
 	ctx, span := startSpanFromMessageAndContext(ctx, "go-shuttle.abandon.Do", message)
 	defer span.End()
 

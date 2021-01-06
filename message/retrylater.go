@@ -20,11 +20,12 @@ type retryLaterHandler struct {
 	retryAfter time.Duration
 }
 
-func (r *retryLaterHandler) Do(ctx context.Context, orig Handler, message *servicebus.Message) Handler {
+func (r *retryLaterHandler) Do(ctx context.Context, orig Handler, message *servicebus.Message, sub *servicebus.Subscription) Handler {
 	select {
 	case <-ctx.Done():
 		return Error(fmt.Errorf("aborting retrylater for message. abandoning meddage %s: %w", message.ID, ctx.Err()))
 	case <-time.After(r.retryAfter):
+		sub.RenewLocks(ctx, message)
 		return orig
 	}
 }

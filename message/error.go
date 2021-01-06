@@ -15,7 +15,7 @@ type errorHandler struct {
 	err error
 }
 
-func (a *errorHandler) Do(ctx context.Context, _ Handler, msg *servicebus.Message) Handler {
+func (a *errorHandler) Do(ctx context.Context, _ Handler, msg *servicebus.Message, _ *servicebus.Subscription) Handler {
 	ctx, span := startSpanFromMessageAndContext(ctx, "go-shuttle.errorHandler.Do", msg)
 	defer span.End()
 

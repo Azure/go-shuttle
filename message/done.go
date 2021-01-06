@@ -15,7 +15,7 @@ func IsDone(handler Handler) bool {
 
 type doneHandler struct{}
 
-func (a *doneHandler) Do(_ context.Context, _ Handler, _ *servicebus.Message) Handler {
+func (a *doneHandler) Do(_ context.Context, _ Handler, _ *servicebus.Message, _ *servicebus.Subscription) Handler {
 	panic("done Handler is not meant to be called, it marks the end of the processing")
 }
 

@@ -11,7 +11,7 @@ import (
 type HandleFunc func(ctx context.Context, message *Message) Handler
 
 // Do wraps a service message and returns a handlers
-func (h HandleFunc) Do(ctx context.Context, _ Handler, msg *servicebus.Message) Handler {
+func (h HandleFunc) Do(ctx context.Context, _ Handler, msg *servicebus.Message, _ *servicebus.Subscription) Handler {
 	ctx, span := startSpanFromMessageAndContext(ctx, "go-shuttle.HandlerFunc.Do", msg)
 	defer span.End()
 
@@ -25,5 +25,5 @@ func (h HandleFunc) Do(ctx context.Context, _ Handler, msg *servicebus.Message) 
 
 // Handler is the interface to handle messages
 type Handler interface {
-	Do(ctx context.Context, orig Handler, message *servicebus.Message) Handler
+	Do(ctx context.Context, orig Handler, message *servicebus.Message, sub *servicebus.Subscription) Handler
 }
