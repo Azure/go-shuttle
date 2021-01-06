@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -247,29 +248,40 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
 
-	//blantantly stolen from https://github.com/Azure/azure-service-bus-go/pull/117/files
-	msgChan := make(chan *servicebus.Message, l.concurrency)
-	// Define a function that should be executed when a message is received.
+	semaphore := make(chan bool, l.concurrency)
+	//for each messge start two go routines one to handle the message and anotehr to renew lock till we're done
 	var concurrentHandler servicebus.HandlerFunc = func(ctx context.Context, msg *servicebus.Message) error {
-		msgChan <- msg
-		return nil
-	}
-	// Define msg workers
-	for i := 0; i < int(l.concurrency); i++ {
+		semaphore <- true //should make sure we block at l.concurrency
+		done := make(chan bool)
 		go func() {
-			for msg := range msgChan {
-				currentHandler := handler
-				for !message.IsDone(currentHandler) {
-					currentHandler = currentHandler.Do(ctx, handler, msg)
-					// handle nil as a Completion!
-					if currentHandler == nil {
-						currentHandler = message.Complete()
-					}
+			defer func() {
+				done <- true
+				<-semaphore
+			}()
+			currentHandler := handler
+			for !message.IsDone(currentHandler) {
+				currentHandler = currentHandler.Do(ctx, handler, msg)
+				// handle nil as a Completion!
+				if currentHandler == nil {
+					currentHandler = message.Complete()
 				}
 			}
 		}()
+		//renew locks periodically
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				case <-ctx.Done():
+					return
+				case <-time.After(time.Second * 30): //this should be lock duration
+					sub.RenewLocks(ctx, msg)
+				}
+			}
+		}()
+		return nil
 	}
-	defer close(msgChan)
 
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, concurrentHandler)

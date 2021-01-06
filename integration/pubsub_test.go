@@ -313,12 +313,12 @@ func (suite *serviceBusSuite) publishAndConcurrentReceiveMessage(testConfig publ
 			}
 			msgstatus = append(msgstatus, status)
 
-		case <-time.After(10 * time.Second):
+		case <-time.After(30 * time.Second):
 			if testConfig.shouldSucceed {
 				suite.FailNow("Test didn't finish on time %v", msgstatus)
 			}
 		}
-		if len(msgstatus) >= len(expected) {
+		if len(msgstatus) >= 6 {
 			break
 		}
 	}
@@ -523,10 +523,14 @@ func checkConcurrentResultHandler(ch chan<- string, order *int32) message.Handle
 		func(ctx context.Context, msg *message.Message) message.Handler {
 			order := atomic.AddInt32(order, 1)
 			ch <- fmt.Sprintf("recieved%d", order)
-			//fmt.Printf("concurrent Got a new Msg : %d, %v, %s\n", order, time.Now(), msg.Data())
+			fmt.Printf("Recieved msg : %d, %v, %s\n", order, time.Now(), msg.Data())
+			/*if order < 10 {
+				fmt.Printf("Retry Later Msg : %d, %v, %s\n", order, time.Now(), msg.Data())
+				return msg.RetryLater(1 * time.Second)
+			}*/
 			time.Sleep(time.Duration(order) * time.Second)
 			ch <- fmt.Sprintf("completed%d", order)
-			//fmt.Printf("concurrent completed : %d, %v, %s\n", order, time.Now(), msg.Data())
-			return message.Complete()
+			fmt.Printf("Completed : %d, %v, %s\n", order, time.Now(), msg.Data())
+			return msg.Complete()
 		})
 }
