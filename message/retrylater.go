@@ -8,8 +8,9 @@ import (
 	"github.com/devigned/tab"
 )
 
-// RetryLater waits for the given duration before retrying the processing of the message.
-// This happens in memory and does not impact servicebus message max retry limit
+// RetryLater waits for the given duration before abanoning.
+// Consider examining/increasing your LockDuration/MaxDeliveryCount before using.
+// Can't retryly later longer than the lock duration (which has a max of 5 minutes)
 func RetryLater(retryAfter time.Duration) Handler {
 	return &retryLaterHandler{
 		retryAfter: retryAfter,
