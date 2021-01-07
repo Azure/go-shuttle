@@ -322,8 +322,14 @@ func ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager,
 	if err == nil {
 		return subEntity, nil
 	}
+	increaseMaxDelivery := func(s *servicebus.SubscriptionDescription) error {
+		var maxDeliveryCount int32 = 500
+		s.MaxDeliveryCount = &maxDeliveryCount //whats our biggest agentpool? this is 5 * 500 minutes
+		return nil
+	}
+
 	duration := LockDuration
-	return sm.Put(ctx, name, servicebus.SubscriptionWithLockDuration(&duration))
+	return sm.Put(ctx, name, servicebus.SubscriptionWithLockDuration(&duration), increaseMaxDelivery)
 }
 
 func ensureFilterRule(

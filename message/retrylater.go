@@ -2,7 +2,6 @@ package message
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -24,10 +23,10 @@ func (r *retryLaterHandler) Do(ctx context.Context, orig Handler, message *servi
 	go func() {
 		select {
 		case <-ctx.Done():
-			return Error(fmt.Errorf("aborting retrylater for message. abandoning meddage %s: %w", message.ID, ctx.Err()))
-		case <-time.After(r.retryAfter):
-			return orig
+			return
+		case <-time.After(r.retryAfter): //or min LockDuration?
+			Abandon().Do(ctx, orig, message)
 		}
-	}
-	
+	}()
+	return done()
 }
