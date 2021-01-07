@@ -16,6 +16,7 @@ import (
 
 const (
 	defaultSubscriptionName = "default"
+	LockDuration            = time.Minute //same as the servicebus sdk but we want to have a const so we renew at correct times
 )
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
@@ -253,6 +254,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	var concurrentHandler servicebus.HandlerFunc = func(ctx context.Context, msg *servicebus.Message) error {
 		semaphore <- true //should make sure we block at l.concurrency
 		done := make(chan bool)
+		ctx, cancel = context.WithCancel(ctx)
 		go func() {
 			defer func() {
 				done <- true
@@ -275,8 +277,10 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 					return
 				case <-ctx.Done():
 					return
-				case <-time.After(time.Second * 30): //this should be lock duration
+				case <-time.After(LockDuration / time.Duration(10)):
 					sub.RenewLocks(ctx, msg)
+					//nothing we can do about errors.
+
 				}
 			}
 		}()
@@ -335,6 +339,8 @@ func getTopicEntity(ctx context.Context, topicName string, namespace *servicebus
 	return tm.Get(ctx, topicName)
 }
 
+var lockDuration = 5
+
 func getSubscriptionEntity(
 	ctx context.Context,
 	subscriptionName string,
@@ -358,8 +364,8 @@ func ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager,
 	if err == nil {
 		return subEntity, nil
 	}
-
-	return sm.Put(ctx, name)
+	duration := LockDuration
+	return sm.Put(ctx, name, servicebus.SubscriptionWithLockDuration(&duration))
 }
 
 func ensureFilterRule(
