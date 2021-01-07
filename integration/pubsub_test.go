@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -390,7 +389,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessageTwice(testConfig publishRe
 }
 
 func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) message.Handler {
-	var retryCount = 0
+
 	return message.HandleFunc(
 		func(ctx context.Context, msg *message.Message) message.Handler {
 			if publishedMsg != msg.Data() {
@@ -402,13 +401,11 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				return message.Error(errors.New("published message type and received message type are different"))
 			}
 			if publishedMsgType == reflection.GetType(retryLaterEvent{}) {
-				if retryCount > 2 {
-					fmt.Printf("Completing retryLaterEvent at  %v\n", time.Now())
+				//use delivery count now that retry later abandons
+				if msg.Message().DeliveryCount == 2 {
 					ch <- true
 					return message.Complete()
 				}
-				retryCount++
-				fmt.Printf("Retrying retryLaterEvent at %v\n", time.Now())
 				return message.RetryLater(1 * time.Second)
 			}
 			ch <- true

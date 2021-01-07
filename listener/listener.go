@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -25,6 +26,8 @@ type Listener struct {
 	listenerHandle     *servicebus.ListenerHandle
 	topicName          string
 	subscriptionName   string
+	maxDeliveryCount   int32
+	lockDuration       time.Duration
 	filterDefinitions  []*filterDefinition
 }
 
@@ -117,13 +120,27 @@ func WithSubscriptionName(name string) ManagementOption {
 	}
 }
 
-// WithFilterDescriber configures the filters on the subscription
+// WithFilterDescriber configures the filters on th56e subscription
 func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) ManagementOption {
 	return func(l *Listener) error {
 		if len(filterName) == 0 || filter == nil {
 			return errors.New("filter name or filter cannot be zero value")
 		}
 		l.filterDefinitions = append(l.filterDefinitions, &filterDefinition{filterName, filter})
+		return nil
+	}
+}
+
+//allos listeners to control subscription details for longer lived operations.
+//If you using RetryLater you probably want this
+func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) Option {
+	return func(l *Listener) error {
+		if lock > servicebusinternal.LockDuration {
+			//working on getting service bus to enforce this. Hangs if you go higher. https://github.com/Azure/azure-service-bus-go/pull/202
+			return fmt.Errorf("Lock duration must be <= to %v", servicebusinternal.LockDuration)
+		}
+		l.lockDuration = lock
+		l.maxDeliveryCount = maxDelivery
 		return nil
 	}
 }
@@ -172,7 +189,7 @@ func setSubscriptionEntity(ctx context.Context, l *Listener) error {
 	if l.subscriptionName == "" {
 		l.subscriptionName = defaultSubscriptionName
 	}
-	subscriptionEntity, err := getSubscriptionEntity(ctx, l.subscriptionName, l.namespace, l.topicEntity)
+	subscriptionEntity, err := l.getSubscriptionEntity(ctx, l.subscriptionName, l.namespace, l.topicEntity)
 	if err != nil {
 		return fmt.Errorf("failed to get subscription: %w", err)
 	}
@@ -278,7 +295,7 @@ func (l *Listener) GetActiveMessageCount(ctx context.Context, topicName, subscri
 		return 0, fmt.Errorf("topic name %q doesn't match %q", topicName, l.topicName)
 	}
 
-	subscriptionEntity, err := getSubscriptionEntity(ctx, subscriptionName, l.namespace, l.topicEntity)
+	subscriptionEntity, err := l.getSubscriptionEntity(ctx, subscriptionName, l.namespace, l.topicEntity)
 	if err != nil {
 		return 0, fmt.Errorf("error to get entity of subscription %q of topic %q: %s", subscriptionName, topicName, err)
 	}
@@ -297,7 +314,7 @@ func getTopicEntity(ctx context.Context, topicName string, namespace *servicebus
 	return tm.Get(ctx, topicName)
 }
 
-func getSubscriptionEntity(
+func (l *Listener) getSubscriptionEntity(
 	ctx context.Context,
 	subscriptionName string,
 	ns *servicebus.Namespace,
@@ -307,7 +324,7 @@ func getSubscriptionEntity(
 		return nil, fmt.Errorf("creating subscription manager failed: %w", err)
 	}
 
-	subEntity, err := ensureSubscription(ctx, subscriptionManager, subscriptionName)
+	subEntity, err := l.ensureSubscription(ctx, subscriptionManager, subscriptionName)
 	if err != nil {
 		return nil, fmt.Errorf("ensuring subscription failed: %w", err)
 	}
@@ -315,18 +332,16 @@ func getSubscriptionEntity(
 	return subEntity, nil
 }
 
-func ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager, name string) (*servicebus.SubscriptionEntity, error) {
+func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager, name string) (*servicebus.SubscriptionEntity, error) {
 	subEntity, err := sm.Get(ctx, name)
 	if err == nil {
 		return subEntity, nil
 	}
-	increaseMaxDelivery := func(s *servicebus.SubscriptionDescription) error {
-		var maxDeliveryCount int32 = 500
-		s.MaxDeliveryCount = &maxDeliveryCount //whats our biggest agentpool? this is 5 * 500 minutes
-		return nil
+	mutateSericeDetails := func(s *servicebus.SubscriptionDescription) error {
+		s.MaxDeliveryCount = &l.maxDeliveryCount
+		return servicebus.SubscriptionWithLockDuration(&l.lockDuration)(s)
 	}
-	duration := servicebusinternal.LockDuration
-	return sm.Put(ctx, name, servicebus.SubscriptionWithLockDuration(&duration), increaseMaxDelivery)
+	return sm.Put(ctx, name, mutateSericeDetails)
 }
 
 func ensureFilterRule(
