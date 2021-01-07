@@ -21,10 +21,13 @@ type retryLaterHandler struct {
 }
 
 func (r *retryLaterHandler) Do(ctx context.Context, orig Handler, message *servicebus.Message) Handler {
-	select {
-	case <-ctx.Done():
-		return Error(fmt.Errorf("aborting retrylater for message. abandoning meddage %s: %w", message.ID, ctx.Err()))
-	case <-time.After(r.retryAfter):
-		return orig
+	go func() {
+		select {
+		case <-ctx.Done():
+			return Error(fmt.Errorf("aborting retrylater for message. abandoning meddage %s: %w", message.ID, ctx.Err()))
+		case <-time.After(r.retryAfter):
+			return orig
+		}
 	}
+	
 }
