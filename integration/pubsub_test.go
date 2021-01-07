@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -401,11 +402,13 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				return message.Error(errors.New("published message type and received message type are different"))
 			}
 			if publishedMsgType == reflection.GetType(retryLaterEvent{}) {
-				if retryCount > 0 {
+				if retryCount > 2 {
+					fmt.Printf("Completing retryLaterEvent at  %v\n", time.Now())
 					ch <- true
 					return message.Complete()
 				}
 				retryCount++
+				fmt.Printf("Retrying retryLaterEvent at %v\n", time.Now())
 				return message.RetryLater(1 * time.Second)
 			}
 			ch <- true

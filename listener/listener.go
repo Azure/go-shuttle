@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -16,7 +15,6 @@ import (
 
 const (
 	defaultSubscriptionName = "default"
-	LockDuration            = 5 * time.Minute //Need to reference from retry later.
 )
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
@@ -327,8 +325,7 @@ func ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager,
 		s.MaxDeliveryCount = &maxDeliveryCount //whats our biggest agentpool? this is 5 * 500 minutes
 		return nil
 	}
-
-	duration := LockDuration
+	duration := servicebusinternal.LockDuration
 	return sm.Put(ctx, name, servicebus.SubscriptionWithLockDuration(&duration), increaseMaxDelivery)
 }
 
