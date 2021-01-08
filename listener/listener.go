@@ -120,7 +120,7 @@ func WithSubscriptionName(name string) ManagementOption {
 	}
 }
 
-// WithFilterDescriber configures the filters on th56e subscription
+// WithFilterDescriber configures the filters on the subscription
 func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) ManagementOption {
 	return func(l *Listener) error {
 		if len(filterName) == 0 || filter == nil {
