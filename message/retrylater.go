@@ -10,7 +10,7 @@ import (
 
 // RetryLater waits for the given duration before abanoning.
 // Consider examining/increasing your LockDuration/MaxDeliveryCount before using.
-// Can't retryly later longer than the lock duration (which has a max of 5 minutes)
+// Undefined behavior if RetryLater is passed a duration that puts the message handling past the lock duration (which has a max of 5 minutes)
 func RetryLater(retryAfter time.Duration) Handler {
 	return &retryLaterHandler{
 		retryAfter: retryAfter,
