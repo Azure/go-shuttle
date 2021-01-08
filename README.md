@@ -108,7 +108,7 @@ err := l.Listen(ctx, handler, topicName)
 ```
 
 Notes: 
-* RetryLater simply waits for the given duration before abanoning. So, if you using RetryLater you probably want to set WithSubscriptionDetails, especially maxDelivery as each call to RetryLater will up the delivery count by 1
+* RetryLater simply waits for the given duration before abanoning. So, if you use RetryLater you probably want to set WithSubscriptionDetails, especially maxDelivery as each call to RetryLater will up the delivery count by 1
 * Undefined behavior if RetryLater is passed a duration that puts the message handling (time used in go-shuttle, client handler, and RetryLater combined) past the lock duration (which has a max of 5 minutes).
 
 #### Start Listening
