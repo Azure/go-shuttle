@@ -131,7 +131,7 @@ func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) M
 	}
 }
 
-//allos listeners to control subscription details for longer lived operations.
+//allows listeners to control subscription details for longer lived operations.
 //If you using RetryLater you probably want this
 func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) Option {
 	return func(l *Listener) error {
