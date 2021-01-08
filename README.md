@@ -102,14 +102,15 @@ handler := message.HandlerFunc(func(ctx context.Context, msg *message.Message) m
     return msg.RetryLater(10*time.Minute)
 })
 
-This is currently a delayed abandon so it can not be longer than the lock duration and effects your dequeue count.
+// This is currently a delayed abandon so it can not be longer than the lock duration and effects your dequeue count.
 
 // listen blocks and handle messages from the topic
 err := l.Listen(ctx, handler, topicName)
 ```
 
-Note that this happens in-memory in your service. The receiver is keeping your message and pushing it back to your handler after the given time.
-This will not increase the retry count of the message, as the message is not dequeued another time.
+Note: RetryLater wimply waits for the given duration before abanoning. So, if you using RetryLater you probably want to set WithSubscriptionDetails, especially maxDelivery as each call to RetryLater will up the delivery count by 1
+
+Additionally, RetryLater's behavior is undefined if RetryLater is passed a duration that puts the message handling past the lock duration (which has a max of 5 minutes)
 
 #### Start Listening
 ```golang
