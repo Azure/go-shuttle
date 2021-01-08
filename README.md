@@ -99,18 +99,17 @@ err := l.Listen(ctx, handler, topicName)
 In some cases, your message handler can detect that it is not ready to process the message, and needs to retry later: 
 ```golang
 handler := message.HandlerFunc(func(ctx context.Context, msg *message.Message) message.Handler {
-    return msg.RetryLater(10*time.Minute)
+    // This is currently a delayed abandon so it can not be longer than the lock duration (max of 5 minutes) and effects your dequeue count.
+    return msg.RetryLater(4*time.Minute)
 })
-
-// This is currently a delayed abandon so it can not be longer than the lock duration and effects your dequeue count.
 
 // listen blocks and handle messages from the topic
 err := l.Listen(ctx, handler, topicName)
 ```
 
-Note: RetryLater wimply waits for the given duration before abanoning. So, if you using RetryLater you probably want to set WithSubscriptionDetails, especially maxDelivery as each call to RetryLater will up the delivery count by 1
-
-Additionally, RetryLater's behavior is undefined if RetryLater is passed a duration that puts the message handling past the lock duration (which has a max of 5 minutes)
+Notes: 
+* RetryLater simply waits for the given duration before abanoning. So, if you using RetryLater you probably want to set WithSubscriptionDetails, especially maxDelivery as each call to RetryLater will up the delivery count by 1
+* Undefined behavior if RetryLater is passed a duration that puts the message handling (time used in go-shuttle, client handler, and RetryLater combined) past the lock duration (which has a max of 5 minutes).
 
 #### Start Listening
 ```golang
