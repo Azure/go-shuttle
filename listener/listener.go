@@ -338,7 +338,7 @@ func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.Subscr
 		return subEntity, nil
 	}
 	mutateSericeDetails := func(s *servicebus.SubscriptionDescription) error {
-		if l.maxDeliveryCount != 0 {
+		if l.maxDeliveryCount > 0 {
 			s.MaxDeliveryCount = &l.maxDeliveryCount
 		}
 		if l.lockDuration > time.Duration(0) {
