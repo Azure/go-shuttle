@@ -102,7 +102,7 @@ handler := message.HandlerFunc(func(ctx context.Context, msg *message.Message) m
     return msg.RetryLater(10*time.Minute)
 })
 
-This is currently a delayed abanonded so it can not be longer than the lock duration and effects your dequeue count.
+This is currently a delayed abandon so it can not be longer than the lock duration and effects your dequeue count.
 
 // listen blocks and handle messages from the topic
 err := l.Listen(ctx, handler, topicName)
