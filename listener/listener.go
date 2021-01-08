@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -25,6 +26,8 @@ type Listener struct {
 	listenerHandle     *servicebus.ListenerHandle
 	topicName          string
 	subscriptionName   string
+	maxDeliveryCount   int32
+	lockDuration       time.Duration
 	filterDefinitions  []*filterDefinition
 }
 
@@ -128,6 +131,26 @@ func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) M
 	}
 }
 
+// WithSubscriptionDetails allows listeners to control subscription details for longer lived operations.
+// If you using RetryLater you probably want this. Passing zeros leaves it up to Service bus defaults
+func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) ManagementOption {
+	return func(l *Listener) error {
+		if lock > servicebusinternal.LockDuration {
+			//working on getting service bus to enforce this. Hangs if you go higher. https://github.com/Azure/azure-service-bus-go/pull/202
+			return fmt.Errorf("Lock duration must be <= to %v", servicebusinternal.LockDuration)
+		}
+		if lock < time.Duration(0) {
+			return fmt.Errorf("Lock duration must be positive")
+		}
+		l.lockDuration = lock
+		if maxDelivery < 0 {
+			return fmt.Errorf("Max Deliveries must be positive")
+		}
+		l.maxDeliveryCount = maxDelivery
+		return nil
+	}
+}
+
 type filterDefinition struct {
 	Name   string
 	Filter servicebus.FilterDescriber
@@ -172,7 +195,7 @@ func setSubscriptionEntity(ctx context.Context, l *Listener) error {
 	if l.subscriptionName == "" {
 		l.subscriptionName = defaultSubscriptionName
 	}
-	subscriptionEntity, err := getSubscriptionEntity(ctx, l.subscriptionName, l.namespace, l.topicEntity)
+	subscriptionEntity, err := l.getSubscriptionEntity(ctx, l.subscriptionName)
 	if err != nil {
 		return fmt.Errorf("failed to get subscription: %w", err)
 	}
@@ -278,7 +301,7 @@ func (l *Listener) GetActiveMessageCount(ctx context.Context, topicName, subscri
 		return 0, fmt.Errorf("topic name %q doesn't match %q", topicName, l.topicName)
 	}
 
-	subscriptionEntity, err := getSubscriptionEntity(ctx, subscriptionName, l.namespace, l.topicEntity)
+	subscriptionEntity, err := l.getSubscriptionEntity(ctx, subscriptionName)
 	if err != nil {
 		return 0, fmt.Errorf("error to get entity of subscription %q of topic %q: %s", subscriptionName, topicName, err)
 	}
@@ -297,17 +320,16 @@ func getTopicEntity(ctx context.Context, topicName string, namespace *servicebus
 	return tm.Get(ctx, topicName)
 }
 
-func getSubscriptionEntity(
+func (l *Listener) getSubscriptionEntity(
 	ctx context.Context,
-	subscriptionName string,
-	ns *servicebus.Namespace,
-	te *servicebus.TopicEntity) (*servicebus.SubscriptionEntity, error) {
-	subscriptionManager, err := ns.NewSubscriptionManager(te.Name)
+	subscriptionName string) (*servicebus.SubscriptionEntity, error) {
+
+	subscriptionManager, err := l.namespace.NewSubscriptionManager(l.topicEntity.Name)
 	if err != nil {
 		return nil, fmt.Errorf("creating subscription manager failed: %w", err)
 	}
 
-	subEntity, err := ensureSubscription(ctx, subscriptionManager, subscriptionName)
+	subEntity, err := l.ensureSubscription(ctx, subscriptionManager, subscriptionName)
 	if err != nil {
 		return nil, fmt.Errorf("ensuring subscription failed: %w", err)
 	}
@@ -315,13 +337,21 @@ func getSubscriptionEntity(
 	return subEntity, nil
 }
 
-func ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager, name string) (*servicebus.SubscriptionEntity, error) {
+func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager, name string) (*servicebus.SubscriptionEntity, error) {
 	subEntity, err := sm.Get(ctx, name)
 	if err == nil {
 		return subEntity, nil
 	}
-
-	return sm.Put(ctx, name)
+	mutateSericeDetails := func(s *servicebus.SubscriptionDescription) error {
+		if l.maxDeliveryCount > 0 {
+			s.MaxDeliveryCount = &l.maxDeliveryCount
+		}
+		if l.lockDuration > time.Duration(0) {
+			return servicebus.SubscriptionWithLockDuration(&l.lockDuration)(s)
+		}
+		return nil
+	}
+	return sm.Put(ctx, name, mutateSericeDetails)
 }
 
 func ensureFilterRule(
