@@ -2,6 +2,7 @@ package servicebus
 
 import (
 	"errors"
+	"time"
 
 	"github.com/Azure/azure-amqp-common-go/v3/auth"
 	servicebussdk "github.com/Azure/azure-service-bus-go"
@@ -11,6 +12,8 @@ import (
 
 const (
 	serviceBusResourceURI = "https://servicebus.azure.net/"
+	//cannot be higher than 5 minutes
+	LockDuration = 5 * time.Minute
 )
 
 var errorOption func(h *servicebussdk.Namespace) error
