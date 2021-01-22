@@ -114,6 +114,33 @@ func (suite *serviceBusSuite) TestPublishAndListenRetryLater() {
 	}, event)
 }
 
+func (suite *serviceBusSuite) TestPublishAndListenShortLockDuration() {
+	suite.T().Parallel()
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	shortLockTopic := suite.Prefix + "shortlock" + suite.TagID
+	pub, err := publisher.New(shortLockTopic, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := listener.New(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionDetails(2*time.Second, 3),
+		listener.WithSubscriptionName("subshortlock"))
+	suite.NoError(err)
+	// create retryLater event. listener emits retry based on event type
+	event := &testEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	suite.publishAndReceiveMessageWithAutoLockRenewal(publishReceiveTest{
+		topicName:       shortLockTopic,
+		listener:        l,
+		publisher:       pub,
+		listenerOptions: []listener.Option{listener.WithMessageLockAutoRenewal(1 * time.Second)},
+		shouldSucceed:   true,
+	}, event)
+}
+
 func (suite *serviceBusSuite) defaultTest(p *publisher.Publisher, l *listener.Listener) {
 	// create test event
 	event := &testEvent{
@@ -268,7 +295,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceive
 		if testConfig.shouldSucceed != isSuccessful {
 			suite.FailNow("Test did not succeed")
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(15 * time.Second):
 		if testConfig.shouldSucceed {
 			suite.FailNow("Test didn't finish on time")
 		}
@@ -388,8 +415,51 @@ func (suite *serviceBusSuite) publishAndReceiveMessageTwice(testConfig publishRe
 	suite.NoError(err)
 }
 
-func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) message.Handler {
+func (suite *serviceBusSuite) publishAndReceiveMessageWithAutoLockRenewal(testConfig publishReceiveTest, event interface{}) {
+	ctx := context.Background()
+	gotMessage := make(chan bool)
 
+	// setup listener
+	go func() {
+		eventJSON, err := json.Marshal(event)
+		suite.NoError(err)
+		testConfig.listener.Listen(
+			ctx,
+			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+	}()
+	// publish after the listener is setup
+	time.Sleep(5 * time.Second)
+	publishCount := 1
+	if testConfig.publishCount != nil {
+		publishCount = *testConfig.publishCount
+	}
+	for i := 0; i < publishCount; i++ {
+		err := testConfig.publisher.Publish(
+			ctx,
+			event,
+			testConfig.publisherOptions...,
+		)
+		suite.NoError(err)
+	}
+
+	select {
+	case isSuccessful := <-gotMessage:
+		if testConfig.shouldSucceed != isSuccessful {
+			suite.FailNow("Test did not succeed")
+		}
+	case <-time.After(5 * time.Second):
+		if testConfig.shouldSucceed {
+			suite.FailNow("Test didn't finish on time")
+		}
+	}
+	err := testConfig.listener.Close(ctx)
+	suite.NoError(err)
+}
+
+func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) message.Handler {
 	return message.HandleFunc(
 		func(ctx context.Context, msg *message.Message) message.Handler {
 			if publishedMsg != msg.Data() {
@@ -401,12 +471,25 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				return message.Error(errors.New("published message type and received message type are different"))
 			}
 			if publishedMsgType == reflection.GetType(retryLaterEvent{}) {
-				//use delivery count now that retry later abandons
+				// use delivery count now that retry later abandons
 				if msg.Message().DeliveryCount == 2 {
 					ch <- true
 					return message.Complete()
 				}
 				return message.RetryLater(1 * time.Second)
+			}
+			if publishedMsgType == reflection.GetType(shortLockMessage{}) {
+				// the shortlock is set at 1 second in the listener setup
+				// We sleep for longer to trigger the lock renewal in the listener.
+				// if the renewal works, then the message completion will succeed.
+				time.Sleep(3 * time.Second)
+				res := message.Complete()
+				if message.IsDone(res) {
+					ch <- true
+				} else {
+					ch <- false
+				}
+				return res
 			}
 			ch <- true
 			return message.Complete()
