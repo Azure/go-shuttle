@@ -30,6 +30,12 @@ type retryLaterEvent struct {
 	Value string `json:"value"`
 }
 
+type shortLockMessage struct {
+	ID    int    `json:"id"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type testEvent struct {
 	ID    int    `json:"id"`
 	Key   string `json:"key"`

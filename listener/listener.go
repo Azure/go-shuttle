@@ -9,6 +9,8 @@ import (
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/message"
+	"github.com/Azure/go-shuttle/peeklock"
+	"github.com/devigned/tab"
 
 	aad "github.com/Azure/go-shuttle/internal/aad"
 	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
@@ -20,15 +22,16 @@ const (
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
 type Listener struct {
-	namespace          *servicebus.Namespace
-	topicEntity        *servicebus.TopicEntity
-	subscriptionEntity *servicebus.SubscriptionEntity
-	listenerHandle     *servicebus.ListenerHandle
-	topicName          string
-	subscriptionName   string
-	maxDeliveryCount   int32
-	lockDuration       time.Duration
-	filterDefinitions  []*filterDefinition
+	namespace           *servicebus.Namespace
+	topicEntity         *servicebus.TopicEntity
+	subscriptionEntity  *servicebus.SubscriptionEntity
+	listenerHandle      *servicebus.ListenerHandle
+	topicName           string
+	subscriptionName    string
+	maxDeliveryCount    int32
+	lockRenewalInterval *time.Duration
+	lockDuration        time.Duration
+	filterDefinitions   []*filterDefinition
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -151,6 +154,16 @@ func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) ManagementOp
 	}
 }
 
+func WithMessageLockAutoRenewal(interval time.Duration) Option {
+	return func(l *Listener) error {
+		if interval < time.Duration(0) {
+			return fmt.Errorf("renewal interval must be positive")
+		}
+		l.lockRenewalInterval = &interval
+		return nil
+	}
+}
+
 type filterDefinition struct {
 	Name   string
 	Filter servicebus.FilterDescriber
@@ -260,6 +273,12 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
 		func(ctx context.Context, msg *servicebus.Message) error {
+			ctx, s := tab.StartSpan(ctx, "go-shuttle.Listener.HandlerFunc")
+			defer s.End()
+			if l.lockRenewalInterval != nil {
+				renewer := peeklock.RenewPeriodically(ctx, *l.lockRenewalInterval, sub, msg)
+				defer renewer.Stop()
+			}
 			currentHandler := handler
 			for !message.IsDone(currentHandler) {
 				currentHandler = currentHandler.Do(ctx, handler, msg)

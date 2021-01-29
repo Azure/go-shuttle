@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/go-shuttle/internal/aad"
 	"github.com/Azure/go-shuttle/internal/reflection"
 	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
+	"github.com/devigned/tab"
 )
 
 // Publisher is a struct to contain service bus entities relevant to publishing to a topic
@@ -172,6 +173,8 @@ func New(topicName string, opts ...ManagementOption) (*Publisher, error) {
 
 // Publish publishes to the pre-configured Service Bus topic
 func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option) error {
+	_, s := tab.StartSpan(ctx, "go-shuttle.Publish")
+	defer s.End()
 	msgJSON, err := json.Marshal(msg)
 
 	// adding in user properties to enable filtering on listener side

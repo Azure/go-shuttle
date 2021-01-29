@@ -12,8 +12,13 @@ import (
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure"
+	_ "github.com/devigned/tab/opentracing"
 	"github.com/joho/godotenv"
+	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/suite"
+	"github.com/uber/jaeger-client-go/config"
+	jaegerlog "github.com/uber/jaeger-client-go/log"
+	"github.com/uber/jaeger-lib/metrics"
 )
 
 type (
@@ -47,6 +52,12 @@ func init() {
 func (suite *BaseSuite) SetupSuite() {
 	if err := godotenv.Load("../.env"); err != nil {
 		suite.T().Log(err)
+	}
+	if os.Getenv("TRACING") == "1" {
+		_, err := initTracing()
+		if err != nil {
+			suite.FailNow("failed to initialize tracing %s", err)
+		}
 	}
 
 	setFromEnv := func(key string, target *string) {
@@ -137,4 +148,20 @@ func randomString(prefix string, length int) string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return prefix + string(b)
+}
+
+func initTracing() (io.Closer, error) {
+	cfg, err := config.FromEnv()
+	if err != nil {
+		return nil, err
+	}
+	jLogger := jaegerlog.StdLogger
+	jMetricsFactory := metrics.NullFactory
+	tracer, closer, err := cfg.NewTracer(config.Logger(jLogger), config.Metrics(jMetricsFactory))
+	opentracing.SetGlobalTracer(tracer)
+	if err != nil {
+		return nil, err
+	}
+	return closer, nil
+
 }
