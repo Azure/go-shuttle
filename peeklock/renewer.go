@@ -5,6 +5,7 @@ import (
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/devigned/tab"
 )
 
 type LockRenewer interface {
@@ -28,17 +29,17 @@ func RenewPeriodically(ctx context.Context, interval time.Duration, lockrenewer 
 func (plr *PeriodicLockRenewer) startPeriodicRenewal(ctx context.Context, interval time.Duration, message *servicebus.Message) {
 	var renewerCtx context.Context
 	renewerCtx, plr.cancelFunc = context.WithCancel(ctx)
+	_, span := tab.StartSpan(renewerCtx, "go-shuttle.peeklock.startPeriodicRenewal")
+	defer span.End()
 	for alive := true; alive; {
 		select {
 		case <-time.After(interval):
-			// add span for logs
-			// fmt.Printf("%s - Renewing Lock: [ ttl: %s, lockedUntil: %s, enqueuedTime: %s ]",
-			// 	time.Now(),
-			// 	message.TTL,
-			// 	message.SystemProperties.LockedUntil,
-			// 	message.SystemProperties.EnqueuedTime)
+			// TODO: improve span once tracing package extracted
+			span.Logger().Debug("Renewing message lock",
+				tab.StringAttribute("message.TTL", message.TTL.String()),
+				tab.StringAttribute("message.LockedUntil", message.SystemProperties.LockedUntil.String()),
+				tab.StringAttribute("message.EnqueuedTime", message.SystemProperties.EnqueuedTime.String()))
 			plr.lockRenewer.RenewLocks(renewerCtx, message)
-			// what do we do if we fail to renew?
 		case <-renewerCtx.Done():
 			// stop renewing
 			alive = false
