@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -11,6 +12,8 @@ import (
 	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/Azure/go-shuttle/publisher"
+	"github.com/devigned/tab"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
@@ -138,6 +141,33 @@ func (suite *serviceBusSuite) TestPublishAndListenShortLockDuration() {
 		publisher:       pub,
 		listenerOptions: []listener.Option{listener.WithMessageLockAutoRenewal(1 * time.Second)},
 		shouldSucceed:   true,
+	}, event)
+}
+
+func (suite *serviceBusSuite) TestPublishAndListenNotRenewingLock() {
+	suite.T().Parallel()
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	norenewlockTopic := suite.Prefix + "norenewlock" + suite.TagID
+	pub, err := publisher.New(norenewlockTopic, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := listener.New(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionDetails(2*time.Second, 2),
+		listener.WithSubscriptionName("norenewlock"))
+	suite.NoError(err)
+	// create retryLater event. listener emits retry based on event type
+	event := &testEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	suite.publishAndReceiveMessageNotRenewingLock(publishReceiveTest{
+		topicName:       norenewlockTopic,
+		listener:        l,
+		publisher:       pub,
+		listenerOptions: []listener.Option{},
+		shouldSucceed:   false,
 	}, event)
 }
 
@@ -459,6 +489,60 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithAutoLockRenewal(testCo
 	suite.NoError(err)
 }
 
+func (suite *serviceBusSuite) publishAndReceiveMessageNotRenewingLock(testConfig publishReceiveTest, event interface{}) {
+	parenrCtx := context.Background()
+	returnedHandler := make(chan message.Handler, 1)
+	lockRenewalFailureHandler := message.HandleFunc(func(ctx context.Context, msg *message.Message) message.Handler {
+		ctx, sp := tab.StartSpan(ctx, "go-shuttle.test.lockrenewalhandler")
+		defer sp.End()
+		tab.StringAttribute("msg.DeliveryCount", fmt.Sprint(msg.Message().DeliveryCount))
+		tab.StringAttribute("msg.LockedUntil", fmt.Sprint(msg.Message().SystemProperties.LockedUntil))
+
+		// the shortlock is set at 1 second in the listener setup
+		// We sleep for longer to trigger the lock renewal in the listener.
+		// if the renewal works, then the message completion will succeed.
+		time.Sleep(5 * time.Second)
+
+		fmt.Printf("[%s] trying to complete!\n", time.Now())
+		// Force inline completion to retrieve resulting handler
+		res := msg.Complete().Do(ctx, nil, msg.Message())
+		// push the returned handler into the channel to trigger the assertion below
+		returnedHandler <- res
+		return res
+	})
+
+	// setup listener
+	go func() {
+		testConfig.listener.Listen(
+			parenrCtx,
+			lockRenewalFailureHandler,
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+	}()
+	// publish after the listener is setup
+	time.Sleep(5 * time.Second)
+	err := testConfig.publisher.Publish(
+		parenrCtx,
+		event,
+		testConfig.publisherOptions...,
+	)
+	suite.NoError(err)
+
+	// expect error handler returned
+	select {
+	case h := <-returnedHandler:
+		// This shows that the handler Complete call returns an error when the lock
+		// on the message has expired.
+		assert.True(suite.T(), message.IsError(h))
+	case <-time.After(12 * time.Second):
+		suite.T().Errorf("message never reached the handler or is hanging")
+	}
+	err = testConfig.listener.Close(parenrCtx)
+	time.Sleep(2 * time.Second)
+	suite.NoError(err)
+}
+
 func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) message.Handler {
 	return message.HandleFunc(
 		func(ctx context.Context, msg *message.Message) message.Handler {
@@ -483,7 +567,7 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				// We sleep for longer to trigger the lock renewal in the listener.
 				// if the renewal works, then the message completion will succeed.
 				time.Sleep(3 * time.Second)
-				res := message.Complete()
+				res := message.Complete() //if renew failed, complete will fail and we don't return Done().
 				if message.IsDone(res) {
 					ch <- true
 				} else {

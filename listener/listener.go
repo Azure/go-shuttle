@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/Azure/go-shuttle/peeklock"
+	"github.com/devigned/tab"
 
 	aad "github.com/Azure/go-shuttle/internal/aad"
 	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
@@ -272,6 +273,8 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
 		func(ctx context.Context, msg *servicebus.Message) error {
+			ctx, s := tab.StartSpan(ctx, "go-shuttle.Listener.HandlerFunc")
+			defer s.End()
 			if l.lockRenewalInterval != nil {
 				renewer := peeklock.RenewPeriodically(ctx, *l.lockRenewalInterval, sub, msg)
 				defer renewer.Stop()

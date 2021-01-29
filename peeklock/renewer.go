@@ -50,5 +50,4 @@ func (plr *PeriodicLockRenewer) Stop() {
 	if plr.cancelFunc != nil {
 		plr.cancelFunc()
 	}
-
 }

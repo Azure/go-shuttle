@@ -1,5 +1,5 @@
 include .env
-IMAGE?="${REGISTRY}/pubsubtest"
+IMAGE?=${REGISTRY}/pubsubtest
 export
 SCRIPTPATH="$(shell cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
@@ -44,5 +44,7 @@ clean-aci:
 integration: build-test-image push-test-image test-aci
 
 integration-local: build-test-image
-	@docker run --env-file .env --rm --entrypoint go test -run TestConnectionString -v ./integration ${IMAGE}
+	@docker-compose --env-file .env up
+
+
 
