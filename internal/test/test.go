@@ -87,10 +87,6 @@ func (suite *BaseSuite) SetupSuite() {
 	// suite.Token = suite.servicePrincipalToken()
 	suite.Environment = azure.PublicCloud
 	suite.TagID = randomString("tag", 5)
-
-	if !suite.NoError(err) {
-		suite.FailNowf("tracing setup failed", "%s", err)
-	}
 }
 
 // TearDownSuite destroys created resources during the run of the suite. In particular it deletes the topics that were created
