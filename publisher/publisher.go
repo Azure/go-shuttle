@@ -3,16 +3,12 @@ package publisher
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	common "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/Azure/go-shuttle/internal/aad"
 	"github.com/Azure/go-shuttle/internal/reflection"
-	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
 	"github.com/devigned/tab"
 )
 
@@ -26,124 +22,6 @@ type Publisher struct {
 
 func (p *Publisher) Namespace() *servicebus.Namespace {
 	return p.namespace
-}
-
-// ManagementOption provides structure for configuring a new Publisher
-type ManagementOption func(p *Publisher) error
-
-// Option provides structure for configuring when starting to publish to a specified topic
-type Option func(msg *servicebus.Message) error
-
-// WithConnectionString configures a publisher with the information provided in a Service Bus connection string
-func WithConnectionString(connStr string) ManagementOption {
-	return func(p *Publisher) error {
-		if connStr == "" {
-			return errors.New("no Service Bus connection string provided")
-		}
-		ns, err := servicebus.NewNamespace(servicebus.NamespaceWithConnectionString(connStr))
-		if err != nil {
-			return err
-		}
-		p.namespace = ns
-		return nil
-	}
-}
-
-// WithManagedIdentityResourceID configures a publisher with the attached managed identity and the Service bus resource name
-func WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID string) ManagementOption {
-	return func(p *Publisher) error {
-		if serviceBusNamespaceName == "" {
-			return errors.New("no Service Bus namespace provided")
-		}
-		ns, err := servicebus.NewNamespace(servicebusinternal.NamespaceWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
-		if err != nil {
-			return err
-		}
-		p.namespace = ns
-		return nil
-	}
-}
-
-// WithManagedIdentityClientID configures a publisher with the attached managed identity and the Service bus resource name
-func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID string) ManagementOption {
-	return func(p *Publisher) error {
-		if serviceBusNamespaceName == "" {
-			return errors.New("no Service Bus namespace provided")
-		}
-		ns, err := servicebus.NewNamespace(servicebusinternal.NamespaceWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID))
-		if err != nil {
-			return err
-		}
-		p.namespace = ns
-		return nil
-	}
-}
-
-func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) ManagementOption {
-	return func(p *Publisher) error {
-		if spt == nil {
-			return errors.New("cannot provide a nil token")
-		}
-		ns, err := servicebus.NewNamespace(servicebusinternal.NamespaceWithTokenProvider(serviceBusNamespaceName, aad.AsJWTTokenProvider(spt)))
-		if err != nil {
-			return err
-		}
-		p.namespace = ns
-		return nil
-	}
-}
-
-// SetDefaultHeader adds a header to every message published using the value specified from the message body
-func SetDefaultHeader(headerName, msgKey string) ManagementOption {
-	return func(p *Publisher) error {
-		if p.headers == nil {
-			p.headers = make(map[string]string)
-		}
-		p.headers[headerName] = msgKey
-		return nil
-	}
-}
-
-// SetDuplicateDetection guarantees that the topic will have exactly-once delivery over a user-defined span of time.
-// Defaults to 30 seconds with a maximum of 7 days
-func WithDuplicateDetection(window *time.Duration) ManagementOption {
-	return func(p *Publisher) error {
-		p.topicManagementOptions = append(p.topicManagementOptions, servicebus.TopicWithDuplicateDetection(window))
-		return nil
-	}
-}
-
-// SetMessageDelay schedules a message in the future
-func SetMessageDelay(delay time.Duration) Option {
-	return func(msg *servicebus.Message) error {
-		if msg == nil {
-			return errors.New("message is nil. cannot assign message delay")
-		}
-		msg.ScheduleAt(time.Now().Add(delay))
-		return nil
-	}
-}
-
-// SetMessageID sets the messageID of the message. Used for duplication detection
-func SetMessageID(messageID string) Option {
-	return func(msg *servicebus.Message) error {
-		if msg == nil {
-			return errors.New("message is nil. cannot assign message ID")
-		}
-		msg.ID = messageID
-		return nil
-	}
-}
-
-// SetCorrelationID sets the SetCorrelationID of the message.
-func SetCorrelationID(correlationID string) Option {
-	return func(msg *servicebus.Message) error {
-		if msg == nil {
-			return errors.New("message is nil. cannot assign correlation ID")
-		}
-		msg.CorrelationID = correlationID
-		return nil
-	}
 }
 
 // New creates a new service bus publisher
