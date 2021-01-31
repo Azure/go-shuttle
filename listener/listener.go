@@ -273,15 +273,16 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	// Create a handle class that has that function
 	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
 		func(ctx context.Context, msg *servicebus.Message) error {
-			ctx, s := tab.StartSpan(ctx, "go-shuttle.Listener.HandlerFunc")
+			msgCtx, finished := messageContext(ctx, msg)
+			defer finished()
+			msgCtx, s := tab.StartSpan(msgCtx, "go-shuttle.Listener.HandlerFunc")
 			defer s.End()
 			if l.lockRenewalInterval != nil {
-				renewer := peeklock.RenewPeriodically(ctx, *l.lockRenewalInterval, sub, msg)
-				defer renewer.Stop()
+				peeklock.RenewPeriodically(msgCtx, *l.lockRenewalInterval, sub, msg)
 			}
 			currentHandler := handler
 			for !message.IsDone(currentHandler) {
-				currentHandler = currentHandler.Do(ctx, handler, msg)
+				currentHandler = currentHandler.Do(msgCtx, handler, msg)
 				// handle nil as a Completion!
 				if currentHandler == nil {
 					currentHandler = message.Complete()
@@ -296,6 +297,14 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
 	return listenerHandle.Err()
+}
+
+func messageContext(ctx context.Context, msg *servicebus.Message) (context.Context, func()) {
+	msgContext, finished := context.WithCancel(ctx)
+	if msg.SystemProperties.EnqueuedTime != nil && msg.TTL != nil {
+		msgContext, _ = context.WithDeadline(msgContext, msg.SystemProperties.EnqueuedTime.Add(*msg.TTL))
+	}
+	return msgContext, finished
 }
 
 // Close closes the listener if an active listener exists
