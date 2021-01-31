@@ -4,7 +4,7 @@ import (
 	"context"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/devigned/tab"
+	"github.com/Azure/go-shuttle/tracing"
 )
 
 // Error is a wrapper around Abandon() that allows to trace the error before abandoning the message
@@ -17,13 +17,9 @@ type errorHandler struct {
 }
 
 func (h *errorHandler) Do(ctx context.Context, _ Handler, msg *servicebus.Message) Handler {
-	ctx, span := startSpanFromMessageAndContext(ctx, "go-shuttle.errorHandler.Do", msg)
+	ctx, span := tracing.StartSpanFromMessageAndContext(ctx, "go-shuttle.errorHandler.Do", msg)
 	defer span.End()
-	span.AddAttributes(
-		tab.BoolAttribute("error", true),
-		tab.StringAttribute("level", "error"),
-		tab.StringAttribute("error", h.err.Error()))
-
+	span.Logger().Error(h.err)
 	return Abandon()
 }
 

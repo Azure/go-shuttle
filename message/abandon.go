@@ -4,7 +4,7 @@ import (
 	"context"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/devigned/tab" // same way as service-bus to log errors
+	"github.com/Azure/go-shuttle/tracing"
 )
 
 // Abandon stops processing the message and releases the lock on it.
@@ -16,13 +16,13 @@ type abandon struct {
 }
 
 func (a *abandon) Do(ctx context.Context, _ Handler, message *servicebus.Message) Handler {
-	ctx, span := startSpanFromMessageAndContext(ctx, "go-shuttle.abandon.Do", message)
+	ctx, span := tracing.StartSpanFromMessageAndContext(ctx, "go-shuttle.abandon.Do", message)
 	defer span.End()
 
 	if err := message.Abandon(ctx); err != nil {
-		span.AddAttributes(tab.StringAttribute("eventMessage", err.Error()), tab.StringAttribute("eventLevel", "error"))
-
-		// the processing will terminate and the lock on the message will be released after messageLockDuration
+		span.Logger().Error(err)
+		// the processing will terminate and the lock on the message will eventually be released after
+		// the message lock expires on the broker side
 	}
 	return done()
 }
