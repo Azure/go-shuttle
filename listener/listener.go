@@ -8,11 +8,10 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/go-shuttle/concurrent"
 	"github.com/Azure/go-shuttle/internal/aad"
 	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
 	"github.com/Azure/go-shuttle/message"
-	"github.com/Azure/go-shuttle/peeklock"
-	"github.com/Azure/go-shuttle/tracing"
 )
 
 const (
@@ -28,7 +27,7 @@ type Listener struct {
 	topicName           string
 	subscriptionName    string
 	maxDeliveryCount    int32
-	lockRenewalInterval *time.Duration
+	LockRenewalInterval *time.Duration
 	lockDuration        time.Duration
 	filterDefinitions   []*filterDefinition
 }
@@ -158,7 +157,7 @@ func WithMessageLockAutoRenewal(interval time.Duration) Option {
 		if interval < time.Duration(0) {
 			return fmt.Errorf("renewal interval must be positive")
 		}
-		l.lockRenewalInterval = &interval
+		l.LockRenewalInterval = &interval
 		return nil
 	}
 }
@@ -260,6 +259,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	}()
 
 	// Generate new subscription client
+	// TODO: Add servicebus.SubscriptionWithPrefetchCount(prefetch count) option and expose the setting via the listener
 	sub, err := topic.NewSubscription(l.subscriptionEntity.Name)
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription %s: %w", l.subscriptionEntity.Name, err)
@@ -268,26 +268,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
-
-	// Create a handle class that has that function
-	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
-		func(ctx context.Context, msg *servicebus.Message) error {
-			ctx, s := tracing.StartSpanFromMessageAndContext(ctx, "go-shuttle.Listener.HandlerFunc", msg)
-			defer s.End()
-			if l.lockRenewalInterval != nil {
-				renewer := peeklock.RenewPeriodically(ctx, *l.lockRenewalInterval, sub, msg)
-				defer renewer.Stop()
-			}
-			currentHandler := handler
-			for !message.IsDone(currentHandler) {
-				currentHandler = currentHandler.Do(ctx, handler, msg)
-				// handle nil as a Completion!
-				if currentHandler == nil {
-					currentHandler = message.Complete()
-				}
-			}
-			return nil
-		}))
+	listenerHandle := subReceiver.Listen(ctx, concurrent.NewHandler(ctx, l, sub, handler))
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 

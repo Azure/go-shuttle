@@ -15,6 +15,7 @@ type LockRenewer interface {
 type PeriodicLockRenewer struct {
 	lockRenewer LockRenewer
 	cancelFunc  func()
+	timer       *time.Timer
 }
 
 // RenewPeriodically starts a background goroutine that renews the message lock at the given interval until Stop() is called
