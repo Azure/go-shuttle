@@ -20,13 +20,13 @@ func StartSpanFromMessageAndContext(ctx context.Context, operationName string, m
 				span.AddAttributes(tab.Int64Attribute("message.sequenceNumber", *message.SystemProperties.SequenceNumber))
 			}
 			if message.SystemProperties.EnqueuedTime != nil {
-				span.AddAttributes(tab.StringAttribute("message.sequenceNumber", message.SystemProperties.EnqueuedTime.String()))
+				span.AddAttributes(tab.StringAttribute("message.enqueuedTime", message.SystemProperties.EnqueuedTime.String()))
 			}
 			if message.SystemProperties.LockedUntil != nil {
-				span.AddAttributes(tab.StringAttribute("message.lockedUntil", message.SystemProperties.EnqueuedTime.String()))
+				span.AddAttributes(tab.StringAttribute("message.lockedUntil", message.SystemProperties.LockedUntil.String()))
 			}
 			if message.TTL != nil {
-				span.AddAttributes(tab.StringAttribute("message.TTL", message.TTL.String()))
+				span.AddAttributes(tab.StringAttribute("message.ttl", message.TTL.String()))
 			}
 		}
 	} else {
