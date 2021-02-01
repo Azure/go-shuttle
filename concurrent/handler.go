@@ -2,27 +2,27 @@ package concurrent
 
 import (
 	"context"
+	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/Azure/go-shuttle/peeklock"
 	"github.com/devigned/tab"
 )
 
 type Handler struct {
-	listener       *listener.Listener
-	lockRenewer    peeklock.LockRenewer
-	messageHandler message.Handler
-	messages       chan *servicebus.Message
+	messageHandler  message.Handler
+	messages        chan *servicebus.Message
+	lockRenewer     peeklock.LockRenewer
+	renewalInterval *time.Duration
 }
 
-func NewHandler(ctx context.Context, l *listener.Listener, r peeklock.LockRenewer, handler message.Handler) servicebus.Handler {
+func NewHandler(ctx context.Context, r peeklock.LockRenewer, renewalInterval *time.Duration, handler message.Handler) servicebus.Handler {
 	h := &Handler{
-		listener:       l,
-		lockRenewer:    r,
-		messageHandler: handler,
-		messages:       make(chan *servicebus.Message),
+		renewalInterval: renewalInterval,
+		lockRenewer:     r,
+		messageHandler:  handler,
+		messages:        make(chan *servicebus.Message),
 	}
 	go h.handleMessages(ctx)
 	return h
@@ -43,17 +43,26 @@ func (h *Handler) handleMessages(ctx context.Context) {
 
 func messageContext(ctx context.Context, msg *servicebus.Message) context.Context {
 	msgCtx, _ := context.WithCancel(ctx)
-	if msg.SystemProperties != nil && msg.SystemProperties.EnqueuedTime != nil && msg.TTL != nil {
-		msgCtx, _ = context.WithDeadline(ctx, msg.SystemProperties.EnqueuedTime.Add(*msg.TTL))
+	if hasDeadline(msg) {
+		deadline := msg.SystemProperties.EnqueuedTime.Add(*msg.TTL)
+		msgCtx, _ = context.WithDeadline(ctx, deadline)
 	}
 	return msgCtx
+}
+
+func hasDeadline(msg *servicebus.Message) bool {
+	return msg.SystemProperties != nil &&
+		msg.SystemProperties.EnqueuedTime != nil &&
+		msg.TTL != nil &&
+		*msg.TTL > 0*time.Second
 }
 
 func (h *Handler) handleMessage(ctx context.Context, msg *servicebus.Message) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.Listener.HandlerFunc")
 	defer s.End()
-	if h.listener.LockRenewalInterval != nil {
-		renewer := peeklock.RenewPeriodically(ctx, *h.listener.LockRenewalInterval, h.lockRenewer, msg)
+	// TODO: find a way to extract the lockRenewal concept completely out of the Handler. maybe via message channel
+	if h.renewalInterval != nil {
+		renewer := peeklock.RenewPeriodically(ctx, *h.renewalInterval, h.lockRenewer, msg)
 		defer renewer.Stop()
 	}
 	currentHandler := h.messageHandler

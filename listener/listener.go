@@ -268,14 +268,13 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
-	listenerHandle := subReceiver.Listen(ctx, concurrent.NewHandler(ctx, l, sub, handler))
+	listenerHandle := subReceiver.Listen(ctx, concurrent.NewHandler(ctx, sub, l.LockRenewalInterval, handler))
 	l.listenerHandle = listenerHandle
-	<-listenerHandle.Done()
-
+	<-l.listenerHandle.Done()
 	if err := subReceiver.Close(ctx); err != nil {
 		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
-	return listenerHandle.Err()
+	return l.listenerHandle.Err()
 }
 
 // Close closes the listener if an active listener exists
@@ -284,7 +283,6 @@ func (l *Listener) Close(ctx context.Context) error {
 		return errors.New("no active listener. cannot close")
 	}
 	if err := l.listenerHandle.Close(ctx); err != nil {
-		l.listenerHandle = nil
 		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
 	return nil

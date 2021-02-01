@@ -342,12 +342,15 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithRetryAfter(testConfig 
 	go func() {
 		eventJSON, err := json.Marshal(event)
 		suite.NoError(err)
-		testConfig.listener.Listen(
+		err = testConfig.listener.Listen(
 			ctx,
 			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
+		if err != nil {
+			fmt.Printf("ERROR: %s", err)
+		}
 	}()
 	// publish after the listener is setup
 	time.Sleep(5 * time.Second)
@@ -369,7 +372,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithRetryAfter(testConfig 
 		if testConfig.shouldSucceed != isSuccessful {
 			suite.FailNow("Test did not succeed")
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		if testConfig.shouldSucceed {
 			suite.FailNow("Test didn't finish on time")
 		}
