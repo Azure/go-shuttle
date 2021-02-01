@@ -550,35 +550,54 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 	return message.HandleFunc(
 		func(ctx context.Context, msg *message.Message) message.Handler {
 			if publishedMsg != msg.Data() {
+				errHandler := message.Error(errors.New("published message and received message are different"))
+				res := errHandler.Do(ctx, nil, msg.Message()) // Call do to attempt to abandon the message before closing the connection
 				ch <- false
-				return message.Error(errors.New("published message and received message are different"))
+				return res
 			}
 			if publishedMsgType != msg.Type() {
+				errHandler := message.Error(errors.New("published message type and received message type are different"))
+				res := errHandler.Do(ctx, nil, msg.Message()) // Call do to attempt to abandon the message before closing the connection
 				ch <- false
-				return message.Error(errors.New("published message type and received message type are different"))
+				return res
 			}
 			if publishedMsgType == reflection.GetType(retryLaterEvent{}) {
 				// use delivery count now that retry later abandons
 				if msg.Message().DeliveryCount == 2 {
-					ch <- true
-					return message.Complete()
+					resHandler := message.Complete().Do(ctx, nil, msg.Message())
+					if message.IsDone(resHandler) {
+						ch <- true
+					} else if message.IsError(resHandler) {
+						resHandler = resHandler.Do(ctx, nil, msg.Message())
+						ch <- false
+					}
+					return resHandler
+				} else {
+					return message.RetryLater(1 * time.Second)
 				}
-				return message.RetryLater(1 * time.Second)
 			}
 			if publishedMsgType == reflection.GetType(shortLockMessage{}) {
 				// the shortlock is set at 1 second in the listener setup
 				// We sleep for longer to trigger the lock renewal in the listener.
 				// if the renewal works, then the message completion will succeed.
 				time.Sleep(3 * time.Second)
-				res := message.Complete() //if renew failed, complete will fail and we don't return Done().
-				if message.IsDone(res) {
+				resHandler := message.Complete().Do(ctx, nil, msg.Message()) //if renew failed, complete will fail and we don't return Done().
+				if message.IsDone(resHandler) {
 					ch <- true
-				} else {
+				} else if message.IsError(resHandler) {
+					resHandler = resHandler.Do(ctx, nil, msg.Message())
 					ch <- false
 				}
-				return res
+				return resHandler
 			}
-			ch <- true
-			return message.Complete()
+
+			resHandler := message.Complete().Do(ctx, nil, msg.Message())
+			if message.IsDone(resHandler) {
+				ch <- true
+			} else if message.IsError(resHandler) {
+				resHandler = resHandler.Do(ctx, nil, msg.Message())
+				ch <- false
+			}
+			return resHandler
 		})
 }
