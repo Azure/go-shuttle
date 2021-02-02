@@ -271,10 +271,8 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	listenerHandle := subReceiver.Listen(ctx, concurrent.NewHandler(ctx, sub, l.LockRenewalInterval, handler))
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
-	if !subReceiver.Closed {
-		if err := subReceiver.Close(ctx); err != nil {
-			return fmt.Errorf("error shutting down service bus subscription. %w", err)
-		}
+	if err := subReceiver.Close(ctx); err != nil {
+		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
 	return listenerHandle.Err()
 }
