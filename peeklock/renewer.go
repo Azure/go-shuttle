@@ -5,7 +5,7 @@ import (
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/devigned/tab"
+	"github.com/Azure/go-shuttle/tracing"
 )
 
 type LockRenewer interface {
@@ -15,9 +15,10 @@ type LockRenewer interface {
 type PeriodicLockRenewer struct {
 	lockRenewer LockRenewer
 	cancelFunc  func()
-	timer       *time.Timer
 }
 
+// RenewPeriodically starts a background goroutine that renews the message lock at the given interval until Stop() is called
+// or until the passed in context is canceled.
 func RenewPeriodically(ctx context.Context, interval time.Duration, lockrenewer LockRenewer, msg *servicebus.Message) *PeriodicLockRenewer {
 	p := &PeriodicLockRenewer{
 		lockRenewer: lockrenewer,
@@ -29,19 +30,16 @@ func RenewPeriodically(ctx context.Context, interval time.Duration, lockrenewer 
 func (plr *PeriodicLockRenewer) startPeriodicRenewal(ctx context.Context, interval time.Duration, message *servicebus.Message) {
 	var renewerCtx context.Context
 	renewerCtx, plr.cancelFunc = context.WithCancel(ctx)
-	_, span := tab.StartSpan(renewerCtx, "go-shuttle.peeklock.startPeriodicRenewal")
+	_, span := tracing.StartSpanFromMessageAndContext(renewerCtx, "go-shuttle.peeklock.startPeriodicRenewal", message)
 	defer span.End()
 	for alive := true; alive; {
 		select {
 		case <-time.After(interval):
-			// TODO: improve span once tracing package extracted
-			span.Logger().Debug("Renewing message lock",
-				tab.StringAttribute("message.TTL", message.TTL.String()),
-				tab.StringAttribute("message.LockedUntil", message.SystemProperties.LockedUntil.String()),
-				tab.StringAttribute("message.EnqueuedTime", message.SystemProperties.EnqueuedTime.String()))
-			plr.lockRenewer.RenewLocks(renewerCtx, message)
+			span.Logger().Debug("Renewing message lock")
+			err := plr.lockRenewer.RenewLocks(renewerCtx, message)
+			span.Logger().Error(err)
 		case <-renewerCtx.Done():
-			// stop renewing
+			span.Logger().Info("Stopping periodic renewal")
 			alive = false
 		}
 	}
