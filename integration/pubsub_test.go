@@ -156,7 +156,6 @@ func (suite *serviceBusSuite) TestPublishAndListenNotRenewingLock() {
 		listener.WithSubscriptionDetails(2*time.Second, 2),
 		listener.WithSubscriptionName("norenewlock"))
 	suite.NoError(err)
-	// create retryLater event. listener emits retry based on event type
 	event := &testEvent{
 		ID:    1,
 		Key:   "key",
@@ -168,6 +167,36 @@ func (suite *serviceBusSuite) TestPublishAndListenNotRenewingLock() {
 		publisher:       pub,
 		listenerOptions: []listener.Option{},
 		shouldSucceed:   false,
+	}, event)
+}
+
+func (suite *serviceBusSuite) TestPublishAndListenConcurrentPrefetch() {
+	suite.T().Parallel()
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	prefetchTopic := suite.Prefix + "prefetch" + suite.TagID
+	pub, err := publisher.New(prefetchTopic, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := listener.New(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionDetails(30*time.Second, 2),
+		listener.WithSubscriptionName("prefetch"))
+	suite.NoError(err)
+	event := &testEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	publishCount := 100
+	suite.publishAndReceiveMessageWithPrefetch(publishReceiveTest{
+		topicName: prefetchTopic,
+		listener:  l,
+		publisher: pub,
+		listenerOptions: []listener.Option{
+			listener.WithPrefetchCount(20),
+			listener.WithMessageLockAutoRenewal(20 * time.Second)},
+		shouldSucceed: true,
+		publishCount:  &publishCount,
 	}, event)
 }
 
@@ -544,6 +573,92 @@ func (suite *serviceBusSuite) publishAndReceiveMessageNotRenewingLock(testConfig
 	err = testConfig.listener.Close(parenrCtx)
 	time.Sleep(2 * time.Second)
 	suite.NoError(err)
+}
+
+func (suite *serviceBusSuite) publishAndReceiveMessageWithPrefetch(testConfig publishReceiveTest, event *testEvent) {
+	parentCtx := context.Background()
+	returnedHandler := make(chan message.Handler)
+	lockRenewalFailureHandler := message.HandleFunc(func(ctx context.Context, msg *message.Message) message.Handler {
+		ctx, sp := tab.StartSpan(ctx, "go-shuttle.test.prefetch")
+		defer sp.End()
+		tab.StringAttribute("msg.DeliveryCount", fmt.Sprint(msg.Message().DeliveryCount))
+		tab.StringAttribute("msg.LockedUntil", fmt.Sprint(msg.Message().SystemProperties.LockedUntil))
+
+		// simulate work
+		time.Sleep(200 * time.Millisecond)
+
+		fmt.Printf("[%s] trying to complete ID %s!\n", time.Now(), msg.Message().ID)
+		// Force inline completion to retrieve resulting handler
+		res := msg.Complete().Do(ctx, nil, msg.Message())
+		// push the returned handler into the channel to trigger the assertion below
+		returnedHandler <- res
+		return res
+	})
+
+	// sets up the subscription so that messages get transferred there, waiting for the listener
+	go func() {
+		testConfig.listener.Listen(
+			parentCtx,
+			lockRenewalFailureHandler,
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+	}()
+	time.Sleep(2 * time.Second)
+	if err := testConfig.listener.Close(parentCtx); err != nil {
+		fmt.Printf("error on close is OK here. no message received yet: %s", err)
+	}
+
+	// publish all the events
+	for i := 0; i < *testConfig.publishCount; i++ {
+		event.ID = i
+		err := testConfig.publisher.Publish(
+			parentCtx,
+			event,
+			testConfig.publisherOptions...)
+		if err != nil {
+			suite.T().Errorf(err.Error())
+		}
+	}
+
+	// restart the listener
+	go func() {
+		testConfig.listener.Listen(
+			parentCtx,
+			lockRenewalFailureHandler,
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+	}()
+
+	totalHandled := 0
+	run := true
+	// expect only success handler returned
+	for run {
+		select {
+		case h := <-returnedHandler:
+			// This shows that the handler Complete call returns an error when the lock
+			// on the message has expired.
+			assert.True(suite.T(), message.IsDone(h), "should return a doneHandler on success")
+			if message.IsError(h) {
+				suite.T().Errorf("failed to handle message succesfully")
+				suite.T().FailNow()
+			}
+			totalHandled++
+			suite.T().Log("successfully processed msg", totalHandled)
+			if totalHandled == 100 {
+				run = false
+			}
+		case <-time.After(20 * time.Second):
+			suite.T().Errorf("took over 20 seconds for %d messages", *testConfig.publishCount)
+			run = false
+		}
+	}
+
+	err := testConfig.listener.Close(parentCtx)
+	if err != nil {
+		suite.T().Errorf("failed to close the listener: %s", err)
+	}
 }
 
 func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) message.Handler {

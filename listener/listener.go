@@ -30,6 +30,7 @@ type Listener struct {
 	LockRenewalInterval *time.Duration
 	lockDuration        time.Duration
 	filterDefinitions   []*filterDefinition
+	PrefetchCount       *uint32
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -145,9 +146,24 @@ func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) ManagementOp
 		}
 		l.lockDuration = lock
 		if maxDelivery < 0 {
-			return fmt.Errorf("Max Deliveries must be positive")
+			return fmt.Errorf("max deliveries must be positive")
 		}
 		l.maxDeliveryCount = maxDelivery
+		return nil
+	}
+}
+
+// WithPrefetchCount the receiver to quietly acquires more messages, up to the PrefetchCount limit. A single Receive call to the ServiceBus api
+// therefore acquires several messages for immediate consumption that is returned as soon as available.
+// Please be aware of the consequences : https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-prefetch#if-it-is-faster-why-is-prefetch-not-the-default-option
+func WithPrefetchCount(prefetch uint32) Option {
+	return func(l *Listener) error {
+		if prefetch < 1 {
+			return fmt.Errorf("prefetch count value cannot be less than 1")
+		}
+		if prefetch >= 1 {
+			l.PrefetchCount = &prefetch
+		}
 		return nil
 	}
 }
@@ -264,7 +280,12 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription %s: %w", l.subscriptionEntity.Name, err)
 	}
-	subReceiver, err := sub.NewReceiver(ctx)
+
+	var receiverOpts []servicebus.ReceiverOption
+	if l.PrefetchCount != nil {
+		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.PrefetchCount))
+	}
+	subReceiver, err := sub.NewReceiver(ctx, receiverOpts...)
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
