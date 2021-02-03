@@ -2,38 +2,47 @@ package handlers
 
 import (
 	"context"
+	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 )
 
-var _ servicebus.Handler = (*MessageContext)(nil)
+var _ servicebus.Handler = (*DeadlineContext)(nil)
 
-// MessageContext is a servicebus middleware handler that creates a message context from the incoming context to isolate
+// DeadlineContext is a servicebus middleware handler that creates a message context from the incoming context to isolate
 // each message handling sub processes. It adds a deadline equal to `EnqueuedTime + TTL` to the message context if the message TTL is defined.
 // Otherwise no deadline is applied on the message context.
-type MessageContext struct {
+type DeadlineContext struct {
 	next servicebus.Handler
 }
 
-func (mc *MessageContext) Handle(ctx context.Context, msg *servicebus.Message) error {
-	msgCtx := messageContext(ctx, msg)
-	if mc.next != nil {
-		return mc.next.Handle(msgCtx, msg)
+func (mc *DeadlineContext) Handle(ctx context.Context, msg *servicebus.Message) error {
+	if mc.next == nil {
+		return NextHandlerNilError
 	}
-	return nil
+	msgCtx, cancel := setupDeadline(ctx, msg)
+	defer cancel()
+	return mc.next.Handle(msgCtx, msg)
 }
 
-func NewMessageContext(next servicebus.Handler) *MessageContext {
-	return &MessageContext{
+func NewDeadlineContext(next servicebus.Handler) *DeadlineContext {
+	return &DeadlineContext{
 		next: next,
 	}
 }
 
-func messageContext(ctx context.Context, msg *servicebus.Message) context.Context {
-	msgCtx, _ := context.WithCancel(ctx)
+func setupDeadline(ctx context.Context, msg *servicebus.Message) (context.Context, func()) {
+	msgCtx, cancel := context.WithCancel(ctx)
 	if hasDeadline(msg) {
 		deadline := msg.SystemProperties.EnqueuedTime.Add(*msg.TTL)
 		msgCtx, _ = context.WithDeadline(ctx, deadline)
 	}
-	return msgCtx
+	return msgCtx, cancel
+}
+
+func hasDeadline(msg *servicebus.Message) bool {
+	return msg.SystemProperties != nil &&
+		msg.SystemProperties.EnqueuedTime != nil &&
+		msg.TTL != nil &&
+		*msg.TTL > 0*time.Second
 }

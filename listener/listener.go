@@ -305,11 +305,11 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
 	listenerHandle := subReceiver.Listen(ctx,
-		handlers.NewMessageContext(
-			handlers.NewPeekLockRenewer(
-				handlers.NewConcurrent(handlerConcurrency, handler),
-				l.lockRenewalInterval,
-				sub)))
+		handlers.NewConcurrent(handlerConcurrency,
+			handlers.NewDeadlineContext(
+				handlers.NewPeekLockRenewer(l.lockRenewalInterval, sub,
+					handlers.NewShuttleAdapter(handler)),
+			)))
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 	if err := subReceiver.Close(ctx); err != nil {
