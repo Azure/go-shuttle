@@ -15,7 +15,6 @@ type LockRenewer interface {
 type PeriodicLockRenewer struct {
 	lockRenewer LockRenewer
 	cancelFunc  func()
-	timer       *time.Timer
 }
 
 // RenewPeriodically starts a background goroutine that renews the message lock at the given interval until Stop() is called
@@ -38,16 +37,12 @@ func (plr *PeriodicLockRenewer) startPeriodicRenewal(ctx context.Context, interv
 		case <-time.After(interval):
 			span.Logger().Debug("Renewing message lock")
 			err := plr.lockRenewer.RenewLocks(renewerCtx, message)
-			span.Logger().Error(err)
+			if err != nil {
+				span.Logger().Error(err)
+			}
 		case <-renewerCtx.Done():
 			span.Logger().Info("Stopping periodic renewal")
 			alive = false
 		}
-	}
-}
-
-func (plr *PeriodicLockRenewer) Stop() {
-	if plr.cancelFunc != nil {
-		plr.cancelFunc()
 	}
 }

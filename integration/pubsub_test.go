@@ -179,7 +179,7 @@ func (suite *serviceBusSuite) TestPublishAndListenConcurrentPrefetch() {
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,
-		listener.WithSubscriptionDetails(30*time.Second, 2),
+		listener.WithSubscriptionDetails(60*time.Second, 2),
 		listener.WithSubscriptionName("prefetch"))
 	suite.NoError(err)
 	event := &testEvent{
@@ -187,14 +187,16 @@ func (suite *serviceBusSuite) TestPublishAndListenConcurrentPrefetch() {
 		Key:   "key",
 		Value: "value",
 	}
-	publishCount := 100
+	publishCount := 200
 	suite.publishAndReceiveMessageWithPrefetch(publishReceiveTest{
 		topicName: prefetchTopic,
 		listener:  l,
 		publisher: pub,
 		listenerOptions: []listener.Option{
-			listener.WithPrefetchCount(20),
-			listener.WithMessageLockAutoRenewal(20 * time.Second)},
+			listener.WithPrefetchCount(50),
+			listener.WithMessageLockAutoRenewal(10 * time.Second),
+			listener.WithMaxConcurrency(50),
+		},
 		shouldSucceed: true,
 		publishCount:  &publishCount,
 	}, event)
@@ -577,7 +579,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessageNotRenewingLock(testConfig
 
 func (suite *serviceBusSuite) publishAndReceiveMessageWithPrefetch(testConfig publishReceiveTest, event *testEvent) {
 	parentCtx := context.Background()
-	returnedHandler := make(chan message.Handler)
+	returnedHandler := make(chan message.Handler, *testConfig.publishCount)
 	lockRenewalFailureHandler := message.HandleFunc(func(ctx context.Context, msg *message.Message) message.Handler {
 		ctx, sp := tab.StartSpan(ctx, "go-shuttle.test.prefetch")
 		defer sp.End()
@@ -585,9 +587,9 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithPrefetch(testConfig pu
 		tab.StringAttribute("msg.LockedUntil", fmt.Sprint(msg.Message().SystemProperties.LockedUntil))
 
 		// simulate work
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(20 * time.Second)
 
-		fmt.Printf("[%s] trying to complete ID %s!\n", time.Now(), msg.Message().ID)
+		fmt.Printf("[%s] trying to complete ID %s!\n", time.Now().Format(time.RFC3339), msg.Message().ID)
 		// Force inline completion to retrieve resulting handler
 		res := msg.Complete().Do(ctx, nil, msg.Message())
 		// push the returned handler into the channel to trigger the assertion below
@@ -621,6 +623,8 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithPrefetch(testConfig pu
 		}
 	}
 
+	fmt.Printf("\n!!!!!!!!!!!! PUBLISH DONE. START LISTENING!!!!!!!!!\n")
+
 	// restart the listener
 	go func() {
 		testConfig.listener.Listen(
@@ -633,7 +637,10 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithPrefetch(testConfig pu
 
 	totalHandled := 0
 	run := true
+
 	// expect only success handler returned
+	maxTime := 1 * time.Minute
+	timeout := time.NewTimer(maxTime)
 	for run {
 		select {
 		case h := <-returnedHandler:
@@ -646,11 +653,12 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithPrefetch(testConfig pu
 			}
 			totalHandled++
 			suite.T().Log("successfully processed msg", totalHandled)
-			if totalHandled == 100 {
+			if totalHandled == *testConfig.publishCount {
 				run = false
+				timeout.Stop()
 			}
-		case <-time.After(20 * time.Second):
-			suite.T().Errorf("took over 20 seconds for %d messages", *testConfig.publishCount)
+		case <-timeout.C:
+			suite.T().Errorf("took over %s seconds for %d messages", maxTime, *testConfig.publishCount)
 			run = false
 		}
 	}

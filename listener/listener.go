@@ -8,7 +8,7 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/Azure/go-shuttle/concurrent"
+	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/internal/aad"
 	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
 	"github.com/Azure/go-shuttle/message"
@@ -27,10 +27,11 @@ type Listener struct {
 	topicName           string
 	subscriptionName    string
 	maxDeliveryCount    int32
-	LockRenewalInterval *time.Duration
+	lockRenewalInterval *time.Duration
 	lockDuration        time.Duration
 	filterDefinitions   []*filterDefinition
-	PrefetchCount       *uint32
+	prefetchCount       *uint32
+	maxConcurrency      *int
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -162,8 +163,18 @@ func WithPrefetchCount(prefetch uint32) Option {
 			return fmt.Errorf("prefetch count value cannot be less than 1")
 		}
 		if prefetch >= 1 {
-			l.PrefetchCount = &prefetch
+			l.prefetchCount = &prefetch
 		}
+		return nil
+	}
+}
+
+func WithMaxConcurrency(concurrency int) Option {
+	return func(l *Listener) error {
+		if concurrency < 0 {
+			return fmt.Errorf("concurrency must be greater than 0")
+		}
+		l.maxConcurrency = &concurrency
 		return nil
 	}
 }
@@ -173,7 +184,7 @@ func WithMessageLockAutoRenewal(interval time.Duration) Option {
 		if interval < time.Duration(0) {
 			return fmt.Errorf("renewal interval must be positive")
 		}
-		l.LockRenewalInterval = &interval
+		l.lockRenewalInterval = &interval
 		return nil
 	}
 }
@@ -282,14 +293,23 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	}
 
 	var receiverOpts []servicebus.ReceiverOption
-	if l.PrefetchCount != nil {
-		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.PrefetchCount))
+	if l.prefetchCount != nil {
+		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.prefetchCount))
+	}
+	handlerConcurrency := 1
+	if l.maxConcurrency != nil {
+		handlerConcurrency = *l.maxConcurrency
 	}
 	subReceiver, err := sub.NewReceiver(ctx, receiverOpts...)
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
-	listenerHandle := subReceiver.Listen(ctx, concurrent.NewHandler(ctx, sub, l.LockRenewalInterval, handler))
+	listenerHandle := subReceiver.Listen(ctx,
+		handlers.NewMessageContext(
+			handlers.NewPeekLockRenewer(
+				handlers.NewConcurrent(handlerConcurrency, handler),
+				l.lockRenewalInterval,
+				sub)))
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 	if err := subReceiver.Close(ctx); err != nil {
