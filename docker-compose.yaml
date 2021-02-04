@@ -15,8 +15,9 @@ services:
     - goshuttle-tracing
   go-shuttle-test:
     image: ${IMAGE}:latest
-    command: ["-run", "TestConnectionString/TestPublishAndListenNotRenewingLock", "-tags", "debug"]
-#    command: ["-run", "TestConnectionString", "-tags", "debug"]
+    #    command: ["-run", "TestConnectionString/TestPublishAndListenNotRenewingLock", "-tags", "debug"]
+    # command: ["-run", "TestConnectionString/TestPublishAndListenConcurrentPrefetch", "-tags", "debug"]
+    command: ["-run", "TestConnectionString"]
     env_file:
     - .env
     environment:

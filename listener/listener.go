@@ -8,11 +8,10 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/internal/aad"
 	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
 	"github.com/Azure/go-shuttle/message"
-	"github.com/Azure/go-shuttle/peeklock"
-	"github.com/Azure/go-shuttle/tracing"
 )
 
 const (
@@ -31,6 +30,8 @@ type Listener struct {
 	lockRenewalInterval *time.Duration
 	lockDuration        time.Duration
 	filterDefinitions   []*filterDefinition
+	prefetchCount       *uint32
+	maxConcurrency      *int
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -146,9 +147,34 @@ func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) ManagementOp
 		}
 		l.lockDuration = lock
 		if maxDelivery < 0 {
-			return fmt.Errorf("Max Deliveries must be positive")
+			return fmt.Errorf("max deliveries must be positive")
 		}
 		l.maxDeliveryCount = maxDelivery
+		return nil
+	}
+}
+
+// WithPrefetchCount the receiver to quietly acquires more messages, up to the PrefetchCount limit. A single Receive call to the ServiceBus api
+// therefore acquires several messages for immediate consumption that is returned as soon as available.
+// Please be aware of the consequences : https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-prefetch#if-it-is-faster-why-is-prefetch-not-the-default-option
+func WithPrefetchCount(prefetch uint32) Option {
+	return func(l *Listener) error {
+		if prefetch < 1 {
+			return fmt.Errorf("prefetch count value cannot be less than 1")
+		}
+		if prefetch >= 1 {
+			l.prefetchCount = &prefetch
+		}
+		return nil
+	}
+}
+
+func WithMaxConcurrency(concurrency int) Option {
+	return func(l *Listener) error {
+		if concurrency < 0 {
+			return fmt.Errorf("concurrency must be greater than 0")
+		}
+		l.maxConcurrency = &concurrency
 		return nil
 	}
 }
@@ -260,37 +286,32 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	}()
 
 	// Generate new subscription client
+	// TODO: Add servicebus.SubscriptionWithPrefetchCount(prefetch count) option and expose the setting via the listener
 	sub, err := topic.NewSubscription(l.subscriptionEntity.Name)
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription %s: %w", l.subscriptionEntity.Name, err)
 	}
-	subReceiver, err := sub.NewReceiver(ctx)
+
+	var receiverOpts []servicebus.ReceiverOption
+	if l.prefetchCount != nil {
+		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.prefetchCount))
+	}
+	handlerConcurrency := 1
+	if l.maxConcurrency != nil {
+		handlerConcurrency = *l.maxConcurrency
+	}
+	subReceiver, err := sub.NewReceiver(ctx, receiverOpts...)
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
-
-	// Create a handle class that has that function
-	listenerHandle := subReceiver.Listen(ctx, servicebus.HandlerFunc(
-		func(ctx context.Context, msg *servicebus.Message) error {
-			ctx, s := tracing.StartSpanFromMessageAndContext(ctx, "go-shuttle.Listener.HandlerFunc", msg)
-			defer s.End()
-			if l.lockRenewalInterval != nil {
-				renewer := peeklock.RenewPeriodically(ctx, *l.lockRenewalInterval, sub, msg)
-				defer renewer.Stop()
-			}
-			currentHandler := handler
-			for !message.IsDone(currentHandler) {
-				currentHandler = currentHandler.Do(ctx, handler, msg)
-				// handle nil as a Completion!
-				if currentHandler == nil {
-					currentHandler = message.Complete()
-				}
-			}
-			return nil
-		}))
+	listenerHandle := subReceiver.Listen(ctx,
+		handlers.NewConcurrent(handlerConcurrency,
+			handlers.NewDeadlineContext(
+				handlers.NewPeekLockRenewer(l.lockRenewalInterval, sub,
+					handlers.NewShuttleAdapter(handler)),
+			)))
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
-
 	if err := subReceiver.Close(ctx); err != nil {
 		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
@@ -303,7 +324,6 @@ func (l *Listener) Close(ctx context.Context) error {
 		return errors.New("no active listener. cannot close")
 	}
 	if err := l.listenerHandle.Close(ctx); err != nil {
-		l.listenerHandle = nil
 		return fmt.Errorf("error shutting down service bus subscription. %w", err)
 	}
 	return nil

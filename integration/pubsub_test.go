@@ -156,7 +156,6 @@ func (suite *serviceBusSuite) TestPublishAndListenNotRenewingLock() {
 		listener.WithSubscriptionDetails(2*time.Second, 2),
 		listener.WithSubscriptionName("norenewlock"))
 	suite.NoError(err)
-	// create retryLater event. listener emits retry based on event type
 	event := &testEvent{
 		ID:    1,
 		Key:   "key",
@@ -168,6 +167,38 @@ func (suite *serviceBusSuite) TestPublishAndListenNotRenewingLock() {
 		publisher:       pub,
 		listenerOptions: []listener.Option{},
 		shouldSucceed:   false,
+	}, event)
+}
+
+func (suite *serviceBusSuite) TestPublishAndListenConcurrentPrefetch() {
+	suite.T().Parallel()
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	prefetchTopic := suite.Prefix + "prefetch" + suite.TagID
+	pub, err := publisher.New(prefetchTopic, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := listener.New(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionDetails(60*time.Second, 2),
+		listener.WithSubscriptionName("prefetch"))
+	suite.NoError(err)
+	event := &testEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	publishCount := 200
+	suite.publishAndReceiveMessageWithPrefetch(publishReceiveTest{
+		topicName: prefetchTopic,
+		listener:  l,
+		publisher: pub,
+		listenerOptions: []listener.Option{
+			listener.WithPrefetchCount(50),
+			listener.WithMessageLockAutoRenewal(10 * time.Second),
+			listener.WithMaxConcurrency(50),
+		},
+		shouldSucceed: true,
+		publishCount:  &publishCount,
 	}, event)
 }
 
@@ -342,12 +373,15 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithRetryAfter(testConfig 
 	go func() {
 		eventJSON, err := json.Marshal(event)
 		suite.NoError(err)
-		testConfig.listener.Listen(
+		err = testConfig.listener.Listen(
 			ctx,
 			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
+		if err != nil {
+			fmt.Printf("ERROR: %s", err)
+		}
 	}()
 	// publish after the listener is setup
 	time.Sleep(5 * time.Second)
@@ -369,7 +403,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessageWithRetryAfter(testConfig 
 		if testConfig.shouldSucceed != isSuccessful {
 			suite.FailNow("Test did not succeed")
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		if testConfig.shouldSucceed {
 			suite.FailNow("Test didn't finish on time")
 		}
@@ -543,39 +577,150 @@ func (suite *serviceBusSuite) publishAndReceiveMessageNotRenewingLock(testConfig
 	suite.NoError(err)
 }
 
+func (suite *serviceBusSuite) publishAndReceiveMessageWithPrefetch(testConfig publishReceiveTest, event *testEvent) {
+	parentCtx := context.Background()
+	returnedHandler := make(chan message.Handler, *testConfig.publishCount)
+	lockRenewalFailureHandler := message.HandleFunc(func(ctx context.Context, msg *message.Message) message.Handler {
+		ctx, sp := tab.StartSpan(ctx, "go-shuttle.test.prefetch")
+		defer sp.End()
+		tab.StringAttribute("msg.DeliveryCount", fmt.Sprint(msg.Message().DeliveryCount))
+		tab.StringAttribute("msg.LockedUntil", fmt.Sprint(msg.Message().SystemProperties.LockedUntil))
+
+		// simulate work
+		time.Sleep(20 * time.Second)
+
+		fmt.Printf("[%s] trying to complete ID %s!\n", time.Now().Format(time.RFC3339), msg.Message().ID)
+		// Force inline completion to retrieve resulting handler
+		res := msg.Complete().Do(ctx, nil, msg.Message())
+		// push the returned handler into the channel to trigger the assertion below
+		returnedHandler <- res
+		return res
+	})
+
+	// sets up the subscription so that messages get transferred there, waiting for the listener
+	go func() {
+		testConfig.listener.Listen(
+			parentCtx,
+			lockRenewalFailureHandler,
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+	}()
+	time.Sleep(2 * time.Second)
+	if err := testConfig.listener.Close(parentCtx); err != nil {
+		fmt.Printf("error on close is OK here. no message received yet: %s", err)
+	}
+
+	// publish all the events
+	for i := 0; i < *testConfig.publishCount; i++ {
+		event.ID = i
+		err := testConfig.publisher.Publish(
+			parentCtx,
+			event,
+			testConfig.publisherOptions...)
+		if err != nil {
+			suite.T().Errorf(err.Error())
+		}
+	}
+
+	fmt.Printf("\n!!!!!!!!!!!! PUBLISH DONE. START LISTENING!!!!!!!!!\n")
+
+	// restart the listener
+	go func() {
+		testConfig.listener.Listen(
+			parentCtx,
+			lockRenewalFailureHandler,
+			testConfig.topicName,
+			testConfig.listenerOptions...,
+		)
+	}()
+
+	totalHandled := 0
+	run := true
+
+	// expect only success handler returned
+	maxTime := 1 * time.Minute
+	timeout := time.NewTimer(maxTime)
+	for run {
+		select {
+		case h := <-returnedHandler:
+			// This shows that the handler Complete call returns an error when the lock
+			// on the message has expired.
+			assert.True(suite.T(), message.IsDone(h), "should return a doneHandler on success")
+			if message.IsError(h) {
+				suite.T().Errorf("failed to handle message succesfully")
+				suite.T().FailNow()
+			}
+			totalHandled++
+			suite.T().Log("successfully processed msg", totalHandled)
+			if totalHandled == *testConfig.publishCount {
+				run = false
+				timeout.Stop()
+			}
+		case <-timeout.C:
+			suite.T().Errorf("took over %s seconds for %d messages", maxTime, *testConfig.publishCount)
+			run = false
+		}
+	}
+
+	err := testConfig.listener.Close(parentCtx)
+	if err != nil {
+		suite.T().Errorf("failed to close the listener: %s", err)
+	}
+}
+
 func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) message.Handler {
 	return message.HandleFunc(
 		func(ctx context.Context, msg *message.Message) message.Handler {
 			if publishedMsg != msg.Data() {
+				errHandler := message.Error(errors.New("published message and received message are different"))
+				res := errHandler.Do(ctx, nil, msg.Message()) // Call do to attempt to abandon the message before closing the connection
 				ch <- false
-				return message.Error(errors.New("published message and received message are different"))
+				return res
 			}
 			if publishedMsgType != msg.Type() {
+				errHandler := message.Error(errors.New("published message type and received message type are different"))
+				res := errHandler.Do(ctx, nil, msg.Message()) // Call do to attempt to abandon the message before closing the connection
 				ch <- false
-				return message.Error(errors.New("published message type and received message type are different"))
+				return res
 			}
 			if publishedMsgType == reflection.GetType(retryLaterEvent{}) {
 				// use delivery count now that retry later abandons
 				if msg.Message().DeliveryCount == 2 {
-					ch <- true
-					return message.Complete()
+					resHandler := message.Complete().Do(ctx, nil, msg.Message())
+					if message.IsDone(resHandler) {
+						ch <- true
+					} else if message.IsError(resHandler) {
+						resHandler = resHandler.Do(ctx, nil, msg.Message())
+						ch <- false
+					}
+					return resHandler
+				} else {
+					return message.RetryLater(1 * time.Second)
 				}
-				return message.RetryLater(1 * time.Second)
 			}
 			if publishedMsgType == reflection.GetType(shortLockMessage{}) {
 				// the shortlock is set at 1 second in the listener setup
 				// We sleep for longer to trigger the lock renewal in the listener.
 				// if the renewal works, then the message completion will succeed.
 				time.Sleep(3 * time.Second)
-				res := message.Complete() //if renew failed, complete will fail and we don't return Done().
-				if message.IsDone(res) {
+				resHandler := message.Complete().Do(ctx, nil, msg.Message()) //if renew failed, complete will fail and we don't return Done().
+				if message.IsDone(resHandler) {
 					ch <- true
-				} else {
+				} else if message.IsError(resHandler) {
+					resHandler = resHandler.Do(ctx, nil, msg.Message())
 					ch <- false
 				}
-				return res
+				return resHandler
 			}
-			ch <- true
-			return message.Complete()
+
+			resHandler := message.Complete().Do(ctx, nil, msg.Message())
+			if message.IsDone(resHandler) {
+				ch <- true
+			} else if message.IsError(resHandler) {
+				resHandler = resHandler.Do(ctx, nil, msg.Message())
+				ch <- false
+			}
+			return resHandler
 		})
 }
