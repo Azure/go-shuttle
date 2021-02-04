@@ -30,7 +30,6 @@ func (c *Concurrent) Handle(ctx context.Context, msg *servicebus.Message) error 
 	go func() {
 		defer func() { <-c.concurrencyTokens }()
 		c.next.Handle(ctx, msg)
-		// how do we cancel the message context here?
 	}()
 	// no error to return, the error are handled per message and don't affect the pipeline
 	return nil

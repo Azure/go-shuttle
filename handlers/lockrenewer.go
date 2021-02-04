@@ -52,7 +52,7 @@ func (plr *PeekLockRenewer) startPeriodicRenewal(ctx context.Context, message *s
 			span.Logger().Debug("Renewing message lock")
 			err := plr.lockRenewer.RenewLocks(ctx, message)
 			if err != nil {
-				// I don't think this is not a problem. the context is canceled when the message processing is over.
+				// I don't think this is a problem. the context is canceled when the message processing is over.
 				// this can happen if we already entered the interval case when the message is completing.
 				span.Logger().Info("failed to renew the peek lock", tab.StringAttribute("reason", err.Error()))
 			}
