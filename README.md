@@ -108,8 +108,8 @@ err := l.Listen(ctx, handler, topicName)
 ```
 
 Notes: 
-* RetryLater simply waits for the given duration before abanoning. So, if you are using RetryLater you probably want to set WithSubscriptionDetails, especially maxDelivery as each call to RetryLater will up the delivery count by 1
-* Undefined behavior if RetryLater is passed a duration that puts the message handling (time used in go-shuttle, client handler, and RetryLater combined) past the lock duration (which has a max of 5 minutes).
+* RetryLater simply waits for the given duration before abandoning. So, if you are using RetryLater you probably want to set WithSubscriptionDetails, especially maxDelivery as each call to RetryLater will up the delivery count by 1
+* You also likely want to enable Automatic Lock renewal. since the retry later just holds the message in memory, it could lose the peek lock while you wait
 
 #### Start Listening
 ```golang
@@ -142,7 +142,7 @@ err := l.Listen(
 
 ### Listen sample with error check and Close()
 
-```
+```golang
 l, err := listener.New(listener.WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
 if err != nil {
     return err
@@ -159,9 +159,58 @@ defer func() {
 }
 ```
 
+### Enable message lock renewal
+
+This will renew the lock on each message every 30 seconds until the message is `Completed` or `Abandoned`.
+
+```golang
+renewInterval := 30 * time.Second
+if err := l.Listen(ctx, handler, topicName, listener.WithMessageLockAutoRenewal(renewInterval)); err != nil {
+    return err
+}
+```
+
+### Concurrent message handling
+
+There 2 aspects to concurrent handling: Prefetch and MaxConcurrency values :
+
+```golang
+renewInterval := 30 * time.Second
+err := l.Listen(ctx, handler, topicName, 
+    listener.WithPrefetchCount(50),
+    listener.WithMaxConcurrency(50),
+    listener.WithMessageLockAutoRenewal(10 * time.Second))
+
+if err != nil {
+    return err
+}
+```
+
+Both settings are well documented on Azure Service Bus doc. Read carefully this doc to understand the 
+consequences of using these features : https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-prefetch
+
+#### Prefetch
+
+Azure service bus implements the [AMQP 1.0 protocol](http://docs.oasis-open.org/amqp/core/v1.0/amqp-core-overview-v1.0.html). Prefetch translates into the LinkCredit setting on an AMQP connection
+to understand how prefetch works, you need to understand amqp flow control via link credit : https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-amqp-protocol-guide#flow-control 
+
+TL;DR:
+AMQP works as a streaming protocol. in the case of azure service bus, broker *pushes* messages to you.
+so `Prefetch` is a misnomer, it is not batching. It tells the broker how many messages can be `pushed` to your worker without
+being completed or abandoned. Or in other words, how many messages can be worked on at the same time by the receiver. 
+
+#### MaxConcurrency
+
+MaxConcurrency defines how many concurrent message can be worked on. 
+i.e : When prefetch is higher than MaxConcurrency, you will have some messages sitting in memory on the receiver's side
+until a worker picks it up. 
+This improves performance there always is a message ready to be processed when a handler is done, but it has to be carefully
+balanced with the Message Lock Duration and the usual message processing time.  
+For more info : https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-prefetch
+
 ## Publisher Examples
 ### Initializing a publisher with a Service Bus connection string
-```
+```golang
 topicName := "topic"
 pub, _ := publisher.New(
     topicName,
