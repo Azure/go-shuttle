@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	common "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/internal/aad"
@@ -147,6 +148,9 @@ func SetCorrelationID(correlationID string) Option {
 
 // New creates a new service bus publisher
 func New(topicName string, opts ...ManagementOption) (*Publisher, error) {
+	ctx := context.Background()
+	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.New")
+	defer s.End()
 	ns, err := servicebus.NewNamespace()
 	if err != nil {
 		return nil, err
@@ -158,7 +162,8 @@ func New(topicName string, opts ...ManagementOption) (*Publisher, error) {
 			return nil, err
 		}
 	}
-	topicEntity, err := ensureTopic(context.Background(), topicName, publisher.namespace, publisher.topicManagementOptions...)
+
+	topicEntity, err := ensureTopic(ctx, topicName, publisher.namespace, publisher.topicManagementOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get topic: %w", err)
 	}
@@ -173,7 +178,7 @@ func New(topicName string, opts ...ManagementOption) (*Publisher, error) {
 
 // Publish publishes to the pre-configured Service Bus topic
 func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option) error {
-	_, s := tab.StartSpan(ctx, "go-shuttle.Publish")
+	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.Publish")
 	defer s.End()
 	msgJSON, err := json.Marshal(msg)
 
@@ -208,10 +213,23 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 
 func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespace, opts ...servicebus.TopicManagementOption) (*servicebus.TopicEntity, error) {
 	tm := namespace.NewTopicManager()
-	te, err := tm.Get(ctx, name)
-	if err == nil {
+	ensure := func() (interface{}, error) {
+		te, err := tm.Get(ctx, name)
+		if err == nil {
+			return te, nil
+		}
+		te, err = tm.Put(ctx, name, opts...)
+		if err != nil {
+			// let all errors be retryable for now. application only hit this once on topic creation.
+			return nil, common.Retryable(err.Error())
+		}
 		return te, nil
 	}
+	entity, err := common.Retry(5, 1*time.Second, ensure)
+	if err != nil {
+		tab.For(ctx).Error(err)
+		return nil, err
+	}
+	return entity.(*servicebus.TopicEntity), nil
 
-	return tm.Put(ctx, name, opts...)
 }
