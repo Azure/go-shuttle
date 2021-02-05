@@ -380,7 +380,11 @@ func (l *Listener) getSubscriptionEntity(
 }
 
 func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager, name string) (*servicebus.SubscriptionEntity, error) {
+	attempt := 1
 	ensure := func() (interface{}, error) {
+		ctx, span := tab.StartSpan(ctx, "go-shuttle.listener.ensureSubscription")
+		span.AddAttributes(tab.Int64Attribute("retry.attempt", int64(attempt)))
+		defer span.End()
 		subEntity, err := sm.Get(ctx, name)
 		if err == nil {
 			return subEntity, nil
@@ -396,7 +400,8 @@ func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.Subscr
 		}
 		entity, err := sm.Put(ctx, name, mutateSericeDetails)
 		if err != nil {
-			tab.For(ctx).Info("failed attempt to create subscription")
+			attempt++
+			tab.For(ctx).Error(err)
 			// let all errors be retryable for now. application only hit this once on subscription creation.
 			return nil, common.Retryable(err.Error())
 		}

@@ -212,14 +212,19 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 }
 
 func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespace, opts ...servicebus.TopicManagementOption) (*servicebus.TopicEntity, error) {
+	attempt := 1
 	tm := namespace.NewTopicManager()
 	ensure := func() (interface{}, error) {
+		ctx, span := tab.StartSpan(ctx, "go-shuttle.publisher.ensureTopic")
+		span.AddAttributes(tab.Int64Attribute("retry.attempt", int64(attempt)))
 		te, err := tm.Get(ctx, name)
 		if err == nil {
 			return te, nil
 		}
 		te, err = tm.Put(ctx, name, opts...)
 		if err != nil {
+			attempt++
+			tab.For(ctx).Error(err)
 			// let all errors be retryable for now. application only hit this once on topic creation.
 			return nil, common.Retryable(err.Error())
 		}

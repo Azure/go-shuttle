@@ -45,9 +45,8 @@ func (suite *serviceBusSuite) TestCreateListenersConcurrently() {
 	topicName := "newTopic" + suite.TagID
 	_, err := publisher.New(topicName, suite.publisherAuthOption)
 	assert.NoError(suite.T(), err)
-	time.Sleep(2 * time.Second)
 	w := sync.WaitGroup{}
-	lctx, _ := context.WithTimeout(context.TODO(), 30*time.Second)
+	lctx, cancel := context.WithTimeout(context.TODO(), 20*time.Second)
 	for i := 0; i < 5; i++ {
 		l, err := listener.New(suite.listenerAuthOption, listener.WithSubscriptionName("concurrentListener"))
 		assert.NoError(suite.T(), err)
@@ -61,17 +60,14 @@ func (suite *serviceBusSuite) TestCreateListenersConcurrently() {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				fmt.Printf("ERROR! Listener %d failed to start: %s", i, err)
 				assert.NoError(suite.T(), err)
+				cancel()
 			}
 		}(i)
 	}
 	w.Wait()
-	// make sure that topic exists
+	// delete the topic
 	ns := suite.GetNewNamespace()
 	tm := ns.NewTopicManager()
-	_, err = tm.Get(context.Background(), topicName)
-	suite.NoError(err)
-
-	// delete new topic
 	err = tm.Delete(context.Background(), topicName)
 	suite.NoError(err)
 }
