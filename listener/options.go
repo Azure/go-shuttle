@@ -125,3 +125,28 @@ func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) ManagementOp
 		return nil
 	}
 }
+
+// WithPrefetchCount the receiver to quietly acquires more messages, up to the PrefetchCount limit. A single Receive call to the ServiceBus api
+// therefore acquires several messages for immediate consumption that is returned as soon as available.
+// Please be aware of the consequences : https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-prefetch#if-it-is-faster-why-is-prefetch-not-the-default-option
+func WithPrefetchCount(prefetch uint32) Option {
+	return func(l *Listener) error {
+		if prefetch < 1 {
+			return fmt.Errorf("prefetch count value cannot be less than 1")
+		}
+		if prefetch >= 1 {
+			l.prefetchCount = &prefetch
+		}
+		return nil
+	}
+}
+
+func WithMaxConcurrency(concurrency int) Option {
+	return func(l *Listener) error {
+		if concurrency < 0 {
+			return fmt.Errorf("concurrency must be greater than 0")
+		}
+		l.maxConcurrency = &concurrency
+		return nil
+	}
+}
