@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	common "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/internal/aad"
 	servicebusinternal "github.com/Azure/go-shuttle/internal/servicebus"
 	"github.com/Azure/go-shuttle/message"
+	"github.com/devigned/tab"
 )
 
 const (
@@ -226,21 +228,6 @@ func setTopicEntity(ctx context.Context, l *Listener) error {
 	return nil
 }
 
-func setSubscriptionEntity(ctx context.Context, l *Listener) error {
-	if l.subscriptionEntity != nil {
-		return nil
-	}
-	if l.subscriptionName == "" {
-		l.subscriptionName = defaultSubscriptionName
-	}
-	subscriptionEntity, err := l.getSubscriptionEntity(ctx, l.subscriptionName)
-	if err != nil {
-		return fmt.Errorf("failed to get subscription: %w", err)
-	}
-	l.subscriptionEntity = subscriptionEntity
-	return nil
-}
-
 func setSubscriptionFilters(ctx context.Context, l *Listener) error {
 	if len(l.filterDefinitions) == 0 {
 		return nil
@@ -259,6 +246,8 @@ func setSubscriptionFilters(ctx context.Context, l *Listener) error {
 
 // Listen waits for a message from the Service Bus Topic subscription
 func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicName string, opts ...Option) error {
+	ctx, span := tab.StartSpan(ctx, "go-shuttle.listener.Listen")
+	defer span.End()
 	l.topicName = topicName
 	// apply listener options
 	for _, opt := range opts {
@@ -270,7 +259,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	if err := setTopicEntity(ctx, l); err != nil {
 		return err
 	}
-	if err := setSubscriptionEntity(ctx, l); err != nil {
+	if err := ensureSubscriptionEntity(ctx, l); err != nil {
 		return err
 	}
 	if err := setSubscriptionFilters(ctx, l); err != nil {
@@ -358,6 +347,21 @@ func getTopicEntity(ctx context.Context, topicName string, namespace *servicebus
 	return tm.Get(ctx, topicName)
 }
 
+func ensureSubscriptionEntity(ctx context.Context, l *Listener) error {
+	if l.subscriptionEntity != nil {
+		return nil
+	}
+	if l.subscriptionName == "" {
+		l.subscriptionName = defaultSubscriptionName
+	}
+	subscriptionEntity, err := l.getSubscriptionEntity(ctx, l.subscriptionName)
+	if err != nil {
+		return fmt.Errorf("failed to get subscription: %w", err)
+	}
+	l.subscriptionEntity = subscriptionEntity
+	return nil
+}
+
 func (l *Listener) getSubscriptionEntity(
 	ctx context.Context,
 	subscriptionName string) (*servicebus.SubscriptionEntity, error) {
@@ -376,20 +380,39 @@ func (l *Listener) getSubscriptionEntity(
 }
 
 func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.SubscriptionManager, name string) (*servicebus.SubscriptionEntity, error) {
-	subEntity, err := sm.Get(ctx, name)
-	if err == nil {
-		return subEntity, nil
-	}
-	mutateSericeDetails := func(s *servicebus.SubscriptionDescription) error {
-		if l.maxDeliveryCount > 0 {
-			s.MaxDeliveryCount = &l.maxDeliveryCount
+	attempt := 1
+	ensure := func() (interface{}, error) {
+		ctx, span := tab.StartSpan(ctx, "go-shuttle.listener.ensureSubscription")
+		span.AddAttributes(tab.Int64Attribute("retry.attempt", int64(attempt)))
+		defer span.End()
+		subEntity, err := sm.Get(ctx, name)
+		if err == nil {
+			return subEntity, nil
 		}
-		if l.lockDuration > time.Duration(0) {
-			return servicebus.SubscriptionWithLockDuration(&l.lockDuration)(s)
+		mutateSericeDetails := func(s *servicebus.SubscriptionDescription) error {
+			if l.maxDeliveryCount > 0 {
+				s.MaxDeliveryCount = &l.maxDeliveryCount
+			}
+			if l.lockDuration > time.Duration(0) {
+				return servicebus.SubscriptionWithLockDuration(&l.lockDuration)(s)
+			}
+			return nil
 		}
-		return nil
+		entity, err := sm.Put(ctx, name, mutateSericeDetails)
+		if err != nil {
+			attempt++
+			tab.For(ctx).Error(err)
+			// let all errors be retryable for now. application only hit this once on subscription creation.
+			return nil, common.Retryable(err.Error())
+		}
+		return entity, err
 	}
-	return sm.Put(ctx, name, mutateSericeDetails)
+	entity, err := common.Retry(5, 1*time.Second, ensure)
+	if err != nil {
+		tab.For(ctx).Error(err)
+		return nil, err
+	}
+	return entity.(*servicebus.SubscriptionEntity), nil
 }
 
 func ensureFilterRule(
