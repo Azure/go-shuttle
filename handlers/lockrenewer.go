@@ -9,7 +9,7 @@ import (
 	"github.com/devigned/tab"
 )
 
-var _ servicebus.Handler = (*PeekLockRenewer)(nil)
+var _ servicebus.Handler = (*peekLockRenewer)(nil)
 
 // LockRenewer abstracts the servicebus subscription client where this functionality lives
 type LockRenewer interface {
@@ -19,31 +19,31 @@ type LockRenewer interface {
 // PeekLockRenewer starts a background goroutine that renews the message lock at the given interval until Stop() is called
 // or until the passed in context is canceled.
 // it is a pass through handler if the renewalInterval is nil
-type PeekLockRenewer struct {
+type peekLockRenewer struct {
 	next            servicebus.Handler
 	lockRenewer     LockRenewer
 	renewalInterval *time.Duration
 }
 
-func (plr *PeekLockRenewer) Handle(ctx context.Context, msg *servicebus.Message) error {
-	if plr.next == nil {
-		return NextHandlerNilError
-	}
-	if plr.renewalInterval != nil {
+func (plr *peekLockRenewer) Handle(ctx context.Context, msg *servicebus.Message) error {
+	if plr.lockRenewer != nil && plr.renewalInterval != nil {
 		go plr.startPeriodicRenewal(ctx, msg)
 	}
 	return plr.next.Handle(ctx, msg)
 }
 
-func NewPeekLockRenewer(interval *time.Duration, lockrenewer LockRenewer, next servicebus.Handler) *PeekLockRenewer {
-	return &PeekLockRenewer{
+func NewPeekLockRenewer(interval *time.Duration, lockrenewer LockRenewer, next servicebus.Handler) servicebus.Handler {
+	if next == nil {
+		panic(NextHandlerNilError.Error())
+	}
+	return &peekLockRenewer{
 		next:            next,
 		lockRenewer:     lockrenewer,
 		renewalInterval: interval,
 	}
 }
 
-func (plr *PeekLockRenewer) startPeriodicRenewal(ctx context.Context, message *servicebus.Message) {
+func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *servicebus.Message) {
 	_, span := tracing.StartSpanFromMessageAndContext(ctx, "go-shuttle.peeklock.startPeriodicRenewal", message)
 	defer span.End()
 	for alive := true; alive; {

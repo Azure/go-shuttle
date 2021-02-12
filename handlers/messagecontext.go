@@ -7,28 +7,28 @@ import (
 	servicebus "github.com/Azure/azure-service-bus-go"
 )
 
-var _ servicebus.Handler = (*DeadlineContext)(nil)
+var _ servicebus.Handler = (*deadlineContext)(nil)
 
 // DeadlineContext is a servicebus middleware handler that creates a message context from the incoming context to isolate
 // each message handling sub processes. It adds a deadline equal to `EnqueuedTime + TTL` to the message context if the message TTL is defined.
 // Otherwise no deadline is applied on the message context.
 // The context is canceled once the `next` middleware returns. this implies that no middleware above DeadlineContext can use this context.
-type DeadlineContext struct {
+type deadlineContext struct {
 	next servicebus.Handler
 }
 
-func (mc *DeadlineContext) Handle(ctx context.Context, msg *servicebus.Message) error {
-	if mc.next == nil {
-		return NextHandlerNilError
-	}
+func (mc *deadlineContext) Handle(ctx context.Context, msg *servicebus.Message) error {
 	msgCtx, cancel := setupDeadline(ctx, msg)
 	// NOTE: this assumes that no handler above the DeadlineContext handler needs this context.
 	defer cancel()
 	return mc.next.Handle(msgCtx, msg)
 }
 
-func NewDeadlineContext(next servicebus.Handler) *DeadlineContext {
-	return &DeadlineContext{
+func NewDeadlineContext(next servicebus.Handler) servicebus.Handler {
+	if next == nil {
+		panic(NextHandlerNilError.Error())
+	}
+	return &deadlineContext{
 		next: next,
 	}
 }
