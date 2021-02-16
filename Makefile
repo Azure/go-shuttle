@@ -21,6 +21,7 @@ push-test-image:
 test-aci: clean-aci scripts/containergroup.yaml
 	containerId=$$(az container create --file scripts/containergroup.yaml \
 	--resource-group ${TEST_RESOURCE_GROUP} \
+	--subscription ${AZURE_SUBSCRIPTION_ID} \
 	--verbose \
 	--query id -o tsv) ;\
 	az container logs --ids $${containerId} --follow
@@ -28,6 +29,7 @@ test-aci: clean-aci scripts/containergroup.yaml
 shell-aci: clean-aci
 	az container create --file scripts/containergroup.yaml \
 	--resource-group ${TEST_RESOURCE_GROUP} \
+	--subscription ${AZURE_SUBSCRIPTION_ID} \
 	--command-line "/bin/bash"; \
 	az container attach --name "pubsubtester" --resource-group "${TEST_RESOURCE_GROUP}"
 
@@ -39,6 +41,7 @@ clean-aci:
 	az container delete \
 	--resource-group ${TEST_RESOURCE_GROUP} \
 	--name pubsubtester \
+	--subscription ${AZURE_SUBSCRIPTION_ID} \
 	--yes
 
 integration: build-test-image push-test-image test-aci
