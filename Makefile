@@ -9,7 +9,7 @@ test-setup:
 
 .PHONY: cleanup-test-setup
 cleanup-test-setup:
-	az group delete --name ${TEST_RESOURCE_GROUP}
+	az group delete --name ${TEST_RESOURCE_GROUP} --subscription ${AZURE_SUBSCRIPTION_ID}
 
 build-test-image:
 	docker build -t ${IMAGE} .
