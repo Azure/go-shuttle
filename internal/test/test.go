@@ -155,7 +155,7 @@ func initTracing() (io.Closer, error) {
 	if err != nil {
 		return nil, err
 	}
-	jLogger := jaegerlog.StdLogger
+	jLogger := jaegerlog.NullLogger
 	jMetricsFactory := metrics.NullFactory
 	tracer, closer, err := cfg.NewTracer(config.Logger(jLogger), config.Metrics(jMetricsFactory))
 	opentracing.SetGlobalTracer(tracer)

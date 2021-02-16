@@ -14,10 +14,12 @@ services:
     networks:
     - goshuttle-tracing
   go-shuttle-test:
-    image: ${IMAGE}:latest
+    working_dir: "/go/pubsub/go-shuttle"
+    image: localamqp
+    # entrypoint: ["ls"]
     #    command: ["-run", "TestConnectionString/TestPublishAndListenNotRenewingLock", "-tags", "debug"]
     # command: ["-run", "TestConnectionString/TestPublishAndListenConcurrentPrefetch", "-tags", "debug"]
-    command: ["-run", "TestConnectionString"]
+    command: ["-run", "TestConnectionString/TestCompleteCloseToLockExpiry", "-tags", "debug"]
     env_file:
     - .env
     environment:
@@ -29,7 +31,7 @@ services:
     - JAEGER_SAMPLER_TYPE=const
     - JAEGER_SAMPLER_PARAM=1
     - JAEGER_SERVICE_NAME=go-shuttle-test
-    - DEBUG-LEVEL=3
+    - DEBUG_LEVEL=3
     networks:
     - goshuttle-tracing
     depends_on:

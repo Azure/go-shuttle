@@ -3,9 +3,9 @@ module github.com/Azure/go-shuttle
 go 1.14
 
 require (
-	github.com/Azure/azure-amqp-common-go/v3 v3.0.1
+	github.com/Azure/azure-amqp-common-go/v3 v3.1.0
 	github.com/Azure/azure-service-bus-go v0.10.6
-	github.com/Azure/go-autorest/autorest v0.11.6
+	github.com/Azure/go-autorest/autorest v0.11.7
 	github.com/Azure/go-autorest/autorest/adal v0.9.4
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/devigned/tab v0.1.1
@@ -21,4 +21,8 @@ require (
 	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
 )
 
-replace github.com/Azure/go-amqp => github.com/serbrech/go-amqp v0.13.2-0.20210129001558-f9529f4631b8
+//replace github.com/Azure/go-amqp => github.com/serbrech/go-amqp v0.13.2-0.20210129001558-f9529f4631b8
+replace (
+	github.com/Azure/azure-service-bus-go => ../azure-service-bus-go
+	github.com/Azure/go-amqp => ../go-amqp
+)
