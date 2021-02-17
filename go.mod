@@ -3,10 +3,10 @@ module github.com/Azure/go-shuttle
 go 1.14
 
 require (
-	github.com/Azure/azure-amqp-common-go/v3 v3.0.1
-	github.com/Azure/azure-service-bus-go v0.10.6
-	github.com/Azure/go-autorest/autorest v0.11.6
-	github.com/Azure/go-autorest/autorest/adal v0.9.4
+	github.com/Azure/azure-amqp-common-go/v3 v3.1.0
+	github.com/Azure/azure-service-bus-go v0.10.9
+	github.com/Azure/go-autorest/autorest v0.11.18
+	github.com/Azure/go-autorest/autorest/adal v0.9.13
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/devigned/tab v0.1.1
 	github.com/devigned/tab/opentracing v0.1.1
@@ -18,7 +18,7 @@ require (
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
+	golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0
 )
 
-replace github.com/Azure/go-amqp => github.com/serbrech/go-amqp v0.13.2-0.20210129001558-f9529f4631b8
+replace github.com/Azure/azure-service-bus-go => github.com/serbrech/azure-service-bus-go v0.11.0-pre
