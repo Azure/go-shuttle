@@ -14,8 +14,8 @@ services:
     networks:
     - goshuttle-tracing
   go-shuttle-test:
-    working_dir: "/go/pubsub/go-shuttle"
-    image: localamqp
+    working_dir: "/go/pubsub"
+    image: ${IMAGE}
     # entrypoint: ["ls"]
     #    command: ["-run", "TestConnectionString/TestPublishAndListenNotRenewingLock", "-tags", "debug"]
     # command: ["-run", "TestConnectionString/TestPublishAndListenConcurrentPrefetch", "-tags", "debug"]
