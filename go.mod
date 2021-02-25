@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/Azure/azure-amqp-common-go/v3 v3.1.0
-	github.com/Azure/azure-service-bus-go v0.10.9
+	github.com/Azure/azure-service-bus-go v0.10.12-0.20210225175612-bb0d9d0bf8ba
 	github.com/Azure/go-autorest/autorest v0.11.18
 	github.com/Azure/go-autorest/autorest/adal v0.9.13
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
@@ -20,5 +20,3 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0
 )
-
-replace github.com/Azure/azure-service-bus-go => github.com/serbrech/azure-service-bus-go v0.11.0-pre
