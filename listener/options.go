@@ -107,9 +107,9 @@ func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) M
 	}
 }
 
-// WithEventTypeFilter will subscribe to event of the go type provided.
+// WithTypeFilter will subscribe to event of the go type provided.
 // It uses the `type` property automatically to messages published via go-shuttle.
-func WithEventTypeFilter(event interface{}) ManagementOption {
+func WithTypeFilter(event interface{}) ManagementOption {
 	typeName := getTypeName(event)
 	return WithFilterDescriber(fmt.Sprintf("tf_%s", typeName), servicebus.SQLFilter{Expression: fmt.Sprintf("type LIKE '%s'", typeName)})
 }

@@ -63,14 +63,14 @@ func (suite *serviceBusSuite) TestPublishAndListenUsingTypeFilter() {
 	// listener with wrong event type. not getting the event
 	failListener, err := listener.New(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subEventTypeFilterFail"),
-		listener.WithEventTypeFilter(&notTestEvent{}))
+		listener.WithTypeFilter(&notTestEvent{}))
 	suite.NoError(err)
 	suite.typeFilterTest(pub, failListener, false)
 
 	// update subscription to filter on correct event type. succeeds receiving event
 	successListener, err := listener.New(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subEventTypeFilter"),
-		listener.WithEventTypeFilter(&testEvent{}))
+		listener.WithTypeFilter(&testEvent{}))
 	suite.typeFilterTest(pub, successListener, true)
 }
 
