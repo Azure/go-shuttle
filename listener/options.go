@@ -3,6 +3,7 @@ package listener
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/Azure/azure-service-bus-go"
@@ -104,6 +105,21 @@ func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) M
 		l.filterDefinitions = append(l.filterDefinitions, &filterDefinition{filterName, filter})
 		return nil
 	}
+}
+
+// WithEventTypeFilter will subscribe to event of the go type provided.
+// It uses the `type` property automatically to messages published via go-shuttle.
+func WithEventTypeFilter(event interface{}) ManagementOption {
+	typeName := getTypeName(event)
+	return WithFilterDescriber(fmt.Sprintf("tf_%s", typeName), servicebus.SQLFilter{Expression: fmt.Sprintf("type LIKE '%s'", typeName)})
+}
+
+func getTypeName(obj interface{}) string {
+	valueOf := reflect.ValueOf(obj)
+	if valueOf.Type().Kind() == reflect.Ptr {
+		return reflect.Indirect(valueOf).Type().Name()
+	}
+	return valueOf.Type().Name()
 }
 
 // WithSubscriptionDetails allows listeners to control subscription details for longer lived operations.

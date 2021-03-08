@@ -37,7 +37,7 @@ func (suite *serviceBusSuite) TestPublishAndListenMessageTwice() {
 }
 
 // TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
-func (suite *serviceBusSuite) TestPublishAndListenUsingTypeFilter() {
+func (suite *serviceBusSuite) TestPublishAndListenUsingFilter() {
 	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
 	suite.NoError(err)
 	successListener, err := listener.New(suite.listenerAuthOption,
@@ -50,6 +50,28 @@ func (suite *serviceBusSuite) TestPublishAndListenUsingTypeFilter() {
 
 	suite.typeFilterTest(pub, successListener, true)
 	suite.typeFilterTest(pub, failListener, false)
+}
+
+type notTestEvent struct {
+	wrongType string
+}
+
+// TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
+func (suite *serviceBusSuite) TestPublishAndListenUsingTypeFilter() {
+	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
+	suite.NoError(err)
+	// listener with wrong event type. not getting the event
+	failListener, err := listener.New(suite.listenerAuthOption,
+		listener.WithSubscriptionName("subEventTypeFilterFail"),
+		listener.WithEventTypeFilter(&notTestEvent{}))
+	suite.NoError(err)
+	suite.typeFilterTest(pub, failListener, false)
+
+	// update subscription to filter on correct event type. succeeds receiving event
+	successListener, err := listener.New(suite.listenerAuthOption,
+		listener.WithSubscriptionName("subEventTypeFilter"),
+		listener.WithEventTypeFilter(&testEvent{}))
+	suite.typeFilterTest(pub, successListener, true)
 }
 
 // TestPublishAndListenUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
@@ -331,7 +353,7 @@ func (suite *serviceBusSuite) publishAndReceiveMessage(testConfig publishReceive
 		suite.NoError(err)
 		err = testConfig.listener.Listen(
 			ctx,
-			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
+			checkResultHandler(string(eventJSON), reflection.GetType(testEvent{}), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
