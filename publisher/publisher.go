@@ -25,8 +25,7 @@ func (p *Publisher) Namespace() *servicebus.Namespace {
 }
 
 // New creates a new service bus publisher
-func New(topicName string, opts ...ManagementOption) (*Publisher, error) {
-	ctx := context.Background()
+func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publisher, error) {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.New")
 	defer s.End()
 	ns, err := servicebus.NewNamespace()
