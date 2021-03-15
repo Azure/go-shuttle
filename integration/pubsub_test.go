@@ -18,7 +18,7 @@ import (
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
 func (suite *serviceBusSuite) TestPublishAndListenUsingDefault() {
-	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), suite.TopicName, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(suite.listenerAuthOption, listener.WithSubscriptionName("defaultTestSub"))
 	suite.NoError(err)
@@ -28,7 +28,7 @@ func (suite *serviceBusSuite) TestPublishAndListenUsingDefault() {
 
 // TestPublishAndListenMessageTwice tests publish and listen the same messages twice
 func (suite *serviceBusSuite) TestPublishAndListenMessageTwice() {
-	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), suite.TopicName, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(suite.listenerAuthOption, listener.WithSubscriptionName("testTwoMessages"))
 	suite.NoError(err)
@@ -38,7 +38,7 @@ func (suite *serviceBusSuite) TestPublishAndListenMessageTwice() {
 
 // TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
 func (suite *serviceBusSuite) TestPublishAndListenUsingFilter() {
-	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), suite.TopicName, suite.publisherAuthOption)
 	suite.NoError(err)
 	successListener, err := listener.New(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subTypeFilter"),
@@ -58,7 +58,7 @@ type notTestEvent struct {
 
 // TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
 func (suite *serviceBusSuite) TestPublishAndListenUsingTypeFilter() {
-	pub, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), suite.TopicName, suite.publisherAuthOption)
 	suite.NoError(err)
 	// listener with wrong event type. not getting the event
 	failListener, err := listener.New(suite.listenerAuthOption,
@@ -79,6 +79,7 @@ func (suite *serviceBusSuite) TestPublishAndListenUsingCustomHeaderFilter() {
 	suite.T().Parallel()
 	// this assumes that the testTopic was created at the start of the test suite
 	pub, err := publisher.New(
+		context.Background(),
 		suite.TopicName,
 		suite.publisherAuthOption,
 		publisher.SetDefaultHeader("testHeader", "Key"))
@@ -104,6 +105,7 @@ func (suite *serviceBusSuite) TestPublishAndListenUsingDuplicateDetection() {
 	dupeDetectionTopicName := suite.Prefix + "deduptopic" + suite.TagID
 	dupeDetectionWindow := 5 * time.Minute
 	pub, err := publisher.New(
+		context.Background(),
 		dupeDetectionTopicName,
 		suite.publisherAuthOption,
 		publisher.WithDuplicateDetection(&dupeDetectionWindow))
@@ -118,7 +120,7 @@ func (suite *serviceBusSuite) TestPublishAndListenRetryLater() {
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	retryLaterTopic := suite.Prefix + "retrylater" + suite.TagID
-	pub, err := publisher.New(retryLaterTopic, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), retryLaterTopic, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,
@@ -144,7 +146,7 @@ func (suite *serviceBusSuite) TestPublishAndListenShortLockDuration() {
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	shortLockTopic := suite.Prefix + "shortlock" + suite.TagID
-	pub, err := publisher.New(shortLockTopic, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), shortLockTopic, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,
@@ -171,7 +173,7 @@ func (suite *serviceBusSuite) TestPublishAndListenNotRenewingLock() {
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	norenewlockTopic := suite.Prefix + "norenewlock" + suite.TagID
-	pub, err := publisher.New(norenewlockTopic, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), norenewlockTopic, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,
@@ -197,7 +199,7 @@ func (suite *serviceBusSuite) TestPublishAndListenConcurrentPrefetch() {
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	prefetchTopic := suite.Prefix + "prefetch" + suite.TagID
-	pub, err := publisher.New(prefetchTopic, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), prefetchTopic, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,

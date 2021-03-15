@@ -10,7 +10,7 @@ import (
 func (suite *serviceBusSuite) TestCreatePublisherUsingNewTopic() {
 	suite.T().Parallel()
 	topicName := "newTopic" + suite.TagID
-	_, err := publisher.New(topicName, suite.publisherAuthOption)
+	_, err := publisher.New(context.Background(), topicName, suite.publisherAuthOption)
 	if suite.NoError(err) {
 		// make sure that topic exists
 		ns := suite.GetNewNamespace()
@@ -27,7 +27,7 @@ func (suite *serviceBusSuite) TestCreatePublisherUsingNewTopic() {
 // TestCreatePublisherWithExistingTopic tests the creation of a publisher for an existing topic and a connection string
 func (suite *serviceBusSuite) TestCreatePublisherUsingExistingTopic() {
 	// this assumes that the testTopic was created at the start of the test suite
-	_, err := publisher.New(suite.TopicName, suite.publisherAuthOption)
+	_, err := publisher.New(context.Background(), suite.TopicName, suite.publisherAuthOption)
 	if suite.NoError(err) {
 		// make sure that topic exists
 		ns := suite.GetNewNamespace()
