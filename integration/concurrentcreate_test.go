@@ -21,7 +21,7 @@ func (suite *serviceBusSuite) TestCreatePublisherConcurrently() {
 		w.Add(1)
 		go func(it int) {
 			defer w.Done()
-			_, err := publisher.New(topicName, suite.publisherAuthOption)
+			_, err := publisher.New(context.Background(), topicName, suite.publisherAuthOption)
 			if !assert.NoError(suite.T(), err, "failed on iteration %d", it) {
 				suite.FailNow(err.Error())
 			}
@@ -43,7 +43,7 @@ func (suite *serviceBusSuite) TestCreatePublisherConcurrently() {
 func (suite *serviceBusSuite) TestCreateListenersConcurrently() {
 	suite.T().Parallel()
 	topicName := "newTopic" + suite.TagID
-	_, err := publisher.New(topicName, suite.publisherAuthOption)
+	_, err := publisher.New(context.Background(), topicName, suite.publisherAuthOption)
 	assert.NoError(suite.T(), err)
 	w := sync.WaitGroup{}
 	lctx, cancel := context.WithTimeout(context.TODO(), 20*time.Second)

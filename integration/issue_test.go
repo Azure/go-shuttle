@@ -18,7 +18,7 @@ func (suite *serviceBusSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	topic := suite.Prefix + "issue189" + suite.TagID
-	pub, err := publisher.New(topic, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), topic, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,
@@ -46,7 +46,7 @@ func (suite *serviceBusSuite) TestCompleteCloseToLockExpiryNoConcurrency() {
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	topic := suite.Prefix + "issue189" + suite.TagID
-	pub, err := publisher.New(topic, suite.publisherAuthOption)
+	pub, err := publisher.New(context.Background(), topic, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,

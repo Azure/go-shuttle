@@ -211,8 +211,13 @@ For more info : https://docs.microsoft.com/en-us/azure/service-bus-messaging/ser
 ## Publisher Examples
 ### Initializing a publisher with a Service Bus connection string
 ```golang
-topicName := "topic"
+var (
+    ctx       = context.Background()
+    topicName = "topic"
+)
+
 pub, _ := publisher.New(
+    ctx,
     topicName,
     publisher.PublisherWithConnectionString(serviceBusConnectionString),
 )
@@ -223,17 +228,27 @@ To configure using managed identity with Service Bus, refer to this [link](https
 Note if you see errors for certain operation, you may have an RBAC issue. Refer to the built-in RBAC roles [here](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity#built-in-rbac-roles-for-azure-service-bus).
 #### Using user assigned managed identity
 Using Identity ClientID
-```
-topicName := "topic"
+```golang
+var (
+    ctx       = context.Background()
+    topicName = "topic"
+)
+
 pub, _ := publisher.New(
+    ctx,
     topicName,
     publisher.WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID),
 )
 ```
 Using Identity ResourceID
-```
-topicName := "topic"
+```golang
+var (
+    ctx       = context.Background()
+    topicName = "topic"
+)
+
 pub, _ := publisher.New(
+    ctx,
     topicName,
     publisher.WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID),
 )
@@ -241,18 +256,28 @@ pub, _ := publisher.New(
 
 #### Using system assigned managed identity
 Keep the clientID parameter empty
-```
-topicName := "topic"
-pub, _ := publisher.NewPublisher(
+```golang
+var (
+    ctx       = context.Background()
+    topicName = "topic"
+)
+
+pub, _ := publisher.New(
+    ctx,
     topicName,
     publisher.WithManagedIdentityClientID(serviceBusNamespaceName, ""),
 )
 ```
 
 ### Initializing a publisher with a header
-```
-topicName := "topic"
+```golang
+var (
+    ctx       = context.Background()
+    topicName = "topic"
+)
+
 pub, _ := publisher.New(
+    ctx,
     topicName,
     publisher.WithConnectionString(serviceBusConnectionString),
     // msgs will have a header with the name "headerName" and value from the msg body field "Id"
@@ -267,10 +292,16 @@ Please think about what capabilities you would like on the Service Bus topic up 
 Note that you need to use this [feature](https://docs.microsoft.com/en-us/azure/service-bus-messaging/duplicate-detection) in conjunction with setting a messageID on each message you send.
 Refer to the [Publishing a message with a message ID section](#publishing-a-message-with-a-message-id) on how to do this.
 
-```
-topicName := "topic"
-dupeDetectionWindow := 5 * time.Minute
+```golang
+var (
+    ctx       = context.Background()
+    topicName = "topic"
+
+    dupeDetectionWindow = 5 * time.Minute
+)
+
 pub, _ := publisher.New(
+    ctx,
     topicName,
     publisher.WithConnectionString(serviceBusConnectionString),
     publisher.SetDuplicateDetection(&dupeDetectionWindow), // if window is null then a default of 30 seconds is used
