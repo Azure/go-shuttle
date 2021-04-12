@@ -142,6 +142,32 @@ func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) ManagementOp
 	}
 }
 
+// WithSubscriptionLockDuration allows listeners to control LockDuration. Passing zeros leaves it up to Service bus defaults
+func WithSubscriptionLockDuration(lock time.Duration) ManagementOption {
+	return func(l *Listener) error {
+		if lock > sbinternal.LockDuration {
+			// working on getting service bus to enforce this. Hangs if you go higher. https://github.com/Azure/azure-service-bus-go/pull/202
+			return fmt.Errorf("lock duration must be <= to %v", sbinternal.LockDuration)
+		}
+		if lock < time.Duration(0) {
+			return fmt.Errorf("lock duration must be positive")
+		}
+		l.lockDuration = lock
+		return nil
+	}
+}
+
+// WithSubscriptionMaxDeliveryCount allows listeners to control MaxDeliveryCount. Passing zeros leaves it up to Service bus defaults
+func WithSubscriptionMaxDeliveryCount(maxDelivery int32) ManagementOption {
+	return func(l *Listener) error {
+		if maxDelivery < 0 {
+			return fmt.Errorf("max Deliveries must be positive")
+		}
+		l.maxDeliveryCount = maxDelivery
+		return nil
+	}
+}
+
 // WithPrefetchCount the receiver to quietly acquires more messages, up to the PrefetchCount limit. A single Receive call to the ServiceBus api
 // therefore acquires several messages for immediate consumption that is returned as soon as available.
 // Please be aware of the consequences : https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-prefetch#if-it-is-faster-why-is-prefetch-not-the-default-option
