@@ -1,10 +1,10 @@
 package listener
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWithEnvironmentName(t *testing.T) {
