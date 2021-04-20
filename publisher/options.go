@@ -6,6 +6,7 @@ import (
 
 	"github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-shuttle/internal/aad"
 	servicebus2 "github.com/Azure/go-shuttle/internal/servicebus"
 )
@@ -27,6 +28,25 @@ func WithConnectionString(connStr string) ManagementOption {
 			return err
 		}
 		p.namespace = ns
+		return nil
+	}
+}
+
+// WithEnvironmentName configures the azure environment used to connect to Servicebus. The environment value used is
+// then provided by Azure/go-autorest.
+// ref: https://github.com/Azure/go-autorest/blob/c7f947c0610de1bc279f76e6d453353f95cd1bfa/autorest/azure/environments.go#L34
+func WithEnvironmentName(environmentName string) ManagementOption {
+	return func(p *Publisher) error {
+		if environmentName == "" {
+			return errors.New("cannot use empty environment name")
+		}
+		var env azure.Environment
+		var err error
+		if env, err = azure.EnvironmentFromName(environmentName); err != nil {
+			return err
+		}
+		p.namespace.Environment = env
+		p.namespace.Suffix = env.ServiceBusEndpointSuffix
 		return nil
 	}
 }
