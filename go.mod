@@ -5,13 +5,15 @@ go 1.14
 require (
 	github.com/Azure/azure-amqp-common-go/v3 v3.1.0
 	github.com/Azure/azure-service-bus-go v0.10.12-0.20210225175612-bb0d9d0bf8ba
+	github.com/Azure/go-amqp v0.13.5
 	github.com/Azure/go-autorest/autorest v0.11.18
 	github.com/Azure/go-autorest/autorest/adal v0.9.13
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/devigned/tab v0.1.1
 	github.com/devigned/tab/opentracing v0.1.1
 	github.com/joho/godotenv v1.3.0
-	github.com/onsi/gomega v1.10.2
+	github.com/onsi/ginkgo v1.12.1
+	github.com/onsi/gomega v1.11.0
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.6.1
