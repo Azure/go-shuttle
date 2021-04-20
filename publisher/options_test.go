@@ -4,9 +4,8 @@ import (
 	"testing"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWithEnvironmentName(t *testing.T) {
