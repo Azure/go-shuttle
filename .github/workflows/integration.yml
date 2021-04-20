@@ -27,6 +27,6 @@ jobs:
     - name: run integration
       shell: bash
       run: |
-        echo "some data" > .env
-        cat .env
-    
+        echo "${{ secrets.ENV }}" > .env
+        make test-setup
+        make integration
