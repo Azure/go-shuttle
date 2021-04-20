@@ -113,5 +113,4 @@ func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespa
 		return nil, err
 	}
 	return entity.(*servicebus.TopicEntity), nil
-
 }
