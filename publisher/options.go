@@ -6,9 +6,8 @@ import (
 
 	"github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-shuttle/internal/aad"
-	servicebus2 "github.com/Azure/go-shuttle/internal/servicebus"
+	sbinternal "github.com/Azure/go-shuttle/internal/servicebus"
 )
 
 // ManagementOption provides structure for configuring a new Publisher
@@ -23,12 +22,7 @@ func WithConnectionString(connStr string) ManagementOption {
 		if connStr == "" {
 			return errors.New("no Service Bus connection string provided")
 		}
-		ns, err := servicebus.NewNamespace(servicebus.NamespaceWithConnectionString(connStr))
-		if err != nil {
-			return err
-		}
-		p.namespace = ns
-		return nil
+		return servicebus.NamespaceWithConnectionString(connStr)(p.namespace)
 	}
 }
 
@@ -40,14 +34,7 @@ func WithEnvironmentName(environmentName string) ManagementOption {
 		if environmentName == "" {
 			return errors.New("cannot use empty environment name")
 		}
-		var env azure.Environment
-		var err error
-		if env, err = azure.EnvironmentFromName(environmentName); err != nil {
-			return err
-		}
-		p.namespace.Environment = env
-		p.namespace.Suffix = env.ServiceBusEndpointSuffix
-		return nil
+		return servicebus.NamespaceWithAzureEnvironment(p.namespace.Name, environmentName)(p.namespace)
 	}
 }
 
@@ -57,12 +44,7 @@ func WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResou
 		if serviceBusNamespaceName == "" {
 			return errors.New("no Service Bus namespace provided")
 		}
-		ns, err := servicebus.NewNamespace(servicebus2.NamespaceWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID))
-		if err != nil {
-			return err
-		}
-		p.namespace = ns
-		return nil
+		return sbinternal.NamespaceWithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID)(p.namespace)
 	}
 }
 
@@ -72,12 +54,7 @@ func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientI
 		if serviceBusNamespaceName == "" {
 			return errors.New("no Service Bus namespace provided")
 		}
-		ns, err := servicebus.NewNamespace(servicebus2.NamespaceWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID))
-		if err != nil {
-			return err
-		}
-		p.namespace = ns
-		return nil
+		return sbinternal.NamespaceWithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID)(p.namespace)
 	}
 }
 
@@ -86,12 +63,7 @@ func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) 
 		if spt == nil {
 			return errors.New("cannot provide a nil token")
 		}
-		ns, err := servicebus.NewNamespace(servicebus2.NamespaceWithTokenProvider(serviceBusNamespaceName, aad.AsJWTTokenProvider(spt)))
-		if err != nil {
-			return err
-		}
-		p.namespace = ns
-		return nil
+		return sbinternal.NamespaceWithTokenProvider(serviceBusNamespaceName, aad.AsJWTTokenProvider(spt))(p.namespace)
 	}
 }
 
