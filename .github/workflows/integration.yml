@@ -29,8 +29,10 @@ jobs:
       run: |
         echo "${{ secrets.ENV }}" > .env
         make test-setup
+    - name: Dotenv Action
+      uses: falti/dotenv-action@v0.2.5
+      with:
+        path: .env
     - name: run integration
       shell: bash
-      run: | 
-        cat ./.env
-        make integration
+      run: make integration
