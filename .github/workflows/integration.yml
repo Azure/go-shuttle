@@ -31,4 +31,6 @@ jobs:
         make test-setup
     - name: run integration
       shell: bash
-      run: make integration
+      run: | 
+        cat ./.env
+        make integration
