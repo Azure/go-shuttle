@@ -25,7 +25,7 @@ build-test-image:
 	docker build -t ${IMAGE} .
 
 push-test-image:
-	docker login -u ${REGISTRY_USER} -p ${REGISTRY_PASSWORD} ${REGISTRY}
+	@docker login -u ${REGISTRY_USER} -p ${REGISTRY_PASSWORD} ${REGISTRY}
 	docker push ${IMAGE}
 
 test-aci: clean-aci scripts/containergroup.yaml
