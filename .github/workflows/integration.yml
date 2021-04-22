@@ -24,14 +24,11 @@ jobs:
       uses: azure/login@v1
       with:
         creds: ${{ secrets.JSON_CREDS }}
-    
     - name: setup environment
       shell: bash
       run: |
         echo "${{ secrets.ENV }}" > .env
         make test-setup
-        cat .env | grep REGISTRY=
-
     - name: run integration
       shell: bash
       run: make integration
