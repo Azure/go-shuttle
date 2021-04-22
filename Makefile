@@ -1,6 +1,12 @@
 SCRIPTPATH=$(shell cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P)
-ENVFILE?=${SCRIPTPATH}/.env
-include ${ENVFILE}
+
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
+
+ENVFILE=${SCRIPTPATH}/.env
+
 IMAGE?=${REGISTRY}/pubsubtest
 export
 
@@ -51,7 +57,7 @@ clean-aci:
 integration: build-test-image push-test-image test-aci
 
 integration-local: build-test-image
-	@docker-compose --env-file ${ENVFILE} up
+	@docker-compose --env-file "${ENVFILE}" up
 
 
 
