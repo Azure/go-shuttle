@@ -25,14 +25,20 @@ jobs:
       with:
         creds: ${{ secrets.JSON_CREDS }}
     - name: setup environment
+      env:
+        SERVICEBUS_NAMESPACE_NAME: sbgoshuttleint
+        TEST_LOCATION: westus2
+        TEST_RESOURCE_GROUP: goshuttle-int
+        REGISTRY_NAME: goshuttleint
       shell: bash
       run: |
         echo "${{ secrets.ENV }}" > .env
         make test-setup
-    - name: Dotenv Action
-      uses: falti/dotenv-action@v0.2.5
-      with:
-        path: .env
     - name: run integration
+      env:
+        SERVICEBUS_NAMESPACE_NAME: sbgoshuttleint
+        TEST_LOCATION: westus2
+        TEST_RESOURCE_GROUP: goshuttle-int
+        REGISTRY_NAME: goshuttleint
       shell: bash
       run: make integration
