@@ -25,9 +25,12 @@ jobs:
       with:
         creds: ${{ secrets.JSON_CREDS }}
     
-    - name: run integration
+    - name: setup environment
       shell: bash
       run: |
         echo "${{ secrets.ENV }}" > .env
         make test-setup
-        make integration
+
+    - name: run integration
+      shell: bash
+      run: make integration
