@@ -19,14 +19,26 @@ jobs:
     environment: Integration
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v2
     - name: Azure Login
       uses: azure/login@v1
       with:
         creds: ${{ secrets.JSON_CREDS }}
-    
-    - name: run integration
+    - name: setup environment
+      env:
+        SERVICEBUS_NAMESPACE_NAME: sbgoshuttleint
+        TEST_LOCATION: westus2
+        TEST_RESOURCE_GROUP: goshuttle-int
+        REGISTRY_NAME: goshuttleint
       shell: bash
       run: |
-        echo "some data" > .env
-        cat .env
-    
+        echo "${{ secrets.ENV }}" > .env
+        make test-setup
+    - name: run integration
+      env:
+        SERVICEBUS_NAMESPACE_NAME: sbgoshuttleint
+        TEST_LOCATION: westus2
+        TEST_RESOURCE_GROUP: goshuttle-int
+        REGISTRY_NAME: goshuttleint
+      shell: bash
+      run: make integration
