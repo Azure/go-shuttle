@@ -87,4 +87,4 @@ findOrReplace "REGISTRY" "${REGISTRY}" "${DOTENV}"
 findOrReplace "SERVICEBUS_ID" "${SERVICEBUS_ID}" "${DOTENV}"
 findOrReplace "SERVICEBUS_CONNECTION_STRING" "${SERVICEBUS_CONNECTION_STRING}" "${DOTENV}"
 
-rm "${DOTENV}.bak"
+rm -f "${DOTENV}.bak"
