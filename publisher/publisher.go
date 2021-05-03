@@ -105,7 +105,7 @@ func (p *Publisher) tryRecoverTopic(ctx context.Context, sendError error) error 
 	if errors.As(sendError, &neterr) && (!neterr.Temporary() || neterr.Timeout()) {
 		// re-create topic/sender
 		if err := p.initTopic(p.topic.Name); err != nil {
-			return fmt.Errorf("failed to init topic on recovery: %w")
+			return fmt.Errorf("failed to init topic on recovery: %w", err)
 		}
 		return nil
 	}
