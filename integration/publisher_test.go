@@ -85,8 +85,9 @@ func (suite *serviceBusSuite) TestSoakPub() {
 		suite.T().Run(suite.T().Name()+tc.topicName, func(test *testing.T) {
 			test.Parallel()
 			err := testSoak(deadline, suite.publisherAuthOption, tc.topicName, tc.sleepTime)
-			assert.NoError(test, err)
-			suite.FailNow(err.Error())
+			if !assert.NoError(test, err) {
+				suite.FailNow(err.Error())
+			}
 		})
 	}
 }
@@ -115,7 +116,11 @@ func testSoak(ctx context.Context, authOptions publisher.ManagementOption, topic
 			return err
 		}
 		fmt.Println("[", topicName, "] published event ", iteration)
-		time.Sleep(idleTime)
+		select {
+		case <-time.After(idleTime):
+		case <-ctx.Done():
+			continue
+		}
 	}
 	return p.Close(context.TODO())
 }
