@@ -3,7 +3,9 @@ package publisher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	common "github.com/Azure/azure-amqp-common-go/v3"
@@ -44,12 +46,9 @@ func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publ
 	if err != nil {
 		return nil, fmt.Errorf("failed to get topic: %w", err)
 	}
-	topic, err := publisher.namespace.NewTopic(topicEntity.Name)
-	if err != nil {
+	if err = publisher.initTopic(topicEntity.Name); err != nil {
 		return nil, fmt.Errorf("failed to create new topic %s: %w", topicEntity.Name, err)
 	}
-
-	publisher.topic = topic
 	return publisher, nil
 }
 
@@ -72,7 +71,6 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 		}
 	}
 
-	// now apply publishing options
 	for _, opt := range opts {
 		err := opt(sbMsg)
 		if err != nil {
@@ -80,12 +78,38 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 		}
 	}
 
-	// finally, send
 	err = p.topic.Send(ctx, sbMsg)
-	if err != nil {
-		return fmt.Errorf("failed to send message to topic %s: %w", p.topic.Name, err)
+	if err == nil {
+		return nil
+	}
+	// recover + retry
+	if recErr := p.tryRecoverTopic(ctx, err); recErr != nil {
+		return fmt.Errorf("failed to recover topic on send failure %s. recoveryError : %w, sendError: %s", p.topic.Name, recErr, err)
+	}
+	if err = p.topic.Send(ctx, sbMsg); err != nil {
+		return fmt.Errorf("failed to send message to topic %s after recovery: %w", p.topic.Name, err)
 	}
 	return nil
+}
+
+func (p *Publisher) Close(ctx context.Context) error {
+	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.Close")
+	defer s.End()
+	return p.topic.Close(ctx)
+}
+
+func (p *Publisher) tryRecoverTopic(ctx context.Context, sendError error) error {
+	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.tryRecoverTopic", tab.StringAttribute("error", sendError.Error()))
+	defer s.End()
+	var neterr net.Error
+	if errors.As(sendError, &neterr) && (!neterr.Temporary() || neterr.Timeout()) {
+		// re-create topic/sender
+		if err := p.initTopic(p.topic.Name); err != nil {
+			return fmt.Errorf("failed to init topic on recovery: %w", err)
+		}
+		return nil
+	}
+	return fmt.Errorf("error is not identified as recoverable: %w", sendError)
 }
 
 func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespace, opts ...servicebus.TopicManagementOption) (*servicebus.TopicEntity, error) {
@@ -113,4 +137,13 @@ func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespa
 		return nil, err
 	}
 	return entity.(*servicebus.TopicEntity), nil
+}
+
+func (p *Publisher) initTopic(name string) error {
+	topic, err := p.namespace.NewTopic(name)
+	if err != nil {
+		return fmt.Errorf("failed to create new topic %s: %w", name, err)
+	}
+	p.topic = topic
+	return nil
 }
