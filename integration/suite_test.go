@@ -20,7 +20,7 @@ type serviceBusSuite struct {
 	test.BaseSuite
 	Prefix              string
 	TopicName           string
-	Publisher           publisher.Publisher
+	Publisher           publisher.TopicPublisher
 	Listener            listener.Listener
 	publisherAuthOption publisher.ManagementOption
 	listenerAuthOption  listener.ManagementOption
@@ -196,7 +196,7 @@ func (suite *serviceBusSuite) SetupSuite() {
 type publishReceiveTest struct {
 	topicName        string
 	listener         *listener.Listener
-	publisher        *publisher.Publisher
+	publisher        *publisher.TopicPublisher
 	listenerOptions  []listener.Option
 	publisherOptions []publisher.Option
 	publishCount     *int

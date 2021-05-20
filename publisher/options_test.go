@@ -10,7 +10,7 @@ import (
 
 func TestWithEnvironmentName(t *testing.T) {
 	v := assert.New(t)
-	pub := &Publisher{namespace: &servicebus.Namespace{}}
+	pub := &TopicPublisher{namespace: &servicebus.Namespace{}}
 	expectedEnv := azure.Environment{
 		Name:                     "test",
 		ServiceBusEndpointSuffix: "testsuffix.com",

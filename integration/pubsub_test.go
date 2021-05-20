@@ -228,7 +228,7 @@ func (suite *serviceBusSuite) TestPublishAndListenConcurrentPrefetch() {
 	}, event)
 }
 
-func (suite *serviceBusSuite) defaultTest(p *publisher.Publisher, l *listener.Listener) {
+func (suite *serviceBusSuite) defaultTest(p *publisher.TopicPublisher, l *listener.Listener) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -246,7 +246,7 @@ func (suite *serviceBusSuite) defaultTest(p *publisher.Publisher, l *listener.Li
 	)
 }
 
-func (suite *serviceBusSuite) defaultTestWithMessageTwice(p *publisher.Publisher, l *listener.Listener) {
+func (suite *serviceBusSuite) defaultTestWithMessageTwice(p *publisher.TopicPublisher, l *listener.Listener) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -264,7 +264,7 @@ func (suite *serviceBusSuite) defaultTestWithMessageTwice(p *publisher.Publisher
 	)
 }
 
-func (suite *serviceBusSuite) typeFilterTest(p *publisher.Publisher, l *listener.Listener, shouldSucceed bool) {
+func (suite *serviceBusSuite) typeFilterTest(p *publisher.TopicPublisher, l *listener.Listener, shouldSucceed bool) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -283,7 +283,7 @@ func (suite *serviceBusSuite) typeFilterTest(p *publisher.Publisher, l *listener
 	)
 }
 
-func (suite *serviceBusSuite) customHeaderFilterTest(pub *publisher.Publisher, l *listener.Listener, shouldSucceed bool) {
+func (suite *serviceBusSuite) customHeaderFilterTest(pub *publisher.TopicPublisher, l *listener.Listener, shouldSucceed bool) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -302,7 +302,7 @@ func (suite *serviceBusSuite) customHeaderFilterTest(pub *publisher.Publisher, l
 	)
 }
 
-func (suite *serviceBusSuite) duplicateDetectionTest(pub *publisher.Publisher, l *listener.Listener, topicName string) {
+func (suite *serviceBusSuite) duplicateDetectionTest(pub *publisher.TopicPublisher, l *listener.Listener, topicName string) {
 	// create test event
 	event := &testEvent{
 		ID:    1,

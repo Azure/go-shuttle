@@ -14,27 +14,44 @@ import (
 	"github.com/devigned/tab"
 )
 
-// Publisher is a struct to contain service bus entities relevant to publishing to a topic
-type Publisher struct {
+type Publisher interface {
+	Namespace() *servicebus.Namespace
+	SetDefaultHeader(headerName, msgKey string) error
+	Publish(ctx context.Context, msg interface{}, opts ...Option) error
+	Close(ctx context.Context) error
+}
+
+var _ Publisher = &TopicPublisher{}
+
+// TopicPublisher is a struct to contain service bus entities relevant to publishing to a topic
+type TopicPublisher struct {
 	namespace              *servicebus.Namespace
 	topic                  *servicebus.Topic
 	headers                map[string]string
 	topicManagementOptions []servicebus.TopicManagementOption
 }
 
-func (p *Publisher) Namespace() *servicebus.Namespace {
+func (p *TopicPublisher) Namespace() *servicebus.Namespace {
 	return p.namespace
 }
 
-// New creates a new service bus publisher
-func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publisher, error) {
+func (p *TopicPublisher) SetDefaultHeader(headerName, msgKey string) error {
+	if p.headers == nil {
+		p.headers = make(map[string]string)
+	}
+	p.headers[headerName] = msgKey
+	return nil
+}
+
+// New creates a new service bus topic publisher
+func New(ctx context.Context, topicName string, opts ...ManagementOption) (*TopicPublisher, error) {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.New")
 	defer s.End()
 	ns, err := servicebus.NewNamespace()
 	if err != nil {
 		return nil, err
 	}
-	publisher := &Publisher{namespace: ns}
+	publisher := &TopicPublisher{namespace: ns}
 	for _, opt := range opts {
 		err := opt(publisher)
 		if err != nil {
@@ -53,7 +70,7 @@ func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publ
 }
 
 // Publish publishes to the pre-configured Service Bus topic
-func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option) error {
+func (p *TopicPublisher) Publish(ctx context.Context, msg interface{}, opts ...Option) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.Publish")
 	defer s.End()
 	msgJSON, err := json.Marshal(msg)
@@ -92,13 +109,13 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 	return nil
 }
 
-func (p *Publisher) Close(ctx context.Context) error {
+func (p *TopicPublisher) Close(ctx context.Context) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.Close")
 	defer s.End()
 	return p.topic.Close(ctx)
 }
 
-func (p *Publisher) tryRecoverTopic(ctx context.Context, sendError error) error {
+func (p *TopicPublisher) tryRecoverTopic(ctx context.Context, sendError error) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.tryRecoverTopic", tab.StringAttribute("error", sendError.Error()))
 	defer s.End()
 	var neterr net.Error
@@ -139,7 +156,7 @@ func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespa
 	return entity.(*servicebus.TopicEntity), nil
 }
 
-func (p *Publisher) initTopic(name string) error {
+func (p *TopicPublisher) initTopic(name string) error {
 	topic, err := p.namespace.NewTopic(name)
 	if err != nil {
 		return fmt.Errorf("failed to create new topic %s: %w", name, err)
