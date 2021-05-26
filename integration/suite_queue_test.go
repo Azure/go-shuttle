@@ -94,7 +94,7 @@ func withQueuePublisherManagedIdentityResourceID() queue.ManagementOption {
 func (suite *serviceBusQueueSuite) SetupSuite() {
 	suite.BaseSuite.SetupSuite()
 	suite.QueueName = suite.Prefix + testQueueName + suite.TagID
-	_, err := suite.EnsureTopic(context.Background(), suite.QueueName)
+	_, err := suite.EnsureQueue(context.Background(), suite.QueueName)
 	if err != nil {
 		suite.T().Fatal(err)
 	}

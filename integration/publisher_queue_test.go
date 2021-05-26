@@ -12,19 +12,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestCreatePublisherWithNewTopic tests the creation of a publisher for a new topic
+// TestCreatePublisherWithNewQueue tests the creation of a publisher for a new queue
 func (suite *serviceBusQueueSuite) TestCreatePublisherUsingNewQueue() {
 	suite.T().Parallel()
 	queueName := "newQueue" + suite.TagID
 	_, err := queue.New(context.Background(), queueName, suite.publisherAuthOption)
 	if suite.NoError(err) {
-		// make sure that topic exists
+		// make sure that queue exists
 		ns := suite.GetNewNamespace()
 		tm := ns.NewQueueManager()
 		_, err := tm.Get(context.Background(), queueName)
 		suite.NoError(err)
 
-		// delete new topic
+		// delete new queue
 		err = tm.Delete(context.Background(), queueName)
 		suite.NoError(err)
 	}
@@ -32,10 +32,10 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingNewQueue() {
 
 // TestCreatePublisherWithExistingQueue tests the creation of a publisher for an existing queue and a connection string
 func (suite *serviceBusQueueSuite) TestCreatePublisherUsingExistingQueue() {
-	// this assumes that the testTopic was created at the start of the test suite
+	// this assumes that the testQueue was created at the start of the test suite
 	_, err := queue.New(context.Background(), suite.QueueName, suite.publisherAuthOption)
 	if suite.NoError(err) {
-		// make sure that topic exists
+		// make sure that queue exists
 		ns := suite.GetNewNamespace()
 		tm := ns.NewQueueManager()
 		_, err := tm.Get(context.Background(), suite.QueueName)
@@ -43,7 +43,7 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingExistingQueue() {
 	}
 }
 
-// TestPublishAfterIdle tests the creation of a publisher for an existing topic and a connection string
+// TestPublishAfterIdle tests the creation of a publisher for an existing queue and a connection string
 func (suite *serviceBusQueueSuite) TestPublishAfterIdle() {
 	type idlenessTest struct {
 		queueName string
@@ -63,7 +63,7 @@ func (suite *serviceBusQueueSuite) TestPublishAfterIdle() {
 	}
 }
 
-// TestPublishAfterIdle tests the creation of a publisher for an existing topic and a connection string
+// TestPublishAfterIdle tests the creation of a publisher for an existing queue and a connection string
 func (suite *serviceBusQueueSuite) TestSoakPub() {
 	suite.T().Parallel()
 	type idlenessTest struct {
