@@ -5,18 +5,18 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/go-shuttle/publisher/topic"
 	"testing"
 	"time"
 
-	"github.com/Azure/go-shuttle/publisher"
 	"github.com/stretchr/testify/assert"
 )
 
 // TestCreatePublisherWithNewTopic tests the creation of a publisher for a new topic
-func (suite *serviceBusSuite) TestCreatePublisherUsingNewTopic() {
+func (suite *serviceBusTopicSuite) TestCreatePublisherUsingNewTopic() {
 	suite.T().Parallel()
 	topicName := "newTopic" + suite.TagID
-	_, err := publisher.New(context.Background(), topicName, suite.publisherAuthOption)
+	_, err := topic.New(context.Background(), topicName, suite.publisherAuthOption)
 	if suite.NoError(err) {
 		// make sure that topic exists
 		ns := suite.GetNewNamespace()
@@ -31,9 +31,9 @@ func (suite *serviceBusSuite) TestCreatePublisherUsingNewTopic() {
 }
 
 // TestCreatePublisherWithExistingTopic tests the creation of a publisher for an existing topic and a connection string
-func (suite *serviceBusSuite) TestCreatePublisherUsingExistingTopic() {
+func (suite *serviceBusTopicSuite) TestCreatePublisherUsingExistingTopic() {
 	// this assumes that the testTopic was created at the start of the test suite
-	_, err := publisher.New(context.Background(), suite.TopicName, suite.publisherAuthOption)
+	_, err := topic.New(context.Background(), suite.TopicName, suite.publisherAuthOption)
 	if suite.NoError(err) {
 		// make sure that topic exists
 		ns := suite.GetNewNamespace()
@@ -44,7 +44,7 @@ func (suite *serviceBusSuite) TestCreatePublisherUsingExistingTopic() {
 }
 
 // TestPublishAfterIdle tests the creation of a publisher for an existing topic and a connection string
-func (suite *serviceBusSuite) TestPublishAfterIdle() {
+func (suite *serviceBusTopicSuite) TestPublishAfterIdle() {
 	type idlenessTest struct {
 		topicName string
 		sleepTime time.Duration
@@ -64,7 +64,7 @@ func (suite *serviceBusSuite) TestPublishAfterIdle() {
 }
 
 // TestPublishAfterIdle tests the creation of a publisher for an existing topic and a connection string
-func (suite *serviceBusSuite) TestSoakPub() {
+func (suite *serviceBusTopicSuite) TestSoakPub() {
 	suite.T().Parallel()
 	type idlenessTest struct {
 		topicName string
@@ -92,8 +92,8 @@ func (suite *serviceBusSuite) TestSoakPub() {
 	}
 }
 
-func testSoak(ctx context.Context, authOptions publisher.ManagementOption, topicName string, idleTime time.Duration) error {
-	p, err := publisher.New(context.Background(), topicName, authOptions)
+func testSoak(ctx context.Context, authOptions topic.ManagementOption, topicName string, idleTime time.Duration) error {
+	p, err := topic.New(context.Background(), topicName, authOptions)
 	if err != nil {
 		return err
 	}
@@ -125,8 +125,8 @@ func testSoak(ctx context.Context, authOptions publisher.ManagementOption, topic
 	return p.Close(context.TODO())
 }
 
-func testIdleness(authOptions publisher.ManagementOption, topicName string, idleTime time.Duration) error {
-	p, err := publisher.New(context.Background(), topicName, authOptions)
+func testIdleness(authOptions topic.ManagementOption, topicName string, idleTime time.Duration) error {
+	p, err := topic.New(context.Background(), topicName, authOptions)
 	if err != nil {
 		return err
 	}

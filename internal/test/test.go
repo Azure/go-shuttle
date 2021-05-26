@@ -141,6 +141,19 @@ func (suite *BaseSuite) EnsureTopic(ctx context.Context, name string) (*serviceb
 	return tm.Put(ctx, name)
 }
 
+// EnsureQueue checks if the queue exists and creates one if it doesn't
+func (suite *BaseSuite) EnsureQueue(ctx context.Context, name string) (*servicebus.QueueEntity, error) {
+	ns := suite.GetNewNamespace()
+	qm := ns.NewQueueManager()
+
+	qe, err := qm.Get(ctx, name)
+	if err == nil {
+		return qe, nil
+	}
+
+	return qm.Put(ctx, name)
+}
+
 // randomString generates a random string with prefix
 func randomString(prefix string, length int) string {
 	b := make([]rune, length)

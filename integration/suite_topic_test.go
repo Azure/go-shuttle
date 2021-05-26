@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/go-shuttle/publisher/topic"
 	"os"
 	"testing"
 	"time"
@@ -12,17 +13,16 @@ import (
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/internal/test"
 	"github.com/Azure/go-shuttle/listener"
-	"github.com/Azure/go-shuttle/publisher"
 	"github.com/stretchr/testify/suite"
 )
 
-type serviceBusSuite struct {
+type serviceBusTopicSuite struct {
 	test.BaseSuite
 	Prefix              string
 	TopicName           string
-	Publisher           publisher.Publisher
+	Publisher           topic.Publisher
 	Listener            listener.Listener
-	publisherAuthOption publisher.ManagementOption
+	publisherAuthOption topic.ManagementOption
 	listenerAuthOption  listener.ManagementOption
 }
 
@@ -52,7 +52,7 @@ const (
 
 func TestConnectionString(t *testing.T) {
 	t.Parallel()
-	connectionStringSuite := &serviceBusSuite{
+	connectionStringSuite := &serviceBusTopicSuite{
 		Prefix:              "conn-",
 		listenerAuthOption:  withListenerConnectionString(),
 		publisherAuthOption: withPublisherConnectionString(),
@@ -62,7 +62,7 @@ func TestConnectionString(t *testing.T) {
 
 func TestClientId(t *testing.T) {
 	t.Parallel()
-	clientIdSuite := &serviceBusSuite{
+	clientIdSuite := &serviceBusTopicSuite{
 		Prefix:              "cid-",
 		listenerAuthOption:  withListenerManagedIdentityClientID(),
 		publisherAuthOption: withPublisherManagedIdentityClientID(),
@@ -72,7 +72,7 @@ func TestClientId(t *testing.T) {
 
 func TestResourceID(t *testing.T) {
 	t.Parallel()
-	resourceIdSuite := &serviceBusSuite{
+	resourceIdSuite := &serviceBusTopicSuite{
 		Prefix:              "rid-",
 		listenerAuthOption:  withListenerManagedIdentityResourceID(),
 		publisherAuthOption: withPublisherManagedIdentityResourceID(),
@@ -88,13 +88,13 @@ func withListenerConnectionString() listener.ManagementOption {
 	return listener.WithConnectionString(connStr)
 }
 
-func withPublisherConnectionString() publisher.ManagementOption {
+func withPublisherConnectionString() topic.ManagementOption {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		panic("environment variable SERVICEBUS_CONNECTION_STRING was not set")
 	}
 
-	return publisher.WithConnectionString(connStr)
+	return topic.WithConnectionString(connStr)
 }
 
 func withListenerManagedIdentityClientID() listener.ManagementOption {
@@ -151,7 +151,7 @@ func adalToken(id string, getToken withSpecificIdFunc) (*adal.ServicePrincipalTo
 	return spt, nil
 }
 
-func withPublisherManagedIdentityClientID() publisher.ManagementOption {
+func withPublisherManagedIdentityClientID() topic.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -164,10 +164,10 @@ func withPublisherManagedIdentityClientID() publisher.ManagementOption {
 	if err != nil {
 		panic(err)
 	}
-	return publisher.WithToken(serviceBusNamespaceName, token)
+	return topic.WithToken(serviceBusNamespaceName, token)
 }
 
-func withPublisherManagedIdentityResourceID() publisher.ManagementOption {
+func withPublisherManagedIdentityResourceID() topic.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -181,10 +181,10 @@ func withPublisherManagedIdentityResourceID() publisher.ManagementOption {
 	if err != nil {
 		panic(err)
 	}
-	return publisher.WithToken(serviceBusNamespaceName, token)
+	return topic.WithToken(serviceBusNamespaceName, token)
 }
 
-func (suite *serviceBusSuite) SetupSuite() {
+func (suite *serviceBusTopicSuite) SetupSuite() {
 	suite.BaseSuite.SetupSuite()
 	suite.TopicName = suite.Prefix + testTopicName + suite.TagID
 	_, err := suite.EnsureTopic(context.Background(), suite.TopicName)
@@ -196,9 +196,9 @@ func (suite *serviceBusSuite) SetupSuite() {
 type publishReceiveTest struct {
 	topicName        string
 	listener         *listener.Listener
-	publisher        *publisher.Publisher
+	publisher        *topic.Publisher
 	listenerOptions  []listener.Option
-	publisherOptions []publisher.Option
+	publisherOptions []topic.Option
 	publishCount     *int
 	shouldSucceed    bool
 }

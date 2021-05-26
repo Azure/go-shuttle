@@ -1,4 +1,4 @@
-package publisher
+package queue
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ import (
 // ManagementOption provides structure for configuring a new Publisher
 type ManagementOption func(p *Publisher) error
 
-// Option provides structure for configuring when starting to publish to a specified topic
+// Option provides structure for configuring when starting to publish to a specified queue
 type Option func(msg *servicebus.Message) error
 
 // WithConnectionString configures a publisher with the information provided in a Service Bus connection string
@@ -82,7 +82,7 @@ func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 // Defaults to 30 seconds with a maximum of 7 days
 func WithDuplicateDetection(window *time.Duration) ManagementOption {
 	return func(p *Publisher) error {
-		p.topicManagementOptions = append(p.topicManagementOptions, servicebus.TopicWithDuplicateDetection(window))
+		p.queueManagementOptions = append(p.queueManagementOptions, servicebus.QueueEntityWithDuplicateDetection(window))
 		return nil
 	}
 }

@@ -10,17 +10,17 @@ import (
 
 	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
-	"github.com/Azure/go-shuttle/publisher"
+	tp "github.com/Azure/go-shuttle/publisher/topic"
 	"github.com/devigned/tab"
 	"github.com/stretchr/testify/assert"
 )
 
-func (suite *serviceBusSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
+func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 	suite.T().Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	topic := suite.Prefix + "issue189" + suite.TagID
-	pub, err := publisher.New(context.Background(), topic, suite.publisherAuthOption)
+	pub, err := tp.New(context.Background(), topic, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,
@@ -43,12 +43,12 @@ func (suite *serviceBusSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 	}, event)
 }
 
-func (suite *serviceBusSuite) TestCompleteCloseToLockExpiryNoConcurrency() {
+func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryNoConcurrency() {
 	suite.T().Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	topic := suite.Prefix + "issue189" + suite.TagID
-	pub, err := publisher.New(context.Background(), topic, suite.publisherAuthOption)
+	pub, err := tp.New(context.Background(), topic, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := listener.New(
 		suite.listenerAuthOption,
@@ -71,7 +71,7 @@ func (suite *serviceBusSuite) TestCompleteCloseToLockExpiryNoConcurrency() {
 }
 
 // https://github.com/Azure/azure-service-bus-go/issues/189
-func (suite *serviceBusSuite) verifyHalfOfLockDurationComplete(testConfig publishReceiveTest, event *testEvent) {
+func (suite *serviceBusTopicSuite) verifyHalfOfLockDurationComplete(testConfig publishReceiveTest, event *testEvent) {
 	parentCtx := context.Background()
 	returnedHandler := make(chan message.Handler, *testConfig.publishCount)
 	handler := message.HandleFunc(func(ctx context.Context, msg *message.Message) message.Handler {
