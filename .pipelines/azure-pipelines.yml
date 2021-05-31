@@ -4,16 +4,33 @@
 # https://aka.ms/yaml
 
 trigger:
-- main
+  branches:
+    include:
+    - master
+  paths:
+    exclude:
+    - docs/*
+pr:
+  branches:
+    include:
+    - master
 
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+variables:
+  INT_SUBSCRIPTION_ID: $(INT_SUBSCRIPTION_ID)
+  INT_CLIENT_ID: $(INT_CLIENT_ID)
+  INT_CLIENT_SECRET: $(INT_CLIENT_SECRET)
+  INT_TENANT_ID: $(INT_TENANT_ID)
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+steps:
+  bash: az login --service-principal -u ${CLIENT_ID} -p ${CLIENT_SECRET} --tenant ${TENANT_ID} --output none
+    env:
+      CLIENT_ID: $(INT_CLIENT_ID)
+      CLIENT_SECRET: $(INT_CLIENT_SECRET)
+      TENANT_ID: $(INT_TENANT_ID)
+    displayName: 'az login'
+
+- script: az account show
+  displayName: 'az account show'
