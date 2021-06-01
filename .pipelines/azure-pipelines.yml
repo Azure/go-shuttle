@@ -25,14 +25,14 @@ steps:
   displayName: 'az login'
 
 - bash: |
-      echo "SERVICEBUS_NAMESPACE_NAME: ${SERVICEBUS_NAMESPACE_NAME}" >> .env
-      echo "TEST_LOCATION: ${LOCATION}" >> .env
-      echo "TEST_RESOURCE_GROUP: ${RESOURCE_GROUP}" >> .env
-      echo "REGISTRY_NAME: ${REGISTRY_NAME}" >> .env
-      echo "AZURE_CLIENT_ID: ${CLIENT_ID}" >> .env
-      echo "AZURE_CLIENT_SECRET: ${CLIENT_SECRET}" >> .env
-      echo "AZURE_TENANT_ID: ${TENANT_ID}" >> .env
-      echo "AZURE_SUBSCRIPTION_ID: ${SUBSCRIPTION_ID}" >> .env
+      echo "SERVICEBUS_NAMESPACE_NAME=${SERVICEBUS_NAMESPACE_NAME}" >> .env
+      echo "TEST_LOCATION=${LOCATION}" >> .env
+      echo "TEST_RESOURCE_GROUP=${RESOURCE_GROUP}" >> .env
+      echo "REGISTRY_NAME=${REGISTRY_NAME}" >> .env
+      echo "AZURE_CLIENT_ID=${CLIENT_ID}" >> .env
+      echo "AZURE_CLIENT_SECRET=${CLIENT_SECRET}" >> .env
+      echo "AZURE_TENANT_ID=${TENANT_ID}" >> .env
+      echo "AZURE_SUBSCRIPTION_ID=${SUBSCRIPTION_ID}" >> .env
       make test-setup
   displayName: setup environment
   env:
