@@ -1,7 +1,7 @@
 SCRIPTPATH=$(shell cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P)
 
 ifneq (,$(wildcard ./.env))
-	$(info found env file. exporting)
+    $(info found env file)
     include .env
     export
 endif
