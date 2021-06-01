@@ -24,5 +24,26 @@ steps:
     TENANT_ID: $(INT_TENANT_ID)
   displayName: 'az login'
 
-- script: az account show
-  displayName: 'az account show'
+- displayName: setup environment
+  env:
+    TEST_SERVICEBUS_NAMESPACE: $(TEST_SERVICEBUS_NAMESPACE)
+    TEST_LOCATION: $(TEST_LOCATION)
+    TEST_RESOURCE_GROUP: $(TEST_RESOURCE_GROUP)
+    TEST_REGISTRY_NAME: goshuttleint
+    CLIENT_ID: $(INT_CLIENT_ID)
+    CLIENT_SECRET: $(INT_CLIENT_SECRET)
+    TENANT_ID: $(INT_TENANT_ID)
+    SUBSCRIPTION_ID: $(INT_SUBSCRIPTION_ID)
+  bash: |
+      echo "SERVICEBUS_NAMESPACE_NAME: ${TEST_SERVICEBUS_NAMESPACE}" >> .env
+      echo "TEST_LOCATION: ${TEST_LOCATION}" >> .env
+      echo "TEST_RESOURCE_GROUP: ${TEST_RESOURCE_GROUP}" >> .env
+      echo "REGISTRY_NAME: ${TEST_REGISTRY_NAME}" >> .env
+      echo "AZURE_CLIENT_ID: ${LIENT_ID}" >> .env
+      echo "AZURE_CLIENT_SECRET: ${CLIENT_SECRET}" >> .env
+      echo "AZURE_TENANT_ID: ${TENANT_ID}" >> .env
+      echo "AZURE_SUBSCRIPTION_ID: ${SUBSCRIPTION_ID}" >> .env
+      make test-setup
+
+- displayName: run integration
+  bash: make integration
