@@ -7,9 +7,7 @@ trigger:
   branches:
     include:
     - master
-  paths:
-    exclude:
-    - docs/*
+
 pr:
   branches:
     include:
