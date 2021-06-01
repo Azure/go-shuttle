@@ -25,12 +25,12 @@ variables:
   INT_TENANT_ID: $(INT_TENANT_ID)
 
 steps:
-  bash: az login --service-principal -u ${CLIENT_ID} -p ${CLIENT_SECRET} --tenant ${TENANT_ID} --output none
-    env:
-      CLIENT_ID: $(INT_CLIENT_ID)
-      CLIENT_SECRET: $(INT_CLIENT_SECRET)
-      TENANT_ID: $(INT_TENANT_ID)
-    displayName: 'az login'
+- bash: az login --service-principal -u ${CLIENT_ID} -p ${CLIENT_SECRET} --tenant ${TENANT_ID} --output none
+  env:
+    CLIENT_ID: $(INT_CLIENT_ID)
+    CLIENT_SECRET: $(INT_CLIENT_SECRET)
+    TENANT_ID: $(INT_TENANT_ID)
+  displayName: 'az login'
 
 - script: az account show
   displayName: 'az account show'
