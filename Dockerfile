@@ -3,4 +3,4 @@ WORKDIR pubsub
 COPY . .
 RUN touch .env
 #ENTRYPOINT ["tail", "-f", "/dev/null"]
-ENTRYPOINT ["go", "test", "--tags=integration,debug", "-v", "./integration"]
+ENTRYPOINT ["go", "test", "-timeout", "30min", "--tags=integration,debug", "-v", "./integration"]
