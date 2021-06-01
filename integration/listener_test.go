@@ -13,12 +13,12 @@ import (
 )
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string
-func (suite *serviceBusSuite) TestCreateNewListener() {
+func (suite *serviceBusTopicSuite) TestCreateNewListener() {
 	_, err := listener.New(suite.listenerAuthOption)
 	suite.NoError(err)
 }
 
-func (suite *serviceBusSuite) TestListenWithDefault() {
+func (suite *serviceBusTopicSuite) TestListenWithDefault() {
 	listener, err := listener.New(suite.listenerAuthOption)
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
@@ -36,7 +36,7 @@ func (suite *serviceBusSuite) TestListenWithDefault() {
 	}
 }
 
-func (suite *serviceBusSuite) TestListenWithCustomSubscription() {
+func (suite *serviceBusTopicSuite) TestListenWithCustomSubscription() {
 	listener, err := listener.New(
 		suite.listenerAuthOption,
 		listener.WithSubscriptionName("subName"))
@@ -56,7 +56,7 @@ func (suite *serviceBusSuite) TestListenWithCustomSubscription() {
 	}
 }
 
-func (suite *serviceBusSuite) TestListenWithCustomFilter() {
+func (suite *serviceBusTopicSuite) TestListenWithCustomFilter() {
 	createRule, err := listener.New(
 		suite.listenerAuthOption,
 		listener.WithSubscriptionName("default"),
@@ -85,7 +85,7 @@ func (suite *serviceBusSuite) TestListenWithCustomFilter() {
 }
 
 // startListenAndCheckForFilter starts the listener and makes sure that the correct rules were created
-func (suite *serviceBusSuite) startListenAndCheckForFilter(
+func (suite *serviceBusTopicSuite) startListenAndCheckForFilter(
 	l *listener.Listener,
 	filterName string,
 	filter servicebus.FilterDescriber) {
@@ -118,7 +118,7 @@ func contextCanceledError(err error) bool {
 		strings.Contains(err.Error(), "context canceled")
 }
 
-func (suite *serviceBusSuite) checkRule(ns *servicebus.Namespace, subName, filterName string, filter servicebus.FilterDescriber) (bool, error) {
+func (suite *serviceBusTopicSuite) checkRule(ns *servicebus.Namespace, subName, filterName string, filter servicebus.FilterDescriber) (bool, error) {
 	sm, err := ns.NewSubscriptionManager(suite.TopicName)
 	if err != nil {
 		return false, err
