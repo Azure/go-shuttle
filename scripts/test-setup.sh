@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+echo "AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID}"
+echo "TEST_LOCATION: ${TEST_LOCATION}"
+echo "TEST_RESOURCE_GROUP: ${TEST_RESOURCE_GROUP}"
+
 echo "creating RG"
 az group create \
 --name ${TEST_RESOURCE_GROUP} \
