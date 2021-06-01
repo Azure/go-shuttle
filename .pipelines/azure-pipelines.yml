@@ -17,10 +17,10 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  INT_SUBSCRIPTION_ID: $(INT_SUBSCRIPTION_ID)
-  INT_CLIENT_ID: $(INT_CLIENT_ID)
-  INT_CLIENT_SECRET: $(INT_CLIENT_SECRET)
-  INT_TENANT_ID: $(INT_TENANT_ID)
+  INT_SUBSCRIPTION_ID: ''
+  INT_CLIENT_ID: ''
+  INT_CLIENT_SECRET: ''
+  INT_TENANT_ID: ''
 
 steps:
 - bash: az login --service-principal -u ${CLIENT_ID} -p ${CLIENT_SECRET} --tenant ${TENANT_ID} --output none
