@@ -6,12 +6,12 @@
 trigger:
   branches:
     include:
-    - master
+    - main
 
 pr:
   branches:
     include:
-    - master
+    - main
 
 pool:
   vmImage: ubuntu-latest
