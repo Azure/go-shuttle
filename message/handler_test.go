@@ -3,9 +3,11 @@ package message_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/Azure/go-amqp"
 	. "github.com/onsi/gomega"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -35,6 +37,20 @@ func TestDo_ErrorNoType(t *testing.T) {
 	msg := &servicebus.Message{}
 	h := completeHandler.Do(context.Background(), nil, msg)
 	g.Expect(h).To(BeAssignableToTypeOf(message.Error(errors.New(""))))
+}
+
+func TestDo_Error_AbandonOnHandlerError(t *testing.T) {
+	g := NewWithT(t)
+	msg := &servicebus.Message{}
+	h := message.Error(fmt.Errorf("randomError")).Do(context.Background(), nil, msg)
+	g.Expect(h).To(BeAssignableToTypeOf(message.Abandon()))
+}
+
+func TestDo_Error_doneOnAMQPError(t *testing.T) {
+	g := NewWithT(t)
+	msg := &servicebus.Message{}
+	h := message.Error(&amqp.Error{}).Do(context.Background(), nil, msg)
+	g.Expect(message.IsDone(h)).To(BeTrue())
 }
 
 func TestDo_Complete(t *testing.T) {
