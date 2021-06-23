@@ -25,7 +25,7 @@ func NewShuttleAdapter(next message.Handler) servicebus.Handler {
 }
 
 func (c *shuttleAdapter) Handle(ctx context.Context, msg *servicebus.Message) error {
-	ctx, s := tab.StartSpan(ctx, "go-shuttle.Listener.HandlerFunc")
+	ctx, s := tab.StartSpan(ctx, "go-shuttle.listener.shuttleAdapter.Handle")
 	defer s.End()
 	currentHandler := c.next
 	for !message.IsDone(currentHandler) {

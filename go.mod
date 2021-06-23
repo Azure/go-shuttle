@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/Azure/azure-amqp-common-go/v3 v3.1.0
 	github.com/Azure/azure-service-bus-go v0.10.12
+	github.com/Azure/go-amqp v0.13.7
 	github.com/Azure/go-autorest/autorest v0.11.18
 	github.com/Azure/go-autorest/autorest/adal v0.9.13
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect

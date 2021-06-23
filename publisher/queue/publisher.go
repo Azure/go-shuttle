@@ -3,14 +3,13 @@ package queue
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net"
 	"time"
 
 	common "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-shuttle/internal/reflection"
+	"github.com/Azure/go-shuttle/publisher/errorhandling"
 	"github.com/devigned/tab"
 )
 
@@ -101,8 +100,7 @@ func (p *Publisher) Close(ctx context.Context) error {
 func (p *Publisher) tryRecoverQueue(ctx context.Context, sendError error) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.tryRecoverQueue", tab.StringAttribute("error", sendError.Error()))
 	defer s.End()
-	var neterr net.Error
-	if errors.As(sendError, &neterr) && (!neterr.Temporary() || neterr.Timeout()) {
+	if errorhandling.IsConnectionDead(sendError) {
 		if err := p.initQueue(p.queue.Name); err != nil {
 			return fmt.Errorf("failed to init queue on recovery: %w", err)
 		}

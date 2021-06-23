@@ -18,8 +18,9 @@ services:
     image: ${IMAGE}
     # entrypoint: ["ls"]
     #    command: ["-run", "TestConnectionString/TestPublishAndListenNotRenewingLock", "-tags", "debug"]
-    command: ["-timeout", "6h" , "-run", "TestConnectionString/TestSoakPub"]
+    # command: ["-timeout", "6h" , "-run", "TestConnectionString/TestSoakPub"]
     # command: ["-run", "TestConnectionString/TestCompleteCloseToLockExpiry", "-tags", "debug"]
+    command: ["-run", "TestConnectionString"]
     env_file:
     - .env
     environment:
