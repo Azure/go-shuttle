@@ -19,7 +19,7 @@ import (
 //    SystemTracker:<REDACTED> Topic:<REDACTED>, Timestamp:2021-06-19T23:17:15, Info: map[]
 // }
 func isAmqpInternalError(err error) bool {
-	var amqpErr amqp.Error
+	var amqpErr *amqp.Error
 	return errors.As(err, &amqpErr) &&
 		amqpErr.Condition == amqp.ErrorInternalError &&
 		strings.HasPrefix("the service was unable to process the request", strings.ToLower(amqpErr.Description))
