@@ -3,14 +3,13 @@ package topic
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net"
 	"time"
 
 	common "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-shuttle/internal/reflection"
+	"github.com/Azure/go-shuttle/publisher/errorhandling"
 	"github.com/devigned/tab"
 )
 
@@ -101,8 +100,7 @@ func (p *Publisher) Close(ctx context.Context) error {
 func (p *Publisher) tryRecoverTopic(ctx context.Context, sendError error) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.tryRecoverTopic", tab.StringAttribute("error", sendError.Error()))
 	defer s.End()
-	var neterr net.Error
-	if errors.As(sendError, &neterr) && (!neterr.Temporary() || neterr.Timeout()) {
+	if errorhandling.IsConnectionDead(sendError) {
 		// re-create topic/sender
 		if err := p.initTopic(p.topic.Name); err != nil {
 			return fmt.Errorf("failed to init topic on recovery: %w", err)
