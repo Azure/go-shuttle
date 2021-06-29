@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 
-	"github.com/Azure/go-shuttle/tracing/propagation"
+	"github.com/Azure/go-shuttle/tracing/propagation/opencensus"
 	"go.opencensus.io/trace"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -36,9 +36,16 @@ func NewTracePropagator(next servicebus.Handler, t TraceType) servicebus.Handler
 }
 
 func (tp *opencensusTracePropagator) Handle(ctx context.Context, msg *servicebus.Message) error {
-	spanCtx, ok := propagation.SpanContextFromMessage(msg)
-	if !ok {
-		ctx, _ = trace.StartSpanWithRemoteParent(ctx, "go-shuttle.listener.spanprogation.Handle", spanCtx)
+	spanCtx, ok := opencensus.SpanContextFromMessage(msg)
+	if ok {
+		var span *trace.Span
+		ctx, span = trace.StartSpanWithRemoteParent(ctx, "go-shuttle.listener.spanprogation.Handle", spanCtx)
+		defer span.End()
+	} else {
+		var span *trace.Span
+		ctx, span = trace.StartSpan(ctx, "go-shuttle.listener.spanprogation.Handle")
+		defer span.End()
 	}
+
 	return tp.next.Handle(ctx, msg)
 }
