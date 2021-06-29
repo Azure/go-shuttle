@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/internal/aad"
 	sbinternal "github.com/Azure/go-shuttle/internal/servicebus"
+	"github.com/Azure/go-shuttle/tracing/propagation"
 )
 
 // Option provides structure for configuring when starting to listen to a specified topic
@@ -21,6 +22,13 @@ func WithMessageLockAutoRenewal(interval time.Duration) Option {
 			return fmt.Errorf("renewal interval must be positive")
 		}
 		l.lockRenewalInterval = &interval
+		return nil
+	}
+}
+
+func WithTracePropagation(traceType propagation.TraceType) Option {
+	return func(l *Listener) error {
+		l.traceType = traceType
 		return nil
 	}
 }

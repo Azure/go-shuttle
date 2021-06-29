@@ -3,31 +3,28 @@ package handlers
 import (
 	"context"
 
+	"github.com/Azure/go-shuttle/tracing/propagation"
 	"github.com/Azure/go-shuttle/tracing/propagation/opencensus"
 	"go.opencensus.io/trace"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 )
 
-type TraceType string
-
-const (
-	OpenTelemetry TraceType = "OpenTelemetry"
-	OpenCensus    TraceType = "OpenCensus"
-)
-
 type opencensusTracePropagator struct {
 	next      servicebus.Handler
-	traceType TraceType
+	traceType propagation.TraceType
 }
 
-func NewTracePropagator(next servicebus.Handler, t TraceType) servicebus.Handler {
-	if t == OpenCensus {
+func NewTracePropagator(t propagation.TraceType, next servicebus.Handler) servicebus.Handler {
+	if t == propagation.None {
+		return next
+	}
+	if t == propagation.OpenCensus {
 		return &opencensusTracePropagator{
 			next: next,
 		}
 	}
-	if t == OpenTelemetry {
+	if t == propagation.OpenTelemetry {
 		panic("OpenTelemetry trace propagation is not implemented")
 		// not handled for now
 		return next

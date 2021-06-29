@@ -346,6 +346,30 @@ err := pub.Publish(
     publisher.SetMessageID(messageID),
 )
 ```
+
+### Tracing and propagation through messages
+
+Opencensus traces propagation 
+publisher configuration to propagate the traces from go context to servicebus messages :
+```
+pub, _ := publisher.New(
+    ctx,
+    topicName,
+    publisher.WithConnectionString(serviceBusConnectionString),
+    publisher.WithPersistentOptions(opencensus.TracePropagation())
+)
+```
+
+listener configuration to propagate traces from incoming servicebus messages to go context :  
+```
+l.Listen(ctx, 
+    handler, 
+    topicName, 
+    listener.WithTracePropagation(propagation.OpenCensus))
+```
+
+
+
 ## Dev environment and integration tests
 
 1. copy the `.env.template` to a `.env` at the root of the repository

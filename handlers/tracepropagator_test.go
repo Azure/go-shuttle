@@ -6,6 +6,7 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-shuttle/handlers"
+	"github.com/Azure/go-shuttle/tracing/propagation"
 	"github.com/Azure/go-shuttle/tracing/propagation/opencensus"
 	. "github.com/onsi/gomega"
 	"go.opencensus.io/trace"
@@ -29,7 +30,7 @@ func TestWhenMessageHasSpan(t *testing.T) {
 	_, span := trace.StartSpan(context.TODO(), "testSpan", trace.WithSampler(trace.AlwaysSample()))
 	opencensus.SpanContextToMessage(span.SpanContext(), msg)
 
-	h := handlers.NewTracePropagator(record, handlers.OpenCensus)
+	h := handlers.NewTracePropagator(propagation.OpenCensus, record)
 	err := h.Handle(context.TODO(), msg)
 	g.Expect(err).ToNot(HaveOccurred())
 	resSpan := trace.FromContext(record.inCtx)
@@ -42,7 +43,7 @@ func TestWhenMessageDoesNotHaveSpan(t *testing.T) {
 	msg := &servicebus.Message{}
 	_, span := trace.StartSpan(context.TODO(), "testSpan", trace.WithSampler(trace.AlwaysSample()))
 
-	h := handlers.NewTracePropagator(record, handlers.OpenCensus)
+	h := handlers.NewTracePropagator(propagation.OpenCensus, record)
 	err := h.Handle(context.TODO(), msg)
 	g.Expect(err).ToNot(HaveOccurred())
 	resSpan := trace.FromContext(record.inCtx)

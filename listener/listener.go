@@ -10,6 +10,7 @@ import (
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/message"
+	"github.com/Azure/go-shuttle/tracing/propagation"
 	"github.com/devigned/tab"
 )
 
@@ -31,6 +32,7 @@ type Listener struct {
 	filterDefinitions   []*filterDefinition
 	prefetchCount       *uint32
 	maxConcurrency      *int
+	traceType           propagation.TraceType
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -151,10 +153,11 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	}
 	listenerHandle := subReceiver.Listen(ctx,
 		handlers.NewConcurrent(handlerConcurrency,
-			handlers.NewDeadlineContext(
-				handlers.NewPeekLockRenewer(l.lockRenewalInterval, sub,
-					handlers.NewShuttleAdapter(handler)),
-			)))
+			handlers.NewTracePropagator(l.traceType,
+				handlers.NewDeadlineContext(
+					handlers.NewPeekLockRenewer(l.lockRenewalInterval, sub,
+						handlers.NewShuttleAdapter(handler)),
+				))))
 	l.listenerHandle = listenerHandle
 	<-listenerHandle.Done()
 
