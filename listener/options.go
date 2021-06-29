@@ -26,6 +26,8 @@ func WithMessageLockAutoRenewal(interval time.Duration) Option {
 	}
 }
 
+// WithTracePropagation sets up the listener to propagate trace from the incoming messages into the
+// local go context. defaults to None
 func WithTracePropagation(traceType propagation.TraceType) Option {
 	return func(l *Listener) error {
 		l.traceType = traceType
