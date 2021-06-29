@@ -5,6 +5,7 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/Azure/go-shuttle/tracing/propagation/opencensus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,4 +21,12 @@ func TestWithEnvironmentName(t *testing.T) {
 	v.NoError(err)
 	v.Equal(expectedEnv, pub.namespace.Environment)
 	v.Equal(expectedEnv.ServiceBusEndpointSuffix, pub.namespace.Suffix)
+}
+
+func TestWithPersistentSendOptions(t *testing.T) {
+	v := assert.New(t)
+	pub := &Publisher{namespace: &servicebus.Namespace{}}
+	err := WithPersistentSendOptions(opencensus.TracePropagation())(pub)
+	v.NoError(err)
+	v.Len(pub.persistentSendOptions, 1)
 }

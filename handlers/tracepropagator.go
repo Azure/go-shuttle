@@ -15,6 +15,10 @@ type opencensusTracePropagator struct {
 	traceType propagation.TraceType
 }
 
+// NewTracePropagator creates a handler middleware that will extract the trace context from the incoming messages
+// and add a span with the incoming context as remote parent.
+// if no trace context is found on the incoming message, a new trace is started.
+// TraceType None will return the next handler (making this a no-op)
 func NewTracePropagator(t propagation.TraceType, next servicebus.Handler) servicebus.Handler {
 	if t == propagation.None {
 		return next

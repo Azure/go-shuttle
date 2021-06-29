@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/Azure/go-shuttle/publisher/topic"
 	"go.opencensus.io/trace"
 )
 
@@ -81,7 +80,9 @@ func getDecodedBytes(m map[string]interface{}, key string) ([]byte, bool) {
 	return bytesValue, true
 }
 
-func TracePropagation() topic.Option {
+// TracePropagation extracts the go context and serializes it in the message's UserProperties before sending the message
+// It should usually be set as a PersistenOption on the publisher (ref topic.WithPersistentSendOptions)
+func TracePropagation() func(context.Context, *servicebus.Message) error {
 	return func(ctx context.Context, msg *servicebus.Message) error {
 		if msg == nil {
 			return errors.New("message is nil. cannot propagate trace")

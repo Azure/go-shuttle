@@ -19,6 +19,7 @@ type Publisher struct {
 	queue                  *servicebus.Queue
 	headers                map[string]string
 	queueManagementOptions []servicebus.QueueManagementOption
+	persistentSendOptions  []Option
 }
 
 func (p *Publisher) Namespace() *servicebus.Namespace {
@@ -70,13 +71,11 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 		}
 	}
 
-	for _, opt := range opts {
-		err := opt(sbMsg)
-		if err != nil {
+	for _, opt := range append(p.persistentSendOptions, opts...) {
+		if err := opt(ctx, sbMsg); err != nil {
 			return err
 		}
 	}
-
 	err = p.queue.Send(ctx, sbMsg)
 	if err == nil {
 		return nil

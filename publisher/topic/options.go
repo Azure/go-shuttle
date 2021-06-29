@@ -79,7 +79,7 @@ func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 	}
 }
 
-// SetDefaultHeader adds a header to every message published using the value specified from the message body
+// WithPersistentSendOptions adds an Option to be applied to each message before they are sent
 func WithPersistentSendOptions(options ...Option) ManagementOption {
 	return func(p *Publisher) error {
 		p.persistentSendOptions = append(p.persistentSendOptions, options...)
