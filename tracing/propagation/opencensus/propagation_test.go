@@ -1,4 +1,4 @@
-package propagation_test
+package opencensus_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/Azure/go-shuttle/tracing/propagation"
+	"github.com/Azure/go-shuttle/tracing/propagation/opencensus"
 	. "github.com/onsi/gomega"
 	"go.opencensus.io/trace"
 )
@@ -36,9 +36,9 @@ func TestFromMessage(t *testing.T) {
 		{
 			name: "EmptyTraceValues",
 			args: &testArgs{msgUserProperties: map[string]interface{}{
-				propagation.TraceSampledKey: "",
-				propagation.TraceIdKey:      "",
-				propagation.SpanIdKey:       "",
+				opencensus.TraceSampledKey: "",
+				opencensus.TraceIdKey:      "",
+				opencensus.SpanIdKey:       "",
 			}},
 			want:        trace.SpanContext{},
 			wantSuccess: false,
@@ -63,7 +63,7 @@ func TestFromMessage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 			msg := tt.args.GetMessage()
-			got, gotSuccess := propagation.SpanContextFromMessage(msg)
+			got, gotSuccess := opencensus.SpanContextFromMessage(msg)
 			g.Expect(tt.wantSuccess).To(Equal(gotSuccess))
 			g.Expect(got).To(Equal(tt.args.sourceCtx))
 		})
@@ -77,9 +77,9 @@ func getGoodArgs(o ...trace.StartOption) *testArgs {
 	return &testArgs{
 		sourceCtx: span.SpanContext(),
 		msgUserProperties: map[string]interface{}{
-			propagation.TraceSampledKey: uint32(span.SpanContext().TraceOptions),
-			propagation.TraceIdKey:      hex.EncodeToString(traceIdBytes[:]),
-			propagation.SpanIdKey:       hex.EncodeToString(spanIdBytes[:]),
+			opencensus.TraceSampledKey: uint32(span.SpanContext().TraceOptions),
+			opencensus.TraceIdKey:      hex.EncodeToString(traceIdBytes[:]),
+			opencensus.SpanIdKey:       hex.EncodeToString(spanIdBytes[:]),
 		}}
 }
 
@@ -87,9 +87,20 @@ func TestSpanContextToMessage(t *testing.T) {
 	g := NewWithT(t)
 	_, span := trace.StartSpan(context.TODO(), "testSpan", trace.WithSampler(trace.AlwaysSample()))
 	msg := &servicebus.Message{}
-	propagation.SpanContextToMessage(span.SpanContext(), msg)
-	g.Expect(msg.UserProperties[propagation.TraceIdKey]).ToNot(BeEmpty())
-	sc, ok := propagation.SpanContextFromMessage(msg)
+	opencensus.SpanContextToMessage(span.SpanContext(), msg)
+	g.Expect(msg.UserProperties[opencensus.TraceIdKey]).ToNot(BeEmpty())
+	sc, ok := opencensus.SpanContextFromMessage(msg)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(sc).To(Equal(span.SpanContext()))
+}
+
+func TestTracePropagationOption(t *testing.T) {
+	g := NewWithT(t)
+	ctx, span := trace.StartSpan(context.TODO(), "testSpan", trace.WithSampler(trace.AlwaysSample()))
+	msg := &servicebus.Message{}
+	err := opencensus.TracePropagation()(ctx, msg)
+	g.Expect(err).ToNot(HaveOccurred())
+	sc, ok := opencensus.SpanContextFromMessage(msg)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(sc).To(Equal(span.SpanContext()))
 }

@@ -1,6 +1,7 @@
 package topic
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 type ManagementOption func(p *Publisher) error
 
 // Option provides structure for configuring when starting to publish to a specified topic
-type Option func(msg *servicebus.Message) error
+type Option func(ctx context.Context, msg *servicebus.Message) error
 
 // WithConnectionString configures a publisher with the information provided in a Service Bus connection string
 func WithConnectionString(connStr string) ManagementOption {
@@ -78,6 +79,14 @@ func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 	}
 }
 
+// SetDefaultHeader adds a header to every message published using the value specified from the message body
+func WithPersistentSendOptions(options ...Option) ManagementOption {
+	return func(p *Publisher) error {
+		p.persistentSendOptions = append(p.persistentSendOptions, options...)
+		return nil
+	}
+}
+
 // SetDuplicateDetection guarantees that the topic will have exactly-once delivery over a user-defined span of time.
 // Defaults to 30 seconds with a maximum of 7 days
 func WithDuplicateDetection(window *time.Duration) ManagementOption {
@@ -89,7 +98,7 @@ func WithDuplicateDetection(window *time.Duration) ManagementOption {
 
 // SetMessageDelay schedules a message in the future
 func SetMessageDelay(delay time.Duration) Option {
-	return func(msg *servicebus.Message) error {
+	return func(_ context.Context, msg *servicebus.Message) error {
 		if msg == nil {
 			return errors.New("message is nil. cannot assign message delay")
 		}
@@ -100,7 +109,7 @@ func SetMessageDelay(delay time.Duration) Option {
 
 // SetMessageID sets the messageID of the message. Used for duplication detection
 func SetMessageID(messageID string) Option {
-	return func(msg *servicebus.Message) error {
+	return func(_ context.Context, msg *servicebus.Message) error {
 		if msg == nil {
 			return errors.New("message is nil. cannot assign message ID")
 		}
@@ -111,7 +120,7 @@ func SetMessageID(messageID string) Option {
 
 // SetCorrelationID sets the SetCorrelationID of the message.
 func SetCorrelationID(correlationID string) Option {
-	return func(msg *servicebus.Message) error {
+	return func(_ context.Context, msg *servicebus.Message) error {
 		if msg == nil {
 			return errors.New("message is nil. cannot assign correlation ID")
 		}

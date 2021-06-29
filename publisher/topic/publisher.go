@@ -19,6 +19,7 @@ type Publisher struct {
 	topic                  *servicebus.Topic
 	headers                map[string]string
 	topicManagementOptions []servicebus.TopicManagementOption
+	persistentSendOptions  []Option
 }
 
 func (p *Publisher) Namespace() *servicebus.Namespace {
@@ -70,9 +71,8 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 		}
 	}
 
-	for _, opt := range opts {
-		err := opt(sbMsg)
-		if err != nil {
+	for _, opt := range append(p.persistentSendOptions, opts...) {
+		if err := opt(ctx, sbMsg); err != nil {
 			return err
 		}
 	}

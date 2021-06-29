@@ -1,10 +1,13 @@
-package propagation
+package opencensus
 
 import (
+	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/publisher/topic"
 	"go.opencensus.io/trace"
 )
 
@@ -76,4 +79,17 @@ func getDecodedBytes(m map[string]interface{}, key string) ([]byte, bool) {
 		return nil, false
 	}
 	return bytesValue, true
+}
+
+func TracePropagation() topic.Option {
+	return func(ctx context.Context, msg *servicebus.Message) error {
+		if msg == nil {
+			return errors.New("message is nil. cannot propagate trace")
+		}
+		s := trace.FromContext(ctx)
+		if s != nil {
+			SpanContextToMessage(s.SpanContext(), msg)
+		}
+		return nil
+	}
 }
