@@ -18,7 +18,7 @@ type RecorderHandler struct {
 
 func (h *RecorderHandler) Handle(ctx context.Context, msg *servicebus.Message) error {
 	h.inCtx = ctx
-	msg = msg
+	h.msg = msg
 	return nil
 }
 
@@ -28,6 +28,7 @@ func TestWhenMessageHasSpan(t *testing.T) {
 	msg := &servicebus.Message{}
 	_, span := trace.StartSpan(context.TODO(), "testSpan", trace.WithSampler(trace.AlwaysSample()))
 	opencensus.SpanContextToMessage(span.SpanContext(), msg)
+
 	h := handlers.NewTracePropagator(record, handlers.OpenCensus)
 	err := h.Handle(context.TODO(), msg)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -40,6 +41,7 @@ func TestWhenMessageDoesNotHaveSpan(t *testing.T) {
 	record := &RecorderHandler{}
 	msg := &servicebus.Message{}
 	_, span := trace.StartSpan(context.TODO(), "testSpan", trace.WithSampler(trace.AlwaysSample()))
+
 	h := handlers.NewTracePropagator(record, handlers.OpenCensus)
 	err := h.Handle(context.TODO(), msg)
 	g.Expect(err).ToNot(HaveOccurred())
