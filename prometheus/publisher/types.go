@@ -22,10 +22,6 @@ type Recorder interface {
 
 var Metrics Recorder = newRegistry()
 
-func init() {
-	Metrics.Init(prom.DefaultRegisterer)
-}
-
 func newRegistry() *Registry {
 	return &Registry{
 		MessagePublishedCount: prom.NewCounterVec(prom.CounterOpts{

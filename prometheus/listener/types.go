@@ -17,10 +17,6 @@ const (
 
 var Metrics Recorder = newRegistry()
 
-func init() {
-	Metrics.Init(prom.DefaultRegisterer)
-}
-
 func newRegistry() *Registry {
 	return &Registry{
 		MessageHandledCount: prom.NewCounterVec(prom.CounterOpts{
