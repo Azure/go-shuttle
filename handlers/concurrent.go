@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/prometheus/listener"
 )
 
 var _ servicebus.Handler = (*concurrent)(nil)
@@ -32,7 +33,12 @@ func NewConcurrent(maxConcurrency int, next servicebus.Handler) servicebus.Handl
 func (c *concurrent) Handle(ctx context.Context, msg *servicebus.Message) error {
 	c.concurrencyTokens <- true
 	go func() {
-		defer func() { <-c.concurrencyTokens }()
+		defer func() {
+			<-c.concurrencyTokens
+			listener.Metrics.DecConcurrentMessageCount(msg)
+			listener.Metrics.IncMessageHandled(msg)
+		}()
+		listener.Metrics.IncConcurrentMessageCount(msg)
 		c.next.Handle(ctx, msg)
 	}()
 	// no error to return, the error are handled per message and don't affect the pipeline

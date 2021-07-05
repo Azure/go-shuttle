@@ -5,9 +5,10 @@ package integration
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/go-shuttle/publisher/topic"
 	"testing"
 	"time"
+
+	"github.com/Azure/go-shuttle/publisher/topic"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -45,6 +46,7 @@ func (suite *serviceBusTopicSuite) TestCreatePublisherUsingExistingTopic() {
 
 // TestPublishAfterIdle tests the creation of a publisher for an existing topic and a connection string
 func (suite *serviceBusTopicSuite) TestPublishAfterIdle() {
+	suite.T().Parallel()
 	type idlenessTest struct {
 		topicName string
 		sleepTime time.Duration
