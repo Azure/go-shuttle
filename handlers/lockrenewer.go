@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
@@ -61,9 +62,12 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *s
 			}
 			listener.Metrics.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
-			span.Logger().Info("Stopping periodic renewal")
+			err := ctx.Err()
+			span.Logger().Info("Stopping periodic renewal", tab.StringAttribute("error", err.Error()))
 			alive = false
-			listener.Metrics.IncMessageDeadlineReachedCount(message)
+			if errors.Is(err, context.DeadlineExceeded) {
+				listener.Metrics.IncMessageDeadlineReachedCount(message)
+			}
 		}
 	}
 }
