@@ -9,6 +9,7 @@ import (
 	common "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-shuttle/internal/reflection"
+	"github.com/Azure/go-shuttle/prometheus/publisher"
 	"github.com/Azure/go-shuttle/publisher/errorhandling"
 	"github.com/devigned/tab"
 )
@@ -83,8 +84,10 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 	}
 	// recover + retry
 	if recErr := p.tryRecoverQueue(ctx, err); recErr != nil {
+		publisher.Metrics.IncConnectionRecoveryFailure(err)
 		return fmt.Errorf("failed to recover queue on send failure %s. recoveryError : %w, sendError: %s", p.queue.Name, recErr, err)
 	}
+	publisher.Metrics.IncConnectionRecoverySuccess(err)
 	if err = p.queue.Send(ctx, sbMsg); err != nil {
 		return fmt.Errorf("failed to send message to queue %s after recovery: %w", p.queue.Name, err)
 	}
@@ -104,6 +107,7 @@ func (p *Publisher) tryRecoverQueue(ctx context.Context, sendError error) error 
 		if err := p.initQueue(p.queue.Name); err != nil {
 			return fmt.Errorf("failed to init queue on recovery: %w", err)
 		}
+
 		return nil
 	}
 	return fmt.Errorf("error is not identified as recoverable: %w", sendError)

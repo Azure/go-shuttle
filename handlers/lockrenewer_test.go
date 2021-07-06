@@ -7,6 +7,8 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-shuttle/handlers"
+	"github.com/Azure/go-shuttle/prometheus/listener"
+	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,6 +40,29 @@ func Test_RenewPeriodically(t *testing.T) {
 	if !assert.Eventually(t, func() bool { return renewer.RenewCount == 2 }, 130*time.Millisecond, 20*time.Millisecond) {
 		t.Errorf("renewed %d times but expected 2", renewer.RenewCount)
 	}
+}
+
+func Test_RenewLockMetrics(t *testing.T) {
+	reg := prom.NewRegistry()
+	listener.Metrics.Init(reg)
+	renewer := &testLockRenewer{}
+	interval := 10 * time.Millisecond
+	lr := handlers.NewPeekLockRenewer(&interval, renewer, &NoOpHandler{})
+	msg := &servicebus.Message{}
+	lr.Handle(context.TODO(), msg)
+	if !assert.Eventually(t, func() bool { return renewer.RenewCount == 2 }, 35*time.Millisecond, 5*time.Millisecond) {
+		t.Errorf("renewed %d times but expected 2", renewer.RenewCount)
+	}
+	metrics, _ := reg.Gather()
+	assert.GreaterOrEqual(t, len(metrics), 1)
+	metricFound := false
+	for _, m := range metrics {
+		if *m.Name == "goshuttle_handler_message_lock_renewed_total" {
+			metricFound = true
+			assert.GreaterOrEqual(t, *m.Metric[0].Counter.Value, float64(2))
+		}
+	}
+	assert.True(t, metricFound)
 }
 
 func Test_RenewPeriodically_ContextCanceled(t *testing.T) {

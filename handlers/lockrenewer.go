@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/prometheus/listener"
 	"github.com/Azure/go-shuttle/tracing"
 	"github.com/devigned/tab"
 )
@@ -52,12 +54,19 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *s
 			span.Logger().Debug("Renewing message lock")
 			err := plr.lockRenewer.RenewLocks(ctx, message)
 			if err != nil {
+				listener.Metrics.IncMessageLockRenewedFailure(message)
 				// I don't think this is a problem. the context is canceled when the message processing is over.
 				// this can happen if we already entered the interval case when the message is completing.
 				span.Logger().Info("failed to renew the peek lock", tab.StringAttribute("reason", err.Error()))
+				return
 			}
+			listener.Metrics.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
 			span.Logger().Info("Stopping periodic renewal")
+			err := ctx.Err()
+			if errors.Is(err, context.DeadlineExceeded) {
+				listener.Metrics.IncMessageDeadlineReachedCount(message)
+			}
 			alive = false
 		}
 	}

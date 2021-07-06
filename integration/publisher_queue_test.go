@@ -5,9 +5,10 @@ package integration
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/go-shuttle/publisher/queue"
 	"testing"
 	"time"
+
+	"github.com/Azure/go-shuttle/publisher/queue"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -45,6 +46,7 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingExistingQueue() {
 
 // TestPublishAfterIdle tests the creation of a publisher for an existing queue and a connection string
 func (suite *serviceBusQueueSuite) TestPublishAfterIdle() {
+	suite.T().Parallel()
 	type idlenessTest struct {
 		queueName string
 		sleepTime time.Duration
