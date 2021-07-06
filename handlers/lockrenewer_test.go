@@ -46,12 +46,11 @@ func Test_RenewLockMetrics(t *testing.T) {
 	reg := prom.NewRegistry()
 	listener.Metrics.Init(reg)
 	renewer := &testLockRenewer{}
-	interval := 30 * time.Millisecond
+	interval := 10 * time.Millisecond
 	lr := handlers.NewPeekLockRenewer(&interval, renewer, &NoOpHandler{})
 	msg := &servicebus.Message{}
-	ctx, _ := context.WithTimeout(context.TODO(), 90*time.Millisecond)
-	lr.Handle(ctx, msg)
-	if !assert.Eventually(t, func() bool { return renewer.RenewCount == 2 }, 100*time.Millisecond, 5*time.Millisecond) {
+	lr.Handle(context.TODO(), msg)
+	if !assert.Eventually(t, func() bool { return renewer.RenewCount == 2 }, 35*time.Millisecond, 5*time.Millisecond) {
 		t.Errorf("renewed %d times but expected 2", renewer.RenewCount)
 	}
 	metrics, _ := reg.Gather()
