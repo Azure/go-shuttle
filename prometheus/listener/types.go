@@ -48,9 +48,9 @@ func newRegistry() *Registry {
 }
 
 func getMessageTypeLabel(msg *servicebus.Message) prom.Labels {
-	typeName := msg.UserProperties["type"].(string)
+	typeName := msg.UserProperties["type"]
 	return map[string]string{
-		messageTypeLabel: typeName,
+		messageTypeLabel: fmt.Sprintf("%s", typeName),
 	}
 }
 
