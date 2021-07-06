@@ -42,6 +42,37 @@ func Test_RenewPeriodically(t *testing.T) {
 	}
 }
 
+type fakeRecorder struct {
+}
+
+func (f fakeRecorder) Init(registerer prom.Registerer) {
+	panic("implement me")
+}
+
+func (f fakeRecorder) IncMessageDeadlineReachedCount(msg *servicebus.Message) {
+	panic("implement me")
+}
+
+func (f fakeRecorder) IncMessageLockRenewedFailure(msg *servicebus.Message) {
+	panic("implement me")
+}
+
+func (f fakeRecorder) IncMessageLockRenewedSuccess(msg *servicebus.Message) {
+	panic("implement me")
+}
+
+func (f fakeRecorder) DecConcurrentMessageCount(msg *servicebus.Message) {
+	panic("implement me")
+}
+
+func (f fakeRecorder) IncMessageHandled(msg *servicebus.Message) {
+	panic("implement me")
+}
+
+func (f fakeRecorder) IncConcurrentMessageCount(msg *servicebus.Message) {
+	panic("implement me")
+}
+
 func Test_RenewLockMetrics(t *testing.T) {
 	reg := prom.NewRegistry()
 	listener.Metrics.Init(reg)
@@ -54,9 +85,15 @@ func Test_RenewLockMetrics(t *testing.T) {
 		t.Errorf("renewed %d times but expected 2", renewer.RenewCount)
 	}
 	metrics, _ := reg.Gather()
-	assert.Equal(t, 1, len(metrics))
-	assert.Equal(t, "goshuttle_handler_message_lock_renewed_total", *metrics[0].Name)
-	assert.Equal(t, float64(2), *metrics[0].Metric[0].Counter.Value)
+	assert.GreaterOrEqual(t, len(metrics), 1)
+	metricFound := false
+	for _, m := range metrics {
+		if *m.Name == "goshuttle_handler_message_lock_renewed_total" {
+			metricFound = true
+			assert.GreaterOrEqual(t, *metrics[0].Metric[0].Counter.Value, float64(2))
+		}
+	}
+	assert.True(t, metricFound)
 }
 
 func Test_RenewPeriodically_ContextCanceled(t *testing.T) {
