@@ -10,7 +10,7 @@ require (
 	github.com/Azure/go-autorest/autorest/adal v0.9.13
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/devigned/tab v0.1.1
-	github.com/devigned/tab/opentracing v0.1.1
+	github.com/devigned/tab/opentracing v0.1.2
 	github.com/joho/godotenv v1.3.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.11.0
