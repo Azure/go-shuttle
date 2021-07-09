@@ -4,22 +4,22 @@ package integration
 
 import (
 	"context"
+	"github.com/Azure/go-shuttle/listener/topic"
 	"strings"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
 )
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string
 func (suite *serviceBusTopicSuite) TestCreateNewListener() {
-	_, err := listener.New(suite.listenerAuthOption)
+	_, err := topic.New(suite.listenerAuthOption)
 	suite.NoError(err)
 }
 
 func (suite *serviceBusTopicSuite) TestListenWithDefault() {
-	listener, err := listener.New(suite.listenerAuthOption)
+	listener, err := topic.New(suite.listenerAuthOption)
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		go func() {
@@ -37,9 +37,9 @@ func (suite *serviceBusTopicSuite) TestListenWithDefault() {
 }
 
 func (suite *serviceBusTopicSuite) TestListenWithCustomSubscription() {
-	listener, err := listener.New(
+	listener, err := topic.New(
 		suite.listenerAuthOption,
-		listener.WithSubscriptionName("subName"))
+		topic.WithSubscriptionName("subName"))
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		go func() {
@@ -57,10 +57,10 @@ func (suite *serviceBusTopicSuite) TestListenWithCustomSubscription() {
 }
 
 func (suite *serviceBusTopicSuite) TestListenWithCustomFilter() {
-	createRule, err := listener.New(
+	createRule, err := topic.New(
 		suite.listenerAuthOption,
-		listener.WithSubscriptionName("default"),
-		listener.WithFilterDescriber("testFilter",
+		topic.WithSubscriptionName("default"),
+		topic.WithFilterDescriber("testFilter",
 			servicebus.SQLFilter{Expression: "destinationId LIKE test"}))
 	if suite.NoError(err) {
 		suite.startListenAndCheckForFilter(
@@ -69,10 +69,10 @@ func (suite *serviceBusTopicSuite) TestListenWithCustomFilter() {
 			servicebus.SQLFilter{Expression: "destinationId LIKE test"},
 		)
 		// check if it correctly replaces an existing rule
-		replaceRuleSub, err := listener.New(
+		replaceRuleSub, err := topic.New(
 			suite.listenerAuthOption,
-			listener.WithSubscriptionName("default"),
-			listener.WithFilterDescriber("testFilter",
+			topic.WithSubscriptionName("default"),
+			topic.WithFilterDescriber("testFilter",
 				servicebus.SQLFilter{Expression: "destinationId LIKE test2"}))
 		if suite.NoError(err) {
 			suite.startListenAndCheckForFilter(
@@ -86,7 +86,7 @@ func (suite *serviceBusTopicSuite) TestListenWithCustomFilter() {
 
 // startListenAndCheckForFilter starts the listener and makes sure that the correct rules were created
 func (suite *serviceBusTopicSuite) startListenAndCheckForFilter(
-	l *listener.Listener,
+	l *topic.Listener,
 	filterName string,
 	filter servicebus.FilterDescriber) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)

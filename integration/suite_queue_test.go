@@ -6,6 +6,7 @@ import (
 	"context"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/internal/test"
+	queue2 "github.com/Azure/go-shuttle/listener/queue"
 	"github.com/Azure/go-shuttle/publisher/queue"
 	"github.com/stretchr/testify/suite"
 	"os"
@@ -17,7 +18,9 @@ type serviceBusQueueSuite struct {
 	Prefix              string
 	QueueName           string
 	Publisher           queue.Publisher
+	Listener            queue2.Listener
 	publisherAuthOption queue.ManagementOption
+	listenerAuthOption  queue2.ManagementOption
 }
 
 const testQueueName = "testQueue"
@@ -98,5 +101,15 @@ func (suite *serviceBusQueueSuite) SetupSuite() {
 	if err != nil {
 		suite.T().Fatal(err)
 	}
+}
+
+type publishReceiveQueueTest struct {
+	queueName        string
+	listener         *queue2.Listener
+	publisher        *queue.Publisher
+	listenerOptions  []queue2.Option
+	publisherOptions []queue.Option
+	publishCount     *int
+	shouldSucceed    bool
 }
 

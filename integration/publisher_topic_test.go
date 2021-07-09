@@ -86,7 +86,7 @@ func (suite *serviceBusTopicSuite) TestSoakPub() {
 		tc := soak
 		suite.T().Run(suite.T().Name()+tc.topicName, func(test *testing.T) {
 			test.Parallel()
-			err := testSoak(deadline, suite.publisherAuthOption, tc.topicName, tc.sleepTime)
+			err := testTopicSoak(deadline, suite.publisherAuthOption, tc.topicName, tc.sleepTime)
 			if !assert.NoError(test, err) {
 				suite.FailNow(err.Error())
 			}
@@ -94,7 +94,7 @@ func (suite *serviceBusTopicSuite) TestSoakPub() {
 	}
 }
 
-func testSoak(ctx context.Context, authOptions topic.ManagementOption, topicName string, idleTime time.Duration) error {
+func testTopicSoak(ctx context.Context, authOptions topic.ManagementOption, topicName string, idleTime time.Duration) error {
 	p, err := topic.New(context.Background(), topicName, authOptions)
 	if err != nil {
 		return err

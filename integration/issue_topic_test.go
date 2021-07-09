@@ -5,10 +5,10 @@ package integration
 import (
 	"context"
 	"fmt"
+	topic2 "github.com/Azure/go-shuttle/listener/topic"
 	"sync"
 	"time"
 
-	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
 	tp "github.com/Azure/go-shuttle/publisher/topic"
 	"github.com/devigned/tab"
@@ -22,10 +22,10 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 	topic := suite.Prefix + "issue189" + suite.TagID
 	pub, err := tp.New(context.Background(), topic, suite.publisherAuthOption)
 	suite.NoError(err)
-	l, err := listener.New(
+	l, err := topic2.New(
 		suite.listenerAuthOption,
-		listener.WithSubscriptionDetails(30*time.Second, 3),
-		listener.WithSubscriptionName("issue189"))
+		topic2.WithSubscriptionDetails(30*time.Second, 3),
+		topic2.WithSubscriptionName("issue189"))
 	suite.NoError(err)
 	event := &testEvent{
 		ID:    1,
@@ -39,7 +39,7 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 		publisher:       pub,
 		shouldSucceed:   true,
 		publishCount:    &publishCount,
-		listenerOptions: []listener.Option{listener.WithMaxConcurrency(3), listener.WithPrefetchCount(3)},
+		listenerOptions: []topic2.Option{topic2.WithMaxConcurrency(3), topic2.WithPrefetchCount(3)},
 	}, event)
 }
 
@@ -50,10 +50,10 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryNoConcurrency() 
 	topic := suite.Prefix + "issue189" + suite.TagID
 	pub, err := tp.New(context.Background(), topic, suite.publisherAuthOption)
 	suite.NoError(err)
-	l, err := listener.New(
+	l, err := topic2.New(
 		suite.listenerAuthOption,
-		listener.WithSubscriptionDetails(30*time.Second, 3),
-		listener.WithSubscriptionName("issue189"))
+		topic2.WithSubscriptionDetails(30*time.Second, 3),
+		topic2.WithSubscriptionName("issue189"))
 	suite.NoError(err)
 	event := &testEvent{
 		ID:    1,
