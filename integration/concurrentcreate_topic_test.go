@@ -6,11 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	topic2 "github.com/Azure/go-shuttle/listener/topic"
 	"github.com/Azure/go-shuttle/publisher/topic"
 	"sync"
 	"time"
 
-	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/stretchr/testify/assert"
 )
@@ -50,7 +50,7 @@ func (suite *serviceBusTopicSuite) TestCreateListenersConcurrently() {
 	w := sync.WaitGroup{}
 	lctx, cancel := context.WithTimeout(context.TODO(), 20*time.Second)
 	for i := 0; i < 5; i++ {
-		l, err := listener.New(suite.listenerAuthOption, listener.WithSubscriptionName("concurrentListener"))
+		l, err := topic2.New(suite.listenerAuthOption, topic2.WithSubscriptionName("concurrentListener"))
 		assert.NoError(suite.T(), err)
 		w.Add(1)
 		go func(it int) {

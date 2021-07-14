@@ -1,4 +1,4 @@
-package listener
+package queue
 
 import (
 	"errors"
@@ -80,32 +80,6 @@ func WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResou
 	}
 }
 
-// WithSubscriptionName configures the subscription name of the subscription to listen to
-func WithSubscriptionName(name string) ManagementOption {
-	return func(l *Listener) error {
-		l.subscriptionName = name
-		return nil
-	}
-}
-
-// WithFilterDescriber configures the filters on the subscription
-func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) ManagementOption {
-	return func(l *Listener) error {
-		if len(filterName) == 0 || filter == nil {
-			return errors.New("filter name or filter cannot be zero value")
-		}
-		l.filterDefinitions = append(l.filterDefinitions, &filterDefinition{filterName, filter})
-		return nil
-	}
-}
-
-// WithTypeFilter will subscribe to event of the go type provided.
-// It uses the `type` property automatically to messages published via go-shuttle.
-func WithTypeFilter(event interface{}) ManagementOption {
-	typeName := getTypeName(event)
-	return WithFilterDescriber(fmt.Sprintf("tf_%s", typeName), servicebus.SQLFilter{Expression: fmt.Sprintf("type LIKE '%s'", typeName)})
-}
-
 func getTypeName(obj interface{}) string {
 	valueOf := reflect.ValueOf(obj)
 	if valueOf.Type().Kind() == reflect.Ptr {
@@ -114,9 +88,9 @@ func getTypeName(obj interface{}) string {
 	return valueOf.Type().Name()
 }
 
-// WithSubscriptionDetails allows listeners to control subscription details for longer lived operations.
+// WithQueueDetails allows listeners to control Queue details for longer lived operations.
 // If you using RetryLater you probably want this. Passing zeros leaves it up to Service bus defaults
-func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) ManagementOption {
+func WithQueueDetails(lock time.Duration, maxDelivery int32) ManagementOption {
 	return func(l *Listener) error {
 		if lock > sbinternal.LockDuration {
 			// working on getting service bus to enforce this. Hangs if you go higher. https://github.com/Azure/azure-service-bus-go/pull/202
@@ -134,8 +108,8 @@ func WithSubscriptionDetails(lock time.Duration, maxDelivery int32) ManagementOp
 	}
 }
 
-// WithSubscriptionLockDuration allows listeners to control LockDuration. Passing zeros leaves it up to Service bus defaults
-func WithSubscriptionLockDuration(lock time.Duration) ManagementOption {
+// WithQueueLockDuration allows listeners to control LockDuration. Passing zeros leaves it up to Service bus defaults
+func WithQueueLockDuration(lock time.Duration) ManagementOption {
 	return func(l *Listener) error {
 		if lock > sbinternal.LockDuration {
 			// working on getting service bus to enforce this. Hangs if you go higher. https://github.com/Azure/azure-service-bus-go/pull/202
@@ -149,8 +123,8 @@ func WithSubscriptionLockDuration(lock time.Duration) ManagementOption {
 	}
 }
 
-// WithSubscriptionMaxDeliveryCount allows listeners to control MaxDeliveryCount. Passing zeros leaves it up to Service bus defaults
-func WithSubscriptionMaxDeliveryCount(maxDelivery int32) ManagementOption {
+// WithQueueMaxDeliveryCount allows listeners to control MaxDeliveryCount. Passing zeros leaves it up to Service bus defaults
+func WithQueueMaxDeliveryCount(maxDelivery int32) ManagementOption {
 	return func(l *Listener) error {
 		if maxDelivery < 0 {
 			return fmt.Errorf("max Deliveries must be positive")
@@ -184,3 +158,4 @@ func WithMaxConcurrency(concurrency int) Option {
 		return nil
 	}
 }
+
