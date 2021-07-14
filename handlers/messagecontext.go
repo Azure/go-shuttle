@@ -34,12 +34,11 @@ func NewDeadlineContext(next servicebus.Handler) servicebus.Handler {
 }
 
 func setupDeadline(ctx context.Context, msg *servicebus.Message) (context.Context, func()) {
-	msgCtx, cancel := context.WithCancel(ctx)
 	if hasDeadline(msg) {
 		deadline := msg.SystemProperties.EnqueuedTime.Add(*msg.TTL)
-		msgCtx, _ = context.WithDeadline(ctx, deadline)
+		return context.WithDeadline(ctx, deadline)
 	}
-	return msgCtx, cancel
+	return context.WithCancel(ctx)
 }
 
 func hasDeadline(msg *servicebus.Message) bool {

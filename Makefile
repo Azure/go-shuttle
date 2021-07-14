@@ -57,8 +57,10 @@ clean-aci:
 
 integration: build-test-image push-test-image test-aci
 
-integration-local: build-test-image
+integration-compose: build-test-image
 	@docker-compose --env-file "${ENVFILE}" up
 
+integration-local:
+	./run-integration.sh -run TestConnectionString
 
 
