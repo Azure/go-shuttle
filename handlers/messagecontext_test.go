@@ -14,13 +14,13 @@ func Test_CancelContextWhenDoneWithMessage(t *testing.T) {
 	next := &FakeHandler{}
 	handler := handlers.NewDeadlineContext(next)
 	ctx := context.Background()
-	ttlMessage := &servicebus.Message{}
-	err := handler.Handle(ctx, ttlMessage)
+	msg := &servicebus.Message{}
+	err := handler.Handle(ctx, msg)
 	assert.Nil(t, err)
 	assert.Equal(t, context.Canceled, next.Ctx.Err())
 }
 
-func Test_CancelContextWhenDeadlineExceeded(t *testing.T) {
+func Test_DownstreamContextDeadlinesWhenDeadlineExceeded(t *testing.T) {
 	next := &FakeHandler{}
 	enqueuedTime := time.Now()
 	ttl := 1 * time.Microsecond
@@ -39,4 +39,24 @@ func Test_CancelContextWhenDeadlineExceeded(t *testing.T) {
 	err := handler.Handle(ctx, ttlMessage)
 	assert.Nil(t, err)
 	assert.Equal(t, context.DeadlineExceeded, next.Ctx.Err())
+}
+
+func Test_DownstreamContextCanceledWhenDoneBeforeDeadlineExceeded(t *testing.T) {
+	next := &FakeHandler{}
+	enqueuedTime := time.Now()
+	ttl := 100 * time.Millisecond
+	next.HandleFunc = func(ctx context.Context, msg *servicebus.Message) error {
+		return nil
+	}
+	handler := handlers.NewDeadlineContext(next)
+	ctx := context.Background()
+	ttlMessage := &servicebus.Message{
+		SystemProperties: &servicebus.SystemProperties{
+			EnqueuedTime: &enqueuedTime,
+		},
+		TTL: &ttl,
+	}
+	err := handler.Handle(ctx, ttlMessage)
+	assert.Nil(t, err)
+	assert.Equal(t, context.Canceled, next.Ctx.Err())
 }
