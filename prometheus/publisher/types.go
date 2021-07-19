@@ -3,6 +3,7 @@ package publisher
 import (
 	servicebus "github.com/Azure/azure-service-bus-go"
 	prom "github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 const (
@@ -20,7 +21,8 @@ type Recorder interface {
 	IncMessagePublishedFailure(msg *servicebus.Message)
 }
 
-var Metrics Recorder = newRegistry()
+var metricsRegistry = newRegistry()
+var Metrics Recorder = metricsRegistry
 
 func newRegistry() *Registry {
 	return &Registry{
@@ -69,4 +71,28 @@ func (r *Registry) IncConnectionRecoverySuccess(err error) {
 
 func (r *Registry) IncConnectionRecoveryFailure(err error) {
 	r.ConnectionRecovery.WithLabelValues("", "false").Inc()
+}
+
+type Informer struct {
+	registry *Registry
+}
+
+func NewInformer() *Informer {
+	return &Informer{registry: metricsRegistry}
+}
+
+func (i *Informer) GetConnectionRecoveryFailureCount() (float64, error) {
+	counter, err := i.registry.ConnectionRecovery.GetMetricWithLabelValues("", "false")
+	if err != nil {
+		return 0, err
+	}
+	if counter == nil {
+		return 0, nil
+	}
+	metric := &dto.Metric{}
+	counter.Write(metric)
+	if metric.Counter == nil {
+		return 0, nil
+	}
+	return metric.Counter.GetValue(), nil
 }
