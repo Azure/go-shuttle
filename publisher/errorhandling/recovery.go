@@ -2,6 +2,7 @@ package errorhandling
 
 import (
 	"errors"
+	"io"
 	"net"
 	"strings"
 
@@ -30,6 +31,10 @@ func isPermanentNetError(err error) bool {
 	return errors.As(err, &netErr) && (!netErr.Temporary() || netErr.Timeout())
 }
 
+func isEOF(err error) bool {
+	return errors.Is(err, io.EOF)
+}
+
 func IsConnectionDead(err error) bool {
-	return isPermanentNetError(err) || isAmqpInternalError(err)
+	return isPermanentNetError(err) || isAmqpInternalError(err) || isEOF(err)
 }
