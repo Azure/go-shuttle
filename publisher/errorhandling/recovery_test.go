@@ -2,6 +2,7 @@ package errorhandling
 
 import (
 	"fmt"
+	"io"
 	"syscall"
 	"testing"
 
@@ -33,6 +34,7 @@ func TestIsConnectionDead(t *testing.T) {
 		{name: "syscall-timeoutError", givenError: syscall.ETIMEDOUT, want: true},
 		{name: "randomError", givenError: fmt.Errorf("random error"), want: false},
 		{name: "anyAmqpError", givenError: &amqp.Error{}, want: false},
+		{name: "io.EOF", givenError: io.EOF, want: true},
 		{name: "AmqpInternalError", givenError: &amqp.Error{
 			Condition:   amqp.ErrorInternalError,
 			Description: "The service was unable to process the request",
