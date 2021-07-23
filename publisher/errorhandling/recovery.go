@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 
+	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-amqp"
 )
 
@@ -35,6 +36,14 @@ func isEOF(err error) bool {
 	return errors.Is(err, io.EOF)
 }
 
+func isConnClosedError(err error) bool {
+	errConnClosed := servicebus.ErrConnectionClosed("")
+	return errors.As(err, &errConnClosed)
+}
+
 func IsConnectionDead(err error) bool {
-	return isPermanentNetError(err) || isAmqpInternalError(err) || isEOF(err)
+	return isPermanentNetError(err) ||
+		isAmqpInternalError(err) ||
+		isEOF(err) ||
+		isConnClosedError(err)
 }

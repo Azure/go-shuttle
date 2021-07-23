@@ -6,7 +6,9 @@ import (
 	"syscall"
 	"testing"
 
+	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-amqp"
+	"github.com/stretchr/testify/assert"
 )
 
 type temporaryError struct {
@@ -35,6 +37,7 @@ func TestIsConnectionDead(t *testing.T) {
 		{name: "randomError", givenError: fmt.Errorf("random error"), want: false},
 		{name: "anyAmqpError", givenError: &amqp.Error{}, want: false},
 		{name: "io.EOF", givenError: io.EOF, want: true},
+		{name: "sb.ErrConnClosed", givenError: servicebus.ErrConnectionClosed("Blah"), want: true},
 		{name: "AmqpInternalError", givenError: &amqp.Error{
 			Condition:   amqp.ErrorInternalError,
 			Description: "The service was unable to process the request",
@@ -49,4 +52,9 @@ func TestIsConnectionDead(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIsConnectionClosedIdentifier(t *testing.T) {
+	assert.Equal(t, true, isConnClosedError(servicebus.ErrConnectionClosed("Blah")))
+	assert.Equal(t, false, isConnClosedError(fmt.Errorf("")))
 }
