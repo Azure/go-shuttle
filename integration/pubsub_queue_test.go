@@ -6,8 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	queue2 "github.com/Azure/go-shuttle/listener/queue"
-	"github.com/Azure/go-shuttle/publisher/queue"
+	"github.com/Azure/go-shuttle/queue"
+	"github.com/Azure/go-shuttle/queue/listener"
+	"github.com/Azure/go-shuttle/queue/publisher"
 	"time"
 
 	"github.com/Azure/go-shuttle/internal/reflection"
@@ -18,9 +19,9 @@ import (
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
 func (suite *serviceBusQueueSuite) TestPublishAndListenUsingDefault() {
-	pub, err := queue.New(context.Background(), suite.QueueName, suite.publisherAuthOption)
+	pub, err := queue.NewPublisher(context.Background(), suite.QueueName, suite.publisherAuthOption)
 	suite.NoError(err)
-	l, err := queue2.New(suite.listenerAuthOption)
+	l, err := queue.NewListener(suite.listenerAuthOption)
 	suite.NoError(err)
 
 	suite.defaultTest(pub, l)
@@ -28,9 +29,9 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenUsingDefault() {
 
 // TestPublishAndListenMessageTwice tests publish and listen the same messages twice
 func (suite *serviceBusQueueSuite) TestPublishAndListenMessageTwice() {
-	pub, err := queue.New(context.Background(), suite.QueueName, suite.publisherAuthOption)
+	pub, err := queue.NewPublisher(context.Background(), suite.QueueName, suite.publisherAuthOption)
 	suite.NoError(err)
-	l, err := queue2.New(suite.listenerAuthOption)
+	l, err := queue.NewListener(suite.listenerAuthOption)
 	suite.NoError(err)
 
 	suite.defaultTestWithMessageTwice(pub, l)
@@ -43,13 +44,13 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenUsingDuplicateDetection()
 	// note that this queue will also be deleted at the tear down of the suite due to the tagID at the end of the queue name
 	dupeDetectionQueueName := suite.Prefix + "dedupqueue" + suite.TagID
 	dupeDetectionWindow := 5 * time.Minute
-	pub, err := queue.New(
+	pub, err := queue.NewPublisher(
 		context.Background(),
 		dupeDetectionQueueName,
 		suite.publisherAuthOption,
-		queue.WithDuplicateDetection(&dupeDetectionWindow))
+		publisher.WithDuplicateDetection(&dupeDetectionWindow))
 	suite.NoError(err)
-	l, err := queue2.New(suite.listenerAuthOption)
+	l, err := queue.NewListener(suite.listenerAuthOption)
 	suite.NoError(err)
 	suite.duplicateDetectionTest(pub, l, dupeDetectionQueueName)
 }
@@ -59,9 +60,9 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenRetryLater() {
 	// creating a separate queue that was not created at the beginning of the test suite
 	// note that this queue will also be deleted at the tear down of the suite due to the tagID at the end of the queue name
 	retryLaterQueue := suite.Prefix + "retrylater" + suite.TagID
-	pub, err := queue.New(context.Background(), retryLaterQueue, suite.publisherAuthOption)
+	pub, err := queue.NewPublisher(context.Background(), retryLaterQueue, suite.publisherAuthOption)
 	suite.NoError(err)
-	l, err := queue2.New(
+	l, err := queue.NewListener(
 		suite.listenerAuthOption)
 	suite.NoError(err)
 	// create retryLater event. listener emits retry based on event type
@@ -74,7 +75,7 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenRetryLater() {
 		queueName:       retryLaterQueue,
 		listener:        l,
 		publisher:       pub,
-		listenerOptions: []queue2.Option{},
+		listenerOptions: []listener.Option{},
 		shouldSucceed:   true,
 	}, event)
 }
@@ -84,9 +85,9 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenShortLockDuration() {
 	// creating a separate queue that was not created at the beginning of the test suite
 	// note that this queue will also be deleted at the tear down of the suite due to the tagID at the end of the queue name
 	shortLockQueue := suite.Prefix + "shortlock" + suite.TagID
-	pub, err := queue.New(context.Background(), shortLockQueue, suite.publisherAuthOption)
+	pub, err := queue.NewPublisher(context.Background(), shortLockQueue, suite.publisherAuthOption)
 	suite.NoError(err)
-	l, err := queue2.New(
+	l, err := queue.NewListener(
 		suite.listenerAuthOption)
 	suite.NoError(err)
 	// create retryLater event. listener emits retry based on event type
@@ -99,12 +100,12 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenShortLockDuration() {
 		queueName:       shortLockQueue,
 		listener:        l,
 		publisher:       pub,
-		listenerOptions: []queue2.Option{queue2.WithMessageLockAutoRenewal(1 * time.Second)},
+		listenerOptions: []listener.Option{listener.WithMessageLockAutoRenewal(1 * time.Second)},
 		shouldSucceed:   true,
 	}, event)
 }
 
-func (suite *serviceBusQueueSuite) defaultTest(p *queue.Publisher, l *queue2.Listener) {
+func (suite *serviceBusQueueSuite) defaultTest(p *publisher.Publisher, l *listener.Listener) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -122,7 +123,7 @@ func (suite *serviceBusQueueSuite) defaultTest(p *queue.Publisher, l *queue2.Lis
 	)
 }
 
-func (suite *serviceBusQueueSuite) defaultTestWithMessageTwice(p *queue.Publisher, l *queue2.Listener) {
+func (suite *serviceBusQueueSuite) defaultTestWithMessageTwice(p *publisher.Publisher, l *listener.Listener) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -140,7 +141,7 @@ func (suite *serviceBusQueueSuite) defaultTestWithMessageTwice(p *queue.Publishe
 	)
 }
 
-func (suite *serviceBusQueueSuite) typeFilterTest(p *queue.Publisher, l *queue2.Listener, shouldSucceed bool) {
+func (suite *serviceBusQueueSuite) typeFilterTest(p *publisher.Publisher, l *listener.Listener, shouldSucceed bool) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -159,7 +160,7 @@ func (suite *serviceBusQueueSuite) typeFilterTest(p *queue.Publisher, l *queue2.
 	)
 }
 
-func (suite *serviceBusQueueSuite) customHeaderFilterTest(pub *queue.Publisher, l *queue2.Listener, shouldSucceed bool) {
+func (suite *serviceBusQueueSuite) customHeaderFilterTest(pub *publisher.Publisher, l *listener.Listener, shouldSucceed bool) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -178,7 +179,7 @@ func (suite *serviceBusQueueSuite) customHeaderFilterTest(pub *queue.Publisher, 
 	)
 }
 
-func (suite *serviceBusQueueSuite) duplicateDetectionTest(pub *queue.Publisher, l *queue2.Listener, queueName string) {
+func (suite *serviceBusQueueSuite) duplicateDetectionTest(pub *publisher.Publisher, l *listener.Listener, queueName string) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -192,7 +193,7 @@ func (suite *serviceBusQueueSuite) duplicateDetectionTest(pub *queue.Publisher, 
 			queueName:        queueName,
 			listener:         l,
 			publisher:        pub,
-			publisherOptions: []queue.Option{queue.SetMessageID("hi")},
+			publisherOptions: []publisher.Option{publisher.SetMessageID("hi")},
 			publishCount:     &publishCount,
 			shouldSucceed:    true,
 		},
@@ -221,10 +222,10 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessage(testConfig publishRe
 	ctx := context.Background()
 	gotMessage := make(chan bool)
 	if testConfig.listenerOptions == nil {
-		testConfig.listenerOptions = []queue2.Option{}
+		testConfig.listenerOptions = []listener.Option{}
 	}
 	if testConfig.publisherOptions == nil {
-		testConfig.publisherOptions = []queue.Option{}
+		testConfig.publisherOptions = []publisher.Option{}
 	}
 
 	// setup listener
@@ -318,10 +319,10 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessageTwice(testConfig publ
 	ctx := context.Background()
 	gotMessage := make(chan bool)
 	if testConfig.listenerOptions == nil {
-		testConfig.listenerOptions = []queue2.Option{}
+		testConfig.listenerOptions = []listener.Option{}
 	}
 	if testConfig.publisherOptions == nil {
-		testConfig.publisherOptions = []queue.Option{}
+		testConfig.publisherOptions = []publisher.Option{}
 	}
 
 	// setup listener

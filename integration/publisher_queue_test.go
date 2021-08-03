@@ -5,10 +5,9 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/go-shuttle/queue"
 	"testing"
 	"time"
-
-	"github.com/Azure/go-shuttle/publisher/queue"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -17,7 +16,7 @@ import (
 func (suite *serviceBusQueueSuite) TestCreatePublisherUsingNewQueue() {
 	suite.T().Parallel()
 	queueName := "newQueue" + suite.TagID
-	_, err := queue.New(context.Background(), queueName, suite.publisherAuthOption)
+	_, err := queue.NewPublisher(context.Background(), queueName, suite.publisherAuthOption)
 	if suite.NoError(err) {
 		// make sure that queue exists
 		ns := suite.GetNewNamespace()
@@ -34,7 +33,7 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingNewQueue() {
 // TestCreatePublisherWithExistingQueue tests the creation of a publisher for an existing queue and a connection string
 func (suite *serviceBusQueueSuite) TestCreatePublisherUsingExistingQueue() {
 	// this assumes that the testQueue was created at the start of the test suite
-	_, err := queue.New(context.Background(), suite.QueueName, suite.publisherAuthOption)
+	_, err := queue.NewPublisher(context.Background(), suite.QueueName, suite.publisherAuthOption)
 	if suite.NoError(err) {
 		// make sure that queue exists
 		ns := suite.GetNewNamespace()
@@ -94,8 +93,8 @@ func (suite *serviceBusQueueSuite) TestSoakPub() {
 	}
 }
 
-func testQueueSoak(ctx context.Context, authOptions queue.ManagementOption, queueName string, idleTime time.Duration) error {
-	p, err := queue.New(context.Background(), queueName, authOptions)
+func testQueueSoak(ctx context.Context, authOptions publisher.ManagementOption, queueName string, idleTime time.Duration) error {
+	p, err := queue.NewPublisher(context.Background(), queueName, authOptions)
 	if err != nil {
 		return err
 	}
@@ -127,8 +126,8 @@ func testQueueSoak(ctx context.Context, authOptions queue.ManagementOption, queu
 	return p.Close(context.TODO())
 }
 
-func testQueueIdleness(authOptions queue.ManagementOption, queueName string, idleTime time.Duration) error {
-	p, err := queue.New(context.Background(), queueName, authOptions)
+func testQueueIdleness(authOptions publisher.ManagementOption, queueName string, idleTime time.Duration) error {
+	p, err := queue.NewPublisher(context.Background(), queueName, authOptions)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-package topic
+package publisher
 
 import (
 	"errors"

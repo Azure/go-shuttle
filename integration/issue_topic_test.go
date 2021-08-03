@@ -5,12 +5,12 @@ package integration
 import (
 	"context"
 	"fmt"
-	topic2 "github.com/Azure/go-shuttle/listener/topic"
+	"github.com/Azure/go-shuttle/topic"
+	"github.com/Azure/go-shuttle/topic/listener"
 	"sync"
 	"time"
 
 	"github.com/Azure/go-shuttle/message"
-	tp "github.com/Azure/go-shuttle/publisher/topic"
 	"github.com/devigned/tab"
 	"github.com/stretchr/testify/assert"
 )
@@ -20,12 +20,12 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	topic := suite.Prefix + "issue189" + suite.TagID
-	pub, err := tp.New(context.Background(), topic, suite.publisherAuthOption)
+	pub, err := topic.NewPublisher(context.Background(), topic, suite.publisherAuthOption)
 	suite.NoError(err)
-	l, err := topic2.New(
+	l, err := topic.NewListener(
 		suite.listenerAuthOption,
-		topic2.WithSubscriptionDetails(30*time.Second, 3),
-		topic2.WithSubscriptionName("issue189"))
+		listener.WithSubscriptionDetails(30*time.Second, 3),
+		listener.WithSubscriptionName("issue189"))
 	suite.NoError(err)
 	event := &testEvent{
 		ID:    1,
@@ -39,7 +39,7 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 		publisher:       pub,
 		shouldSucceed:   true,
 		publishCount:    &publishCount,
-		listenerOptions: []topic2.Option{topic2.WithMaxConcurrency(3), topic2.WithPrefetchCount(3)},
+		listenerOptions: []listener.Option{listener.WithMaxConcurrency(3), listener.WithPrefetchCount(3)},
 	}, event)
 }
 
@@ -48,12 +48,12 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryNoConcurrency() 
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	topic := suite.Prefix + "issue189" + suite.TagID
-	pub, err := tp.New(context.Background(), topic, suite.publisherAuthOption)
+	pub, err := topic.NewPublisher(context.Background(), topic, suite.publisherAuthOption)
 	suite.NoError(err)
-	l, err := topic2.New(
+	l, err := topic.NewListener(
 		suite.listenerAuthOption,
-		topic2.WithSubscriptionDetails(30*time.Second, 3),
-		topic2.WithSubscriptionName("issue189"))
+		listener.WithSubscriptionDetails(30*time.Second, 3),
+		listener.WithSubscriptionName("issue189"))
 	suite.NoError(err)
 	event := &testEvent{
 		ID:    1,

@@ -1,4 +1,4 @@
-package topic
+package publisher
 
 import (
 	"context"
@@ -10,16 +10,16 @@ import (
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/prometheus/publisher"
-	"github.com/Azure/go-shuttle/publisher/errorhandling"
+	"github.com/Azure/go-shuttle/common/errorhandling"
 	"github.com/devigned/tab"
 )
 
-// Publisher is a struct to contain service bus entities relevant to publishing to a topic
+// Publisher is a struct to contain service bus entities relevant to publishing to a queue
 type Publisher struct {
 	namespace              *servicebus.Namespace
-	topic                  *servicebus.Topic
+	queue                  *servicebus.Queue
 	headers                map[string]string
-	topicManagementOptions []servicebus.TopicManagementOption
+	queueManagementOptions []servicebus.QueueManagementOption
 }
 
 func (p *Publisher) Namespace() *servicebus.Namespace {
@@ -27,7 +27,7 @@ func (p *Publisher) Namespace() *servicebus.Namespace {
 }
 
 // New creates a new service bus publisher
-func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publisher, error) {
+func New(ctx context.Context, queueName string, opts ...ManagementOption) (*Publisher, error) {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.New")
 	defer s.End()
 	ns, err := servicebus.NewNamespace()
@@ -42,17 +42,17 @@ func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publ
 		}
 	}
 
-	topicEntity, err := ensureTopic(ctx, topicName, publisher.namespace, publisher.topicManagementOptions...)
+	queueEntity, err := ensureQueue(ctx, queueName, publisher.namespace, publisher.queueManagementOptions...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get topic: %w", err)
+		return nil, fmt.Errorf("failed to get queue: %w", err)
 	}
-	if err = publisher.initTopic(topicEntity.Name); err != nil {
-		return nil, fmt.Errorf("failed to create new topic %s: %w", topicEntity.Name, err)
+	if err = publisher.initQueue(queueEntity.Name); err != nil {
+		return nil, fmt.Errorf("failed to create new queue %s: %w", queueEntity.Name, err)
 	}
 	return publisher, nil
 }
 
-// Publish publishes to the pre-configured Service Bus topic
+// Publish publishes to the pre-configured Service Bus queue
 func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.Publish")
 	defer s.End()
@@ -78,18 +78,18 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 		}
 	}
 
-	err = p.topic.Send(ctx, sbMsg)
+	err = p.queue.Send(ctx, sbMsg)
 	if err == nil {
 		return nil
 	}
 	// recover + retry
-	if recErr := p.tryRecoverTopic(ctx, err); recErr != nil {
+	if recErr := p.tryRecoverQueue(ctx, err); recErr != nil {
 		publisher.Metrics.IncConnectionRecoveryFailure(err)
-		return fmt.Errorf("failed to recover topic on send failure %s. recoveryError : %w, sendError: %s", p.topic.Name, recErr, err)
+		return fmt.Errorf("failed to recover queue on send failure %s. recoveryError : %w, sendError: %s", p.queue.Name, recErr, err)
 	}
 	publisher.Metrics.IncConnectionRecoverySuccess(err)
-	if err = p.topic.Send(ctx, sbMsg); err != nil {
-		return fmt.Errorf("failed to send message to topic %s after recovery: %w", p.topic.Name, err)
+	if err = p.queue.Send(ctx, sbMsg); err != nil {
+		return fmt.Errorf("failed to send message to queue %s after recovery: %w", p.queue.Name, err)
 	}
 	return nil
 }
@@ -97,55 +97,54 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 func (p *Publisher) Close(ctx context.Context) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.Close")
 	defer s.End()
-	return p.topic.Close(ctx)
+	return p.queue.Close(ctx)
 }
 
-func (p *Publisher) tryRecoverTopic(ctx context.Context, sendError error) error {
-	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.tryRecoverTopic", tab.StringAttribute("error", sendError.Error()))
+func (p *Publisher) tryRecoverQueue(ctx context.Context, sendError error) error {
+	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.tryRecoverQueue", tab.StringAttribute("error", sendError.Error()))
 	defer s.End()
 	if errorhandling.IsConnectionDead(sendError) {
-		// re-create topic/sender
-		if err := p.initTopic(p.topic.Name); err != nil {
-			return fmt.Errorf("failed to init topic on recovery: %w", err)
+		if err := p.initQueue(p.queue.Name); err != nil {
+			return fmt.Errorf("failed to init queue on recovery: %w", err)
 		}
-		publisher.Metrics.IncConnectionRecoverySuccess(sendError)
+
 		return nil
 	}
 	return fmt.Errorf("error is not identified as recoverable: %w", sendError)
 }
 
-func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespace, opts ...servicebus.TopicManagementOption) (*servicebus.TopicEntity, error) {
+func ensureQueue(ctx context.Context, name string, namespace *servicebus.Namespace, opts ...servicebus.QueueManagementOption) (*servicebus.QueueEntity, error) {
 	attempt := 1
-	tm := namespace.NewTopicManager()
+	qm := namespace.NewQueueManager()
 	ensure := func() (interface{}, error) {
-		ctx, span := tab.StartSpan(ctx, "go-shuttle.publisher.ensureTopic")
+		ctx, span := tab.StartSpan(ctx, "go-shuttle.publisher.ensureQueue")
 		span.AddAttributes(tab.Int64Attribute("retry.attempt", int64(attempt)))
-		te, err := tm.Get(ctx, name)
+		qe, err := qm.Get(ctx, name)
 		if err == nil {
-			return te, nil
+			return qe, nil
 		}
-		te, err = tm.Put(ctx, name, opts...)
+		qe, err = qm.Put(ctx, name, opts...)
 		if err != nil {
 			attempt++
 			tab.For(ctx).Error(err)
-			// let all errors be retryable for now. application only hit this once on topic creation.
+			// let all errors be retryable for now. application only hit this once on queue creation.
 			return nil, common.Retryable(err.Error())
 		}
-		return te, nil
+		return qe, nil
 	}
 	entity, err := common.Retry(5, 1*time.Second, ensure)
 	if err != nil {
 		tab.For(ctx).Error(err)
 		return nil, err
 	}
-	return entity.(*servicebus.TopicEntity), nil
+	return entity.(*servicebus.QueueEntity), nil
 }
 
-func (p *Publisher) initTopic(name string) error {
-	topic, err := p.namespace.NewTopic(name)
+func (p *Publisher) initQueue(name string) error {
+	queue, err := p.namespace.NewQueue(name)
 	if err != nil {
-		return fmt.Errorf("failed to create new topic %s: %w", name, err)
+		return fmt.Errorf("failed to create new queue %s: %w", name, err)
 	}
-	p.topic = topic
+	p.queue = queue
 	return nil
 }

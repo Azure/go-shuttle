@@ -5,8 +5,8 @@ package integration
 import (
 	"context"
 	"fmt"
-	topic2 "github.com/Azure/go-shuttle/listener/topic"
-	"github.com/Azure/go-shuttle/publisher/topic"
+	"github.com/Azure/go-shuttle/topic/listener"
+	"github.com/Azure/go-shuttle/topic/publisher"
 	"os"
 	"testing"
 	"time"
@@ -20,10 +20,10 @@ type serviceBusTopicSuite struct {
 	test.BaseSuite
 	Prefix              string
 	TopicName           string
-	Publisher           topic.Publisher
-	Listener            topic2.Listener
-	publisherAuthOption topic.ManagementOption
-	listenerAuthOption  topic2.ManagementOption
+	Publisher           publisher.Publisher
+	Listener            listener.Listener
+	publisherAuthOption publisher.ManagementOption
+	listenerAuthOption  listener.ManagementOption
 }
 
 type retryLaterEvent struct {
@@ -80,24 +80,24 @@ func TestResourceID(t *testing.T) {
 	suite.Run(t, resourceIdSuite)
 }
 
-func withListenerConnectionString() topic2.ManagementOption {
+func withListenerConnectionString() listener.ManagementOption {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		panic("environment variable SERVICEBUS_CONNECTION_STRING was not set")
 	}
-	return topic2.WithConnectionString(connStr)
+	return listener.WithConnectionString(connStr)
 }
 
-func withPublisherConnectionString() topic.ManagementOption {
+func withPublisherConnectionString() publisher.ManagementOption {
 	connStr := os.Getenv("SERVICEBUS_CONNECTION_STRING") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if connStr == "" {
 		panic("environment variable SERVICEBUS_CONNECTION_STRING was not set")
 	}
 
-	return topic.WithConnectionString(connStr)
+	return publisher.WithConnectionString(connStr)
 }
 
-func withListenerManagedIdentityClientID() topic2.ManagementOption {
+func withListenerManagedIdentityClientID() listener.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -111,10 +111,10 @@ func withListenerManagedIdentityClientID() topic2.ManagementOption {
 	if err != nil {
 		panic(err.Error())
 	}
-	return topic2.WithToken(serviceBusNamespaceName, spt)
+	return listener.WithToken(serviceBusNamespaceName, spt)
 }
 
-func withListenerManagedIdentityResourceID() topic2.ManagementOption {
+func withListenerManagedIdentityResourceID() listener.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -130,7 +130,7 @@ func withListenerManagedIdentityResourceID() topic2.ManagementOption {
 	if err != nil {
 		panic(err)
 	}
-	return topic2.WithToken(serviceBusNamespaceName, spt)
+	return listener.WithToken(serviceBusNamespaceName, spt)
 }
 
 type withSpecificIdFunc func(msiEndpoint, resource string, identityResourceID string, callbacks ...adal.TokenRefreshCallback) (*adal.ServicePrincipalToken, error)
@@ -151,7 +151,7 @@ func adalToken(id string, getToken withSpecificIdFunc) (*adal.ServicePrincipalTo
 	return spt, nil
 }
 
-func withPublisherManagedIdentityClientID() topic.ManagementOption {
+func withPublisherManagedIdentityClientID() publisher.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -164,10 +164,10 @@ func withPublisherManagedIdentityClientID() topic.ManagementOption {
 	if err != nil {
 		panic(err)
 	}
-	return topic.WithToken(serviceBusNamespaceName, token)
+	return publisher.WithToken(serviceBusNamespaceName, token)
 }
 
-func withPublisherManagedIdentityResourceID() topic.ManagementOption {
+func withPublisherManagedIdentityResourceID() publisher.ManagementOption {
 	serviceBusNamespaceName := os.Getenv("SERVICEBUS_NAMESPACE_NAME") // `Endpoint=sb://XXXX.servicebus.windows.net/;SharedAccessKeyName=XXXX;SharedAccessKey=XXXX`
 	if serviceBusNamespaceName == "" {
 		panic("environment variable SERVICEBUS_NAMESPACE_NAME was not set")
@@ -181,7 +181,7 @@ func withPublisherManagedIdentityResourceID() topic.ManagementOption {
 	if err != nil {
 		panic(err)
 	}
-	return topic.WithToken(serviceBusNamespaceName, token)
+	return publisher.WithToken(serviceBusNamespaceName, token)
 }
 
 func (suite *serviceBusTopicSuite) SetupSuite() {
@@ -195,10 +195,10 @@ func (suite *serviceBusTopicSuite) SetupSuite() {
 
 type publishReceiveTest struct {
 	topicName        string
-	listener         *topic2.Listener
-	publisher        *topic.Publisher
-	listenerOptions  []topic2.Option
-	publisherOptions []topic.Option
+	listener         *listener.Listener
+	publisher        *publisher.Publisher
+	listenerOptions  []listener.Option
+	publisherOptions []publisher.Option
 	publishCount     *int
 	shouldSucceed    bool
 }

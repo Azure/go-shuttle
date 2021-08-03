@@ -4,18 +4,18 @@ package integration
 
 import (
 	"context"
-	"github.com/Azure/go-shuttle/listener/queue"
+	"github.com/Azure/go-shuttle/queue"
 	"time"
 )
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string
 func (suite *serviceBusQueueSuite) TestCreateNewQueueListener() {
-	_, err := queue.New(suite.listenerAuthOption)
+	_, err := queue.NewListener(suite.listenerAuthOption)
 	suite.NoError(err)
 }
 
 func (suite *serviceBusQueueSuite) TestListenWithDefault() {
-	listener, err := queue.New(suite.listenerAuthOption)
+	listener, err := queue.NewListener(suite.listenerAuthOption)
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		go func() {
