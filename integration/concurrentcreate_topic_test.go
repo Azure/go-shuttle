@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/Azure/go-shuttle/topic"
 	"github.com/Azure/go-shuttle/topic/listener"
-	"github.com/Azure/go-shuttle/topic/publisher"
 	"sync"
 	"time"
 

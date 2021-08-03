@@ -17,10 +17,10 @@ import (
 
 func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 	suite.T().Parallel()
-	// creating a separate topic that was not created at the beginning of the test suite
-	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
-	topic := suite.Prefix + "issue189" + suite.TagID
-	pub, err := topic.NewPublisher(context.Background(), topic, suite.publisherAuthOption)
+	// creating a separate topicName that was not created at the beginning of the test suite
+	// note that this topicName will also be deleted at the tear down of the suite due to the tagID at the end of the topicName name
+	topicName := suite.Prefix + "issue189" + suite.TagID
+	pub, err := topic.NewPublisher(context.Background(), topicName, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := topic.NewListener(
 		suite.listenerAuthOption,
@@ -34,7 +34,7 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryWithPrefetch() {
 	}
 	publishCount := 10
 	suite.verifyHalfOfLockDurationComplete(publishReceiveTest{
-		topicName:       topic,
+		topicName:       topicName,
 		listener:        l,
 		publisher:       pub,
 		shouldSucceed:   true,
@@ -47,8 +47,8 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryNoConcurrency() 
 	suite.T().Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
-	topic := suite.Prefix + "issue189" + suite.TagID
-	pub, err := topic.NewPublisher(context.Background(), topic, suite.publisherAuthOption)
+	topicName := suite.Prefix + "issue189" + suite.TagID
+	pub, err := topic.NewPublisher(context.Background(), topicName, suite.publisherAuthOption)
 	suite.NoError(err)
 	l, err := topic.NewListener(
 		suite.listenerAuthOption,
@@ -62,7 +62,7 @@ func (suite *serviceBusTopicSuite) TestCompleteCloseToLockExpiryNoConcurrency() 
 	}
 	publishCount := 5
 	suite.verifyHalfOfLockDurationComplete(publishReceiveTest{
-		topicName:     topic,
+		topicName:     topicName,
 		listener:      l,
 		publisher:     pub,
 		shouldSucceed: true,

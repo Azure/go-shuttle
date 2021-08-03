@@ -5,10 +5,11 @@ package integration
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/go-shuttle/topic"
 	"testing"
 	"time"
 
+	"github.com/Azure/go-shuttle/topic"
+	"github.com/Azure/go-shuttle/topic/publisher"
 	"github.com/stretchr/testify/assert"
 )
 
