@@ -112,4 +112,3 @@ type publishReceiveQueueTest struct {
 	publishCount     *int
 	shouldSucceed    bool
 }
-

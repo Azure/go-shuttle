@@ -21,7 +21,7 @@ func WithMessageLockAutoRenewal(interval time.Duration) Option {
 		if interval < time.Duration(0) {
 			return fmt.Errorf("renewal interval must be positive")
 		}
-		
+
 		l.SetLockRenewalInterval(&interval)
 		return nil
 	}
@@ -160,4 +160,3 @@ func WithMaxConcurrency(concurrency int) Option {
 		return nil
 	}
 }
-

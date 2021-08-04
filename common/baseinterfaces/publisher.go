@@ -8,13 +8,13 @@ type BasePublisher interface {
 	Namespace() *servicebus.Namespace
 	Headers() map[string]string
 	SetNamespace(namespace *servicebus.Namespace)
-	AppendHeader(k,v string)
+	AppendHeader(k, v string)
 }
 
 // PublisherSettings is a struct to contain service bus entities relevant to publishing to a queue
 type PublisherSettings struct {
-	namespace              *servicebus.Namespace
-	headers                map[string]string
+	namespace *servicebus.Namespace
+	headers   map[string]string
 }
 
 func (p *PublisherSettings) Namespace() *servicebus.Namespace {
@@ -35,4 +35,3 @@ func (p *PublisherSettings) AppendHeader(key, value string) {
 	}
 	p.headers[key] = value
 }
-

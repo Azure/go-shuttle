@@ -19,10 +19,10 @@ const (
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher queue
 type Listener struct {
 	baseinterfaces.ListenerSettings
-	queueEntity         *servicebus.QueueEntity
-	queueListener  		*servicebus.Queue
-	listenerHandle      *servicebus.ListenerHandle
-	queueName    		string
+	queueEntity    *servicebus.QueueEntity
+	queueListener  *servicebus.Queue
+	listenerHandle *servicebus.ListenerHandle
+	queueName      string
 }
 
 // QueueListener returns the servicebus.Queue that the listener is setup with
@@ -42,7 +42,7 @@ func New(opts ...listeneropts.ManagementOption) (*Listener, error) {
 		return nil, err
 	}
 	listener := &Listener{
-		ListenerSettings:   baseinterfaces.ListenerSettings{},
+		ListenerSettings: baseinterfaces.ListenerSettings{},
 	}
 	listener.SetNamespace(ns)
 	for _, opt := range opts {

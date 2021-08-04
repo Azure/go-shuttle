@@ -29,12 +29,12 @@ type TopicListener interface {
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
 type Listener struct {
 	baseinterfaces.ListenerSettings
-	topicEntity         *servicebus.TopicEntity
-	subscriptionEntity  *servicebus.SubscriptionEntity
-	listenerHandle      *servicebus.ListenerHandle
-	topicName           string
-	subscriptionName    string
-	filterDefinitions   []*filterDefinition
+	topicEntity        *servicebus.TopicEntity
+	subscriptionEntity *servicebus.SubscriptionEntity
+	listenerHandle     *servicebus.ListenerHandle
+	topicName          string
+	subscriptionName   string
+	filterDefinitions  []*filterDefinition
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -67,7 +67,7 @@ func New(opts ...ManagementOption) (*Listener, error) {
 		return nil, err
 	}
 	listener := &Listener{
-		ListenerSettings:   baseinterfaces.ListenerSettings{},
+		ListenerSettings: baseinterfaces.ListenerSettings{},
 	}
 	listener.SetNamespace(ns)
 	for _, opt := range opts {

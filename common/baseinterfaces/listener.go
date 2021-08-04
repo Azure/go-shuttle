@@ -56,23 +56,23 @@ func (l *ListenerSettings) Namespace() *servicebus.Namespace {
 	return l.namespace
 }
 
-func (l *ListenerSettings) SetMaxDeliveryCount(maxDeliveryCount int32)  {
+func (l *ListenerSettings) SetMaxDeliveryCount(maxDeliveryCount int32) {
 	l.maxDeliveryCount = maxDeliveryCount
 }
 
-func (l *ListenerSettings) SetLockRenewalInterval(lockRenewalInterval *time.Duration)  {
+func (l *ListenerSettings) SetLockRenewalInterval(lockRenewalInterval *time.Duration) {
 	l.lockRenewalInterval = lockRenewalInterval
 }
 
-func (l *ListenerSettings) SetLockDuration(lockDuration time.Duration)  {
+func (l *ListenerSettings) SetLockDuration(lockDuration time.Duration) {
 	l.lockDuration = lockDuration
 }
 
-func (l *ListenerSettings) SetPrefetchCount(prefectCount *uint32)  {
+func (l *ListenerSettings) SetPrefetchCount(prefectCount *uint32) {
 	l.prefetchCount = prefectCount
 }
 
-func (l *ListenerSettings) SetMaxConcurrency(maxConcurrency *int)  {
+func (l *ListenerSettings) SetMaxConcurrency(maxConcurrency *int) {
 	l.maxConcurrency = maxConcurrency
 }
 

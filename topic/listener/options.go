@@ -73,7 +73,6 @@ func WithMaxConcurrency(concurrency int) Option {
 	return listeneropts.WithMaxConcurrency(concurrency)
 }
 
-
 // WithSubscriptionName configures the subscription name of the subscription to listen to
 func WithSubscriptionName(name string) ManagementOption {
 	return func(l baseinterfaces.BaseListener) error {
