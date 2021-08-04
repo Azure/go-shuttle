@@ -62,12 +62,12 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *s
 			}
 			listener.Metrics.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
+			alive = false
 			span.Logger().Info("Stopping periodic renewal")
 			err := ctx.Err()
 			if errors.Is(err, context.DeadlineExceeded) {
 				listener.Metrics.IncMessageDeadlineReachedCount(message)
 			}
-			alive = false
 		}
 	}
 }

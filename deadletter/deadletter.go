@@ -16,14 +16,23 @@ type Monitor struct {
 	subscriptionName string
 	counter          Counter
 	recorder         listener.DLQRecorder
+	Interval         time.Duration
 }
 
-func (m *Monitor) Run(ctx context.Context) {
-	for ctx.Err() == nil {
-		callCtx, cancel := context.WithTimeout(context.Background(), timeout)
-		m.ReportDeadLetterCount(callCtx) // ignore error as we just log it in internal the span at this point
-		cancel()
+func (m *Monitor) Run(ctx context.Context) error {
+	monCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for alive := true; alive; {
+		select {
+		case <-time.After(m.Interval):
+			callCtx, callCancel := context.WithTimeout(monCtx, timeout)
+			_ = m.ReportDeadLetterCount(callCtx) // ignore error as we just log it in internal the span at this point
+			callCancel()
+		case <-ctx.Done():
+			alive = false
+		}
 	}
+	return nil
 }
 
 func (m *Monitor) ReportDeadLetterCount(ctx context.Context) error {
@@ -49,8 +58,10 @@ type Counter interface {
 	CountDetails(ctx context.Context) (*servicebus.CountDetails, error)
 }
 
-func StartMonitoring(ctx context.Context, c Counter, topicName, subscriptionName string) {
+// StartMonitoring periodically
+func StartMonitoring(ctx context.Context, c Counter, interval time.Duration, topicName, subscriptionName string) {
 	m := &Monitor{
+		Interval:         interval,
 		counter:          c,
 		topicName:        topicName,
 		subscriptionName: subscriptionName,

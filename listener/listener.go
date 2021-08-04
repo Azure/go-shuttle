@@ -20,19 +20,19 @@ const (
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
 type Listener struct {
-	namespace           *servicebus.Namespace
-	topicEntity         *servicebus.TopicEntity
-	subscriptionEntity  *servicebus.SubscriptionEntity
-	listenerHandle      *servicebus.ListenerHandle
-	topicName           string
-	subscriptionName    string
-	maxDeliveryCount    int32
-	lockRenewalInterval *time.Duration
-	lockDuration        time.Duration
-	filterDefinitions   []*filterDefinition
-	prefetchCount       *uint32
-	maxConcurrency      *int
-	enableDLQMonitoring bool
+	namespace             *servicebus.Namespace
+	topicEntity           *servicebus.TopicEntity
+	subscriptionEntity    *servicebus.SubscriptionEntity
+	listenerHandle        *servicebus.ListenerHandle
+	topicName             string
+	subscriptionName      string
+	maxDeliveryCount      int32
+	lockRenewalInterval   *time.Duration
+	lockDuration          time.Duration
+	filterDefinitions     []*filterDefinition
+	prefetchCount         *uint32
+	maxConcurrency        *int
+	dlqMonitoringInterval *time.Duration
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -139,8 +139,8 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return fmt.Errorf("failed to create new subscription %s: %w", l.subscriptionEntity.Name, err)
 	}
 
-	if l.enableDLQMonitoring {
-		go deadletter.Monitor(ctx, l, l.topicName, l.subscriptionName)
+	if l.dlqMonitoringInterval != nil {
+		go deadletter.StartMonitoring(ctx, l, *l.dlqMonitoringInterval, l.topicName, l.subscriptionName)
 	}
 
 	var receiverOpts []servicebus.ReceiverOption
