@@ -9,10 +9,12 @@ import (
 )
 
 const (
-	subsystem          = "goshuttle_handler"
-	messageTypeLabel   = "messageType"
-	deliveryCountLabel = "deliveryCount"
-	successLabel       = "success"
+	subsystem             = "goshuttle_handler"
+	messageTypeLabel      = "messageType"
+	deliveryCountLabel    = "deliveryCount"
+	successLabel          = "success"
+	topicNameLabel        = "topicName"
+	subscriptionNameLabel = "subscriptionName"
 )
 
 var Metrics Recorder = newRegistry()
@@ -44,6 +46,16 @@ func newRegistry() *Registry {
 			Help:      "total number of connection recovery event",
 			Subsystem: subsystem,
 		}, []string{messageTypeLabel, successLabel}),
+		DeadLetterMessageCount: prom.NewGaugeVec(prom.GaugeOpts{
+			Name:      "deadletter_message_count",
+			Help:      "count of messages currently on the deadletter queue",
+			Subsystem: subsystem,
+		}, []string{topicNameLabel, subscriptionNameLabel}),
+		TransferDeadLetterMessageCount: prom.NewGaugeVec(prom.GaugeOpts{
+			Name:      "transfer_deadletter_message_count",
+			Help:      "count of messages currently on the transfer deadletter queue",
+			Subsystem: subsystem,
+		}, []string{topicNameLabel, subscriptionNameLabel}),
 	}
 }
 
@@ -63,11 +75,18 @@ func (m *Registry) Init(reg prom.Registerer) {
 }
 
 type Registry struct {
-	MessageHandledCount         *prom.CounterVec
-	MessageLockRenewedCount     *prom.CounterVec
-	MessageDeadlineReachedCount *prom.CounterVec
-	ConcurrentMessageCount      *prom.GaugeVec
-	ConnectionRecovery          *prom.CounterVec
+	MessageHandledCount            *prom.CounterVec
+	MessageLockRenewedCount        *prom.CounterVec
+	MessageDeadlineReachedCount    *prom.CounterVec
+	ConcurrentMessageCount         *prom.GaugeVec
+	ConnectionRecovery             *prom.CounterVec
+	DeadLetterMessageCount         *prom.GaugeVec
+	TransferDeadLetterMessageCount *prom.GaugeVec
+}
+
+type DLQRecorder interface {
+	SetDeadLetterMessageCount(topicName, subscriptionName string, count float64)
+	SetTransferDeadLetterMessageCount(topicName, subscriptionName string, count float64)
 }
 
 type Recorder interface {
@@ -78,6 +97,7 @@ type Recorder interface {
 	DecConcurrentMessageCount(msg *servicebus.Message)
 	IncMessageHandled(msg *servicebus.Message)
 	IncConcurrentMessageCount(msg *servicebus.Message)
+	DLQRecorder
 }
 
 func (m *Registry) IncMessageLockRenewedSuccess(msg *servicebus.Message) {
@@ -109,4 +129,12 @@ func (m *Registry) DecConcurrentMessageCount(msg *servicebus.Message) {
 func (m *Registry) IncMessageDeadlineReachedCount(msg *servicebus.Message) {
 	labels := getMessageTypeLabel(msg)
 	m.MessageDeadlineReachedCount.With(labels).Inc()
+}
+
+func (m *Registry) SetDeadLetterMessageCount(topicName, subscriptionName string, count float64) {
+	m.DeadLetterMessageCount.WithLabelValues(topicName, subscriptionName).Set(count)
+}
+
+func (m *Registry) SetTransferDeadLetterMessageCount(topicName, subscriptionName string, count float64) {
+	m.TransferDeadLetterMessageCount.WithLabelValues(topicName, subscriptionName).Set(count)
 }

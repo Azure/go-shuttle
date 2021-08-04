@@ -184,3 +184,11 @@ func WithMaxConcurrency(concurrency int) Option {
 		return nil
 	}
 }
+
+// WithDeadLetterQueueMonitoring emits dead letter queue metric in the prometheus registry
+func WithDeadLetterQueueMonitoring(concurrency int) Option {
+	return func(l *Listener) error {
+		l.enableDLQMonitoring = true
+		return nil
+	}
+}

@@ -8,6 +8,7 @@ import (
 
 	common "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/deadletter"
 	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/devigned/tab"
@@ -31,6 +32,7 @@ type Listener struct {
 	filterDefinitions   []*filterDefinition
 	prefetchCount       *uint32
 	maxConcurrency      *int
+	enableDLQMonitoring bool
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -137,6 +139,10 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return fmt.Errorf("failed to create new subscription %s: %w", l.subscriptionEntity.Name, err)
 	}
 
+	if l.enableDLQMonitoring {
+		go deadletter.Monitor(ctx, l, l.topicName, l.subscriptionName)
+	}
+
 	var receiverOpts []servicebus.ReceiverOption
 	if l.prefetchCount != nil {
 		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.prefetchCount))
@@ -164,6 +170,24 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	return listenerHandle.Err()
 }
 
+func (l *Listener) CountDetails(ctx context.Context) (*servicebus.CountDetails, error) {
+	if l.topicEntity == nil {
+		return nil, fmt.Errorf("entity of topic is nil")
+	}
+	subscriptionEntity, err := l.getSubscriptionEntity(ctx, l.subscriptionName)
+	if err != nil {
+		return nil, fmt.Errorf("error to get entity of subscription %q of topic %q: %s", l.subscriptionName, l.topicName, err)
+	}
+	if subscriptionEntity == nil {
+		return nil, fmt.Errorf("entity of subscription %q of topic %q returned is nil", l.subscriptionName, l.topicName)
+	}
+	if subscriptionEntity.CountDetails == nil {
+		return nil, fmt.Errorf("CountDetails not available in the subscription entity %q of topic %q", l.subscriptionName, l.topicName)
+	}
+
+	return subscriptionEntity.CountDetails, nil
+}
+
 // Close closes the listener if an active listener exists
 func (l *Listener) Close(ctx context.Context) error {
 	if l.listenerHandle == nil {
@@ -179,25 +203,14 @@ func (l *Listener) Close(ctx context.Context) error {
 // GetActiveMessageCount gets the active message count of a topic subscription
 // WARNING: GetActiveMessageCount is 10 times expensive than a call to receive a message
 func (l *Listener) GetActiveMessageCount(ctx context.Context, topicName, subscriptionName string) (int32, error) {
-	if l.topicEntity == nil {
-		return 0, fmt.Errorf("entity of topic is nil")
-	}
-	if l.topicName != topicName {
-		return 0, fmt.Errorf("topic name %q doesn't match %q", topicName, l.topicName)
-	}
-
-	subscriptionEntity, err := l.getSubscriptionEntity(ctx, subscriptionName)
+	countDetails, err := l.CountDetails(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("error to get entity of subscription %q of topic %q: %s", subscriptionName, topicName, err)
+		return 0, err
 	}
-	if subscriptionEntity == nil {
-		return 0, fmt.Errorf("entity of subscription %q of topic %q returned is nil", subscriptionName, topicName)
-	}
-	if subscriptionEntity.CountDetails == nil || subscriptionEntity.CountDetails.ActiveMessageCount == nil {
+	if countDetails.ActiveMessageCount == nil {
 		return 0, fmt.Errorf("active message count is not available in the entity of subscription %q of topic %q", subscriptionName, topicName)
 	}
-
-	return *subscriptionEntity.CountDetails.ActiveMessageCount, nil
+	return *countDetails.ActiveMessageCount, nil
 }
 
 func getTopicEntity(ctx context.Context, topicName string, namespace *servicebus.Namespace) (*servicebus.TopicEntity, error) {
