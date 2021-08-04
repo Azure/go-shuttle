@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/go-shuttle/common/baseinterfaces"
 	errorhandling2 "github.com/Azure/go-shuttle/common/errorhandling"
 	"time"
 
@@ -14,16 +15,20 @@ import (
 	"github.com/devigned/tab"
 )
 
+type TopicPublisher interface {
+	baseinterfaces.BasePublisher
+	AppendTopicManagementOption(option servicebus.TopicManagementOption)
+}
+
 // Publisher is a struct to contain service bus entities relevant to publishing to a topic
 type Publisher struct {
-	namespace              *servicebus.Namespace
+	baseinterfaces.PublisherSettings
 	topic                  *servicebus.Topic
-	headers                map[string]string
 	topicManagementOptions []servicebus.TopicManagementOption
 }
 
-func (p *Publisher) Namespace() *servicebus.Namespace {
-	return p.namespace
+func (p *Publisher) AppendTopicManagementOption(option servicebus.TopicManagementOption) {
+	p.topicManagementOptions = append(p.topicManagementOptions, option)
 }
 
 // New creates a new service bus publisher
@@ -34,7 +39,8 @@ func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publ
 	if err != nil {
 		return nil, err
 	}
-	publisher := &Publisher{namespace: ns}
+	publisher := &Publisher{PublisherSettings: baseinterfaces.PublisherSettings{}}
+	publisher.SetNamespace(ns)
 	for _, opt := range opts {
 		err := opt(publisher)
 		if err != nil {
@@ -42,7 +48,7 @@ func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publ
 		}
 	}
 
-	topicEntity, err := ensureTopic(ctx, topicName, publisher.namespace, publisher.topicManagementOptions...)
+	topicEntity, err := ensureTopic(ctx, topicName, publisher.Namespace(), publisher.topicManagementOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get topic: %w", err)
 	}
@@ -64,7 +70,7 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 	sbMsg.UserProperties["type"] = reflection.GetType(msg)
 
 	// add in custom headers setup at initialization time
-	for headerName, headerKey := range p.headers {
+	for headerName, headerKey := range p.Headers() {
 		val := reflection.GetReflectionValue(msg, headerKey)
 		if val != nil {
 			sbMsg.UserProperties[headerName] = val
@@ -142,7 +148,7 @@ func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespa
 }
 
 func (p *Publisher) initTopic(name string) error {
-	topic, err := p.namespace.NewTopic(name)
+	topic, err := p.Namespace().NewTopic(name)
 	if err != nil {
 		return fmt.Errorf("failed to create new topic %s: %w", name, err)
 	}

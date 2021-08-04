@@ -1,16 +1,17 @@
 package publisher
 
 import (
+	servicebus "github.com/Azure/azure-service-bus-go"
 	"testing"
 
-	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestWithEnvironmentName(t *testing.T) {
 	v := assert.New(t)
-	pub := &Publisher{namespace: &servicebus.Namespace{}}
+	pub := &Publisher{}
+	pub.SetNamespace(&servicebus.Namespace{})
 	expectedEnv := azure.Environment{
 		Name:                     "test",
 		ServiceBusEndpointSuffix: "testsuffix.com",
@@ -18,6 +19,6 @@ func TestWithEnvironmentName(t *testing.T) {
 	azure.SetEnvironment("test", expectedEnv)
 	err := WithEnvironmentName("test")(pub)
 	v.NoError(err)
-	v.Equal(expectedEnv, pub.namespace.Environment)
-	v.Equal(expectedEnv.ServiceBusEndpointSuffix, pub.namespace.Suffix)
+	v.Equal(expectedEnv, pub.Namespace().Environment)
+	v.Equal(expectedEnv.ServiceBusEndpointSuffix, pub.Namespace().Suffix)
 }

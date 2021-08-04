@@ -1,12 +1,13 @@
 package topic
 
 import (
-"context"
-"github.com/Azure/go-shuttle/topic/listener"
-"github.com/Azure/go-shuttle/topic/publisher"
+	"context"
+	"github.com/Azure/go-shuttle/common/options/listeneropts"
+	"github.com/Azure/go-shuttle/topic/listener"
+	"github.com/Azure/go-shuttle/topic/publisher"
 )
 
-func NewListener(opts ...listener.ManagementOption) (*listener.Listener, error) {
+func NewListener(opts ...listeneropts.ManagementOption) (*listener.Listener, error) {
 	return listener.New(opts...)
 }
 

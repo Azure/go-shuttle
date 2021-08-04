@@ -16,6 +16,6 @@ func TestWithEnvironmentName(t *testing.T) {
 	azure.SetEnvironment("test", expectedEnv)
 	listener, err := New(WithEnvironmentName("test"))
 	v.NoError(err)
-	v.Equal(expectedEnv, listener.namespace.Environment)
-	v.Equal(expectedEnv.ServiceBusEndpointSuffix, listener.namespace.Suffix)
+	v.Equal(expectedEnv, listener.Namespace().Environment)
+	v.Equal(expectedEnv.ServiceBusEndpointSuffix, listener.Namespace().Suffix)
 }

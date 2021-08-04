@@ -4,26 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/go-shuttle/common/baseinterfaces"
 	"time"
 
 	common "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/common/errorhandling"
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/prometheus/publisher"
-	"github.com/Azure/go-shuttle/common/errorhandling"
 	"github.com/devigned/tab"
 )
 
+type QueuePublisher interface {
+	baseinterfaces.BasePublisher
+	AppendQueueManagementOption(option servicebus.QueueManagementOption)
+}
+
 // Publisher is a struct to contain service bus entities relevant to publishing to a queue
 type Publisher struct {
-	namespace              *servicebus.Namespace
+	baseinterfaces.PublisherSettings
 	queue                  *servicebus.Queue
-	headers                map[string]string
 	queueManagementOptions []servicebus.QueueManagementOption
 }
 
-func (p *Publisher) Namespace() *servicebus.Namespace {
-	return p.namespace
+func (p *Publisher) AppendQueueManagementOption(option servicebus.QueueManagementOption) {
+	p.queueManagementOptions = append(p.queueManagementOptions, option)
 }
 
 // New creates a new service bus publisher
@@ -34,7 +39,8 @@ func New(ctx context.Context, queueName string, opts ...ManagementOption) (*Publ
 	if err != nil {
 		return nil, err
 	}
-	publisher := &Publisher{namespace: ns}
+	publisher := &Publisher{PublisherSettings: baseinterfaces.PublisherSettings{}}
+	publisher.SetNamespace(ns)
 	for _, opt := range opts {
 		err := opt(publisher)
 		if err != nil {
@@ -42,7 +48,7 @@ func New(ctx context.Context, queueName string, opts ...ManagementOption) (*Publ
 		}
 	}
 
-	queueEntity, err := ensureQueue(ctx, queueName, publisher.namespace, publisher.queueManagementOptions...)
+	queueEntity, err := ensureQueue(ctx, queueName, publisher.Namespace(), publisher.queueManagementOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get queue: %w", err)
 	}
@@ -64,7 +70,7 @@ func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option
 	sbMsg.UserProperties["type"] = reflection.GetType(msg)
 
 	// add in custom headers setup at initialization time
-	for headerName, headerKey := range p.headers {
+	for headerName, headerKey := range p.Headers() {
 		val := reflection.GetReflectionValue(msg, headerKey)
 		if val != nil {
 			sbMsg.UserProperties[headerName] = val
@@ -141,7 +147,7 @@ func ensureQueue(ctx context.Context, name string, namespace *servicebus.Namespa
 }
 
 func (p *Publisher) initQueue(name string) error {
-	queue, err := p.namespace.NewQueue(name)
+	queue, err := p.Namespace().NewQueue(name)
 	if err != nil {
 		return fmt.Errorf("failed to create new queue %s: %w", name, err)
 	}

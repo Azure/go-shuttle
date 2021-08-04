@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
-
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/common/baseinterfaces"
+	"github.com/Azure/go-shuttle/common/options/listeneropts"
 	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/devigned/tab"
@@ -18,17 +18,11 @@ const (
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher queue
 type Listener struct {
-	namespace           *servicebus.Namespace
+	baseinterfaces.ListenerSettings
 	queueEntity         *servicebus.QueueEntity
 	queueListener  		*servicebus.Queue
 	listenerHandle      *servicebus.ListenerHandle
-	topicName           string
 	queueName    		string
-	maxDeliveryCount    int32
-	lockRenewalInterval *time.Duration
-	lockDuration        time.Duration
-	prefetchCount       *uint32
-	maxConcurrency      *int
 }
 
 // QueueListener returns the servicebus.Queue that the listener is setup with
@@ -41,18 +35,16 @@ func (l *Listener) Queue() *servicebus.QueueEntity {
 	return l.queueEntity
 }
 
-// Namespace returns the servicebus.Namespace that the listener is setup with
-func (l *Listener) Namespace() *servicebus.Namespace {
-	return l.namespace
-}
-
 // New creates a new service bus listener
-func New(opts ...ManagementOption) (*Listener, error) {
+func New(opts ...listeneropts.ManagementOption) (*Listener, error) {
 	ns, err := servicebus.NewNamespace()
 	if err != nil {
 		return nil, err
 	}
-	listener := &Listener{namespace: ns}
+	listener := &Listener{
+		ListenerSettings:   baseinterfaces.ListenerSettings{},
+	}
+	listener.SetNamespace(ns)
 	for _, opt := range opts {
 		err := opt(listener)
 		if err != nil {
@@ -70,7 +62,7 @@ func setQueueEntity(ctx context.Context, l *Listener) error {
 	if l.queueEntity != nil {
 		return nil
 	}
-	queueEntity, err := getQueueEntity(ctx, l.queueName, l.namespace)
+	queueEntity, err := getQueueEntity(ctx, l.queueName, l.Namespace())
 	if err != nil {
 		return fmt.Errorf("failed to get queue: %w", err)
 	}
@@ -79,7 +71,7 @@ func setQueueEntity(ctx context.Context, l *Listener) error {
 }
 
 // Listen waits for a message from the Service Bus Topic subscription
-func (l *Listener) Listen(ctx context.Context, handler message.Handler, queueName string, opts ...Option) error {
+func (l *Listener) Listen(ctx context.Context, handler message.Handler, queueName string, opts ...listeneropts.Option) error {
 	ctx, span := tab.StartSpan(ctx, "go-shuttle.queue.listener.Listen")
 	defer span.End()
 	l.queueName = queueName
@@ -97,7 +89,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, queueNam
 		return err
 	}
 	// Generate new topic client
-	queue, err := l.namespace.NewQueue(l.queueEntity.Name)
+	queue, err := l.Namespace().NewQueue(l.queueEntity.Name)
 	if err != nil {
 		return fmt.Errorf("failed to create new queue %s: %w", l.queueEntity.Name, err)
 	}
@@ -106,12 +98,12 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, queueNam
 	}()
 
 	var receiverOpts []servicebus.ReceiverOption
-	if l.prefetchCount != nil {
-		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.prefetchCount))
+	if l.PrefetchCount() != nil {
+		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.PrefetchCount()))
 	}
 	handlerConcurrency := 1
-	if l.maxConcurrency != nil {
-		handlerConcurrency = *l.maxConcurrency
+	if l.MaxConcurrency() != nil {
+		handlerConcurrency = *l.MaxConcurrency()
 	}
 	queueReceiver, err := queue.NewReceiver(ctx, receiverOpts...)
 	if err != nil {
@@ -120,7 +112,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, queueNam
 	listenerHandle := queueReceiver.Listen(ctx,
 		handlers.NewConcurrent(handlerConcurrency,
 			handlers.NewDeadlineContext(
-				handlers.NewPeekLockRenewer(l.lockRenewalInterval, queue,
+				handlers.NewPeekLockRenewer(l.LockRenewalInterval(), queue,
 					handlers.NewShuttleAdapter(handler)),
 			)))
 	l.listenerHandle = listenerHandle
@@ -180,7 +172,7 @@ func ensureQueueListener(l *Listener) error {
 
 func (l *Listener) getQueueListener() (*servicebus.Queue, error) {
 
-	queue, err := l.namespace.NewQueue(l.queueEntity.Name)
+	queue, err := l.Namespace().NewQueue(l.queueEntity.Name)
 	if err != nil {
 		return nil, fmt.Errorf("creating queue manager failed: %w", err)
 	}
