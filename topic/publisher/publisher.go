@@ -4,25 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/go-shuttle/common/baseinterfaces"
-	errorhandling2 "github.com/Azure/go-shuttle/common/errorhandling"
+	"github.com/Azure/go-shuttle/common/errorhandling"
 	"time"
 
-	common "github.com/Azure/azure-amqp-common-go/v3"
+	amqp "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/prometheus/publisher"
 	"github.com/devigned/tab"
 )
 
 type TopicPublisher interface {
-	baseinterfaces.BasePublisher
+	common.Publisher
 	AppendTopicManagementOption(option servicebus.TopicManagementOption)
 }
 
 // Publisher is a struct to contain service bus entities relevant to publishing to a topic
 type Publisher struct {
-	baseinterfaces.PublisherSettings
+	common.PublisherSettings
 	topic                  *servicebus.Topic
 	topicManagementOptions []servicebus.TopicManagementOption
 }
@@ -39,7 +39,7 @@ func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publ
 	if err != nil {
 		return nil, err
 	}
-	publisher := &Publisher{PublisherSettings: baseinterfaces.PublisherSettings{}}
+	publisher := &Publisher{PublisherSettings: common.PublisherSettings{}}
 	publisher.SetNamespace(ns)
 	for _, opt := range opts {
 		err := opt(publisher)
@@ -109,7 +109,7 @@ func (p *Publisher) Close(ctx context.Context) error {
 func (p *Publisher) tryRecoverTopic(ctx context.Context, sendError error) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.tryRecoverTopic", tab.StringAttribute("error", sendError.Error()))
 	defer s.End()
-	if errorhandling2.IsConnectionDead(sendError) {
+	if errorhandling.IsConnectionDead(sendError) {
 		// re-create topic/sender
 		if err := p.initTopic(p.topic.Name); err != nil {
 			return fmt.Errorf("failed to init topic on recovery: %w", err)
@@ -135,11 +135,11 @@ func ensureTopic(ctx context.Context, name string, namespace *servicebus.Namespa
 			attempt++
 			tab.For(ctx).Error(err)
 			// let all errors be retryable for now. application only hit this once on topic creation.
-			return nil, common.Retryable(err.Error())
+			return nil, amqp.Retryable(err.Error())
 		}
 		return te, nil
 	}
-	entity, err := common.Retry(5, 1*time.Second, ensure)
+	entity, err := amqp.Retry(5, 1*time.Second, ensure)
 	if err != nil {
 		tab.For(ctx).Error(err)
 		return nil, err

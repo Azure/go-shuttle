@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/go-shuttle/common/baseinterfaces"
 	"time"
 
-	common "github.com/Azure/azure-amqp-common-go/v3"
+	amqp "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/common/errorhandling"
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/prometheus/publisher"
@@ -16,13 +16,13 @@ import (
 )
 
 type QueuePublisher interface {
-	baseinterfaces.BasePublisher
+	common.Publisher
 	AppendQueueManagementOption(option servicebus.QueueManagementOption)
 }
 
 // Publisher is a struct to contain service bus entities relevant to publishing to a queue
 type Publisher struct {
-	baseinterfaces.PublisherSettings
+	common.PublisherSettings
 	queue                  *servicebus.Queue
 	queueManagementOptions []servicebus.QueueManagementOption
 }
@@ -39,7 +39,7 @@ func New(ctx context.Context, queueName string, opts ...ManagementOption) (*Publ
 	if err != nil {
 		return nil, err
 	}
-	publisher := &Publisher{PublisherSettings: baseinterfaces.PublisherSettings{}}
+	publisher := &Publisher{PublisherSettings: common.PublisherSettings{}}
 	publisher.SetNamespace(ns)
 	for _, opt := range opts {
 		err := opt(publisher)
@@ -134,11 +134,11 @@ func ensureQueue(ctx context.Context, name string, namespace *servicebus.Namespa
 			attempt++
 			tab.For(ctx).Error(err)
 			// let all errors be retryable for now. application only hit this once on queue creation.
-			return nil, common.Retryable(err.Error())
+			return nil, amqp.Retryable(err.Error())
 		}
 		return qe, nil
 	}
-	entity, err := common.Retry(5, 1*time.Second, ensure)
+	entity, err := amqp.Retry(5, 1*time.Second, ensure)
 	if err != nil {
 		tab.For(ctx).Error(err)
 		return nil, err

@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/go-shuttle/common/baseinterfaces"
 	"time"
 
-	common "github.com/Azure/azure-amqp-common-go/v3"
+	amqp "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/devigned/tab"
@@ -18,17 +18,17 @@ const (
 	defaultSubscriptionName = "default"
 )
 
-var _ baseinterfaces.BaseListener = &Listener{}
+var _ common.Listener = &Listener{}
 
 type TopicListener interface {
-	baseinterfaces.BaseListener
+	common.Listener
 	SetSubscriptionName(subscriptionName string)
 	AppendFilterDefinition(definition *filterDefinition)
 }
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
 type Listener struct {
-	baseinterfaces.ListenerSettings
+	common.ListenerSettings
 	topicEntity        *servicebus.TopicEntity
 	subscriptionEntity *servicebus.SubscriptionEntity
 	listenerHandle     *servicebus.ListenerHandle
@@ -67,7 +67,7 @@ func New(opts ...ManagementOption) (*Listener, error) {
 		return nil, err
 	}
 	listener := &Listener{
-		ListenerSettings: baseinterfaces.ListenerSettings{},
+		ListenerSettings: common.ListenerSettings{},
 	}
 	listener.SetNamespace(ns)
 	for _, opt := range opts {
@@ -273,11 +273,11 @@ func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.Subscr
 			attempt++
 			tab.For(ctx).Error(err)
 			// let all errors be retryable for now. application only hit this once on subscription creation.
-			return nil, common.Retryable(err.Error())
+			return nil, amqp.Retryable(err.Error())
 		}
 		return entity, err
 	}
-	entity, err := common.Retry(5, 1*time.Second, ensure)
+	entity, err := amqp.Retry(5, 1*time.Second, ensure)
 	if err != nil {
 		tab.For(ctx).Error(err)
 		return nil, err

@@ -3,7 +3,7 @@ package listeneropts
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/go-shuttle/common/baseinterfaces"
+	"github.com/Azure/go-shuttle/common"
 	"reflect"
 	"time"
 
@@ -14,10 +14,10 @@ import (
 )
 
 // Option provides structure for configuring when starting to listen to a specified topic
-type Option func(l baseinterfaces.BaseListener) error
+type Option func(l common.Listener) error
 
 func WithMessageLockAutoRenewal(interval time.Duration) Option {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if interval < time.Duration(0) {
 			return fmt.Errorf("renewal interval must be positive")
 		}
@@ -28,11 +28,11 @@ func WithMessageLockAutoRenewal(interval time.Duration) Option {
 }
 
 // ManagementOption provides structure for configuring a new Listener
-type ManagementOption func(l baseinterfaces.BaseListener) error
+type ManagementOption func(l common.Listener) error
 
 // WithConnectionString configures a listener with the information provided in a Service Bus connection string
 func WithConnectionString(connStr string) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if connStr == "" {
 			return errors.New("no Service Bus connection string provided")
 		}
@@ -44,7 +44,7 @@ func WithConnectionString(connStr string) ManagementOption {
 // then provided by Azure/go-autorest.
 // ref: https://github.com/Azure/go-autorest/blob/c7f947c0610de1bc279f76e6d453353f95cd1bfa/autorest/azure/environments.go#L34
 func WithEnvironmentName(environmentName string) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if environmentName == "" {
 			return errors.New("cannot use empty environment name")
 		}
@@ -54,7 +54,7 @@ func WithEnvironmentName(environmentName string) ManagementOption {
 
 // WithManagedIdentityClientID configures a listener with the attached managed identity and the Service bus resource name
 func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID string) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if serviceBusNamespaceName == "" {
 			return errors.New("no Service Bus namespace provided")
 		}
@@ -64,7 +64,7 @@ func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientI
 
 // WithToken configures a listener with a AAD token
 func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if spt == nil {
 			return errors.New("cannot provide a nil token")
 		}
@@ -74,7 +74,7 @@ func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) 
 
 // WithManagedIdentityResourceID configures a listener with the attached managed identity and the Service bus resource name
 func WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID string) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if serviceBusNamespaceName == "" {
 			return errors.New("no Service Bus namespace provided")
 		}
@@ -93,7 +93,7 @@ func getTypeName(obj interface{}) string {
 // WithDetails allows listeners to control Queue details for longer lived operations.
 // If you using RetryLater you probably want this. Passing zeros leaves it up to Service bus defaults
 func WithDetails(lock time.Duration, maxDelivery int32) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if lock > sbinternal.LockDuration {
 			// working on getting service bus to enforce this. Hangs if you go higher. https://github.com/Azure/azure-service-bus-go/pull/202
 			return fmt.Errorf("lock duration must be <= to %v", sbinternal.LockDuration)
@@ -112,7 +112,7 @@ func WithDetails(lock time.Duration, maxDelivery int32) ManagementOption {
 
 // WithLockDuration allows listeners to control LockDuration. Passing zeros leaves it up to Service bus defaults
 func WithLockDuration(lock time.Duration) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if lock > sbinternal.LockDuration {
 			// working on getting service bus to enforce this. Hangs if you go higher. https://github.com/Azure/azure-service-bus-go/pull/202
 			return fmt.Errorf("lock duration must be <= to %v", sbinternal.LockDuration)
@@ -127,7 +127,7 @@ func WithLockDuration(lock time.Duration) ManagementOption {
 
 // WithQueueMaxDeliveryCount allows listeners to control MaxDeliveryCount. Passing zeros leaves it up to Service bus defaults
 func WithMaxDeliveryCount(maxDelivery int32) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if maxDelivery < 0 {
 			return fmt.Errorf("max Deliveries must be positive")
 		}
@@ -140,7 +140,7 @@ func WithMaxDeliveryCount(maxDelivery int32) ManagementOption {
 // therefore acquires several messages for immediate consumption that is returned as soon as available.
 // Please be aware of the consequences : https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-prefetch#if-it-is-faster-why-is-prefetch-not-the-default-option
 func WithPrefetchCount(prefetch uint32) Option {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if prefetch < 1 {
 			return fmt.Errorf("prefetch count value cannot be less than 1")
 		}
@@ -152,7 +152,7 @@ func WithPrefetchCount(prefetch uint32) Option {
 }
 
 func WithMaxConcurrency(concurrency int) Option {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if concurrency < 0 {
 			return fmt.Errorf("concurrency must be greater than 0")
 		}

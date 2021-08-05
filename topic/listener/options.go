@@ -3,12 +3,13 @@ package listener
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-service-bus-go"
-	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/Azure/go-shuttle/common/baseinterfaces"
-	"github.com/Azure/go-shuttle/common/options/listeneropts"
 	"reflect"
 	"time"
+
+	"github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/go-shuttle/common"
+	"github.com/Azure/go-shuttle/common/options/listeneropts"
 )
 
 type Option = listeneropts.Option
@@ -75,7 +76,7 @@ func WithMaxConcurrency(concurrency int) Option {
 
 // WithSubscriptionName configures the subscription name of the subscription to listen to
 func WithSubscriptionName(name string) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		l.(TopicListener).SetSubscriptionName(name)
 		return nil
 	}
@@ -83,7 +84,7 @@ func WithSubscriptionName(name string) ManagementOption {
 
 // WithFilterDescriber configures the filters on the subscription
 func WithFilterDescriber(filterName string, filter servicebus.FilterDescriber) ManagementOption {
-	return func(l baseinterfaces.BaseListener) error {
+	return func(l common.Listener) error {
 		if len(filterName) == 0 || filter == nil {
 			return errors.New("filter name or filter cannot be zero value")
 		}

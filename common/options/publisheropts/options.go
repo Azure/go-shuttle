@@ -4,21 +4,21 @@ import (
 	"errors"
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/Azure/go-shuttle/common/baseinterfaces"
+	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/internal/aad"
 	sbinternal "github.com/Azure/go-shuttle/internal/servicebus"
 	"time"
 )
 
 // ManagementOption provides structure for configuring a new Publisher
-type ManagementOption func(p baseinterfaces.BasePublisher) error
+type ManagementOption func(p common.Publisher) error
 
 // Option provides structure for configuring when starting to publish to a specified queue
 type Option func(msg *servicebus.Message) error
 
 // WithConnectionString configures a publisher with the information provided in a Service Bus connection string
 func WithConnectionString(connStr string) ManagementOption {
-	return func(p baseinterfaces.BasePublisher) error {
+	return func(p common.Publisher) error {
 		if connStr == "" {
 			return errors.New("no Service Bus connection string provided")
 		}
@@ -30,7 +30,7 @@ func WithConnectionString(connStr string) ManagementOption {
 // then provided by Azure/go-autorest.
 // ref: https://github.com/Azure/go-autorest/blob/c7f947c0610de1bc279f76e6d453353f95cd1bfa/autorest/azure/environments.go#L34
 func WithEnvironmentName(environmentName string) ManagementOption {
-	return func(p baseinterfaces.BasePublisher) error {
+	return func(p common.Publisher) error {
 		if environmentName == "" {
 			return errors.New("cannot use empty environment name")
 		}
@@ -40,7 +40,7 @@ func WithEnvironmentName(environmentName string) ManagementOption {
 
 // WithManagedIdentityResourceID configures a publisher with the attached managed identity and the Service bus resource name
 func WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID string) ManagementOption {
-	return func(p baseinterfaces.BasePublisher) error {
+	return func(p common.Publisher) error {
 		if serviceBusNamespaceName == "" {
 			return errors.New("no Service Bus namespace provided")
 		}
@@ -50,7 +50,7 @@ func WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResou
 
 // WithManagedIdentityClientID configures a publisher with the attached managed identity and the Service bus resource name
 func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID string) ManagementOption {
-	return func(p baseinterfaces.BasePublisher) error {
+	return func(p common.Publisher) error {
 		if serviceBusNamespaceName == "" {
 			return errors.New("no Service Bus namespace provided")
 		}
@@ -59,7 +59,7 @@ func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientI
 }
 
 func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) ManagementOption {
-	return func(p baseinterfaces.BasePublisher) error {
+	return func(p common.Publisher) error {
 		if spt == nil {
 			return errors.New("cannot provide a nil token")
 		}
@@ -69,7 +69,7 @@ func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) 
 
 // SetDefaultHeader adds a header to every message published using the value specified from the message body
 func SetDefaultHeader(headerName, msgKey string) ManagementOption {
-	return func(p baseinterfaces.BasePublisher) error {
+	return func(p common.Publisher) error {
 		p.AppendHeader(headerName, msgKey)
 		return nil
 	}

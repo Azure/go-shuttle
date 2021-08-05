@@ -1,12 +1,12 @@
 package publisher
 
 import (
-	"github.com/Azure/go-shuttle/common/baseinterfaces"
-	"github.com/Azure/go-shuttle/common/options/publisheropts"
 	"time"
 
 	"github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/go-shuttle/common"
+	"github.com/Azure/go-shuttle/common/options/publisheropts"
 )
 
 // ManagementOption provides structure for configuring a new Publisher
@@ -49,7 +49,7 @@ func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 // SetDuplicateDetection guarantees that the topic will have exactly-once delivery over a user-defined span of time.
 // Defaults to 30 seconds with a maximum of 7 days
 func WithDuplicateDetection(window *time.Duration) ManagementOption {
-	return func(p baseinterfaces.BasePublisher) error {
+	return func(p common.Publisher) error {
 		p.(TopicPublisher).AppendTopicManagementOption(servicebus.TopicWithDuplicateDetection(window))
 		return nil
 	}

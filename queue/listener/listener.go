@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/Azure/go-shuttle/common/baseinterfaces"
+	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/common/options/listeneropts"
 	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/message"
@@ -18,7 +18,7 @@ const (
 
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher queue
 type Listener struct {
-	baseinterfaces.ListenerSettings
+	common.ListenerSettings
 	queueEntity    *servicebus.QueueEntity
 	queueListener  *servicebus.Queue
 	listenerHandle *servicebus.ListenerHandle
@@ -42,7 +42,7 @@ func New(opts ...listeneropts.ManagementOption) (*Listener, error) {
 		return nil, err
 	}
 	listener := &Listener{
-		ListenerSettings: baseinterfaces.ListenerSettings{},
+		ListenerSettings: common.ListenerSettings{},
 	}
 	listener.SetNamespace(ns)
 	for _, opt := range opts {
