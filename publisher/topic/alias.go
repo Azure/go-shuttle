@@ -2,11 +2,10 @@ package topic
 
 import (
 	"context"
-	topic "github.com/Azure/go-shuttle/topic/publisher"
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/adal"
-
+	topic "github.com/Azure/go-shuttle/topic/publisher"
 )
 
 // Deprecated: use topic package
