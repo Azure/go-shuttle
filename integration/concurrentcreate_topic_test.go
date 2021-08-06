@@ -6,11 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/go-shuttle/publisher/topic"
+	"github.com/Azure/go-shuttle/topic"
+	"github.com/Azure/go-shuttle/topic/listener"
 	"sync"
 	"time"
 
-	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/stretchr/testify/assert"
 )
@@ -23,7 +23,7 @@ func (suite *serviceBusTopicSuite) TestCreatePublisherConcurrently() {
 		w.Add(1)
 		go func(it int) {
 			defer w.Done()
-			_, err := topic.New(context.Background(), topicName, suite.publisherAuthOption)
+			_, err := topic.NewPublisher(context.Background(), topicName, suite.publisherAuthOption)
 			if !assert.NoError(suite.T(), err, "failed on iteration %d", it) {
 				suite.FailNow(err.Error())
 			}
@@ -45,12 +45,12 @@ func (suite *serviceBusTopicSuite) TestCreatePublisherConcurrently() {
 func (suite *serviceBusTopicSuite) TestCreateListenersConcurrently() {
 	suite.T().Parallel()
 	topicName := "newTopic" + suite.TagID
-	_, err := topic.New(context.Background(), topicName, suite.publisherAuthOption)
+	_, err := topic.NewPublisher(context.Background(), topicName, suite.publisherAuthOption)
 	assert.NoError(suite.T(), err)
 	w := sync.WaitGroup{}
 	lctx, cancel := context.WithTimeout(context.TODO(), 20*time.Second)
 	for i := 0; i < 5; i++ {
-		l, err := listener.New(suite.listenerAuthOption, listener.WithSubscriptionName("concurrentListener"))
+		l, err := topic.NewListener(suite.listenerAuthOption, listener.WithSubscriptionName("concurrentListener"))
 		assert.NoError(suite.T(), err)
 		w.Add(1)
 		go func(it int) {

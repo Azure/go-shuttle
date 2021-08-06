@@ -1,4 +1,4 @@
-package topic
+package publisher
 
 import (
 	"testing"
@@ -10,7 +10,8 @@ import (
 
 func TestWithEnvironmentName(t *testing.T) {
 	v := assert.New(t)
-	pub := &Publisher{namespace: &servicebus.Namespace{}}
+	pub := &Publisher{}
+	pub.SetNamespace(&servicebus.Namespace{})
 	expectedEnv := azure.Environment{
 		Name:                     "test",
 		ServiceBusEndpointSuffix: "testsuffix.com",
@@ -18,6 +19,6 @@ func TestWithEnvironmentName(t *testing.T) {
 	azure.SetEnvironment("test", expectedEnv)
 	err := WithEnvironmentName("test")(pub)
 	v.NoError(err)
-	v.Equal(expectedEnv, pub.namespace.Environment)
-	v.Equal(expectedEnv.ServiceBusEndpointSuffix, pub.namespace.Suffix)
+	v.Equal(expectedEnv, pub.Namespace().Environment)
+	v.Equal(expectedEnv.ServiceBusEndpointSuffix, pub.Namespace().Suffix)
 }

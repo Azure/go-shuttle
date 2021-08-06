@@ -1,6 +1,7 @@
-package listener
+package publisher
 
 import (
+	servicebus "github.com/Azure/azure-service-bus-go"
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -9,13 +10,15 @@ import (
 
 func TestWithEnvironmentName(t *testing.T) {
 	v := assert.New(t)
+	pub := &Publisher{}
+	pub.SetNamespace(&servicebus.Namespace{})
 	expectedEnv := azure.Environment{
 		Name:                     "test",
 		ServiceBusEndpointSuffix: "testsuffix.com",
 	}
 	azure.SetEnvironment("test", expectedEnv)
-	listener, err := New(WithEnvironmentName("test"))
+	err := WithEnvironmentName("test")(pub)
 	v.NoError(err)
-	v.Equal(expectedEnv, listener.namespace.Environment)
-	v.Equal(expectedEnv.ServiceBusEndpointSuffix, listener.namespace.Suffix)
+	v.Equal(expectedEnv, pub.Namespace().Environment)
+	v.Equal(expectedEnv.ServiceBusEndpointSuffix, pub.Namespace().Suffix)
 }

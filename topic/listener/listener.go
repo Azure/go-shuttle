@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	common "github.com/Azure/azure-amqp-common-go/v3"
+	amqp "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/handlers"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/devigned/tab"
@@ -17,20 +18,23 @@ const (
 	defaultSubscriptionName = "default"
 )
 
+var _ common.Listener = &Listener{}
+
+type TopicListener interface {
+	common.Listener
+	SetSubscriptionName(subscriptionName string)
+	AppendFilterDefinition(definition *filterDefinition)
+}
+
 // Listener is a struct to contain service bus entities relevant to subscribing to a publisher topic
 type Listener struct {
-	namespace           *servicebus.Namespace
-	topicEntity         *servicebus.TopicEntity
-	subscriptionEntity  *servicebus.SubscriptionEntity
-	listenerHandle      *servicebus.ListenerHandle
-	topicName           string
-	subscriptionName    string
-	maxDeliveryCount    int32
-	lockRenewalInterval *time.Duration
-	lockDuration        time.Duration
-	filterDefinitions   []*filterDefinition
-	prefetchCount       *uint32
-	maxConcurrency      *int
+	common.ListenerSettings
+	topicEntity        *servicebus.TopicEntity
+	subscriptionEntity *servicebus.SubscriptionEntity
+	listenerHandle     *servicebus.ListenerHandle
+	topicName          string
+	subscriptionName   string
+	filterDefinitions  []*filterDefinition
 }
 
 // Subscription returns the servicebus.SubscriptionEntity that the listener is setup with
@@ -43,9 +47,12 @@ func (l *Listener) Topic() *servicebus.TopicEntity {
 	return l.topicEntity
 }
 
-// Namespace returns the servicebus.Namespace that the listener is setup with
-func (l *Listener) Namespace() *servicebus.Namespace {
-	return l.namespace
+func (l *Listener) SetSubscriptionName(subscriptionName string) {
+	l.subscriptionName = subscriptionName
+}
+
+func (l *Listener) AppendFilterDefinition(definition *filterDefinition) {
+	l.filterDefinitions = append(l.filterDefinitions, definition)
 }
 
 type filterDefinition struct {
@@ -59,7 +66,10 @@ func New(opts ...ManagementOption) (*Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	listener := &Listener{namespace: ns}
+	listener := &Listener{
+		ListenerSettings: common.ListenerSettings{},
+	}
+	listener.SetNamespace(ns)
 	for _, opt := range opts {
 		err := opt(listener)
 		if err != nil {
@@ -77,7 +87,7 @@ func setTopicEntity(ctx context.Context, l *Listener) error {
 	if l.topicEntity != nil {
 		return nil
 	}
-	topicEntity, err := getTopicEntity(ctx, l.topicName, l.namespace)
+	topicEntity, err := getTopicEntity(ctx, l.topicName, l.Namespace())
 	if err != nil {
 		return fmt.Errorf("failed to get topic: %w", err)
 	}
@@ -89,7 +99,7 @@ func setSubscriptionFilters(ctx context.Context, l *Listener) error {
 	if len(l.filterDefinitions) == 0 {
 		return nil
 	}
-	sm, err := l.namespace.NewSubscriptionManager(l.topicEntity.Name)
+	sm, err := l.Namespace().NewSubscriptionManager(l.topicEntity.Name)
 	if err != nil {
 		return fmt.Errorf("could no create subscription manager: %w", err)
 	}
@@ -123,7 +133,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 		return err
 	}
 	// Generate new topic client
-	topic, err := l.namespace.NewTopic(l.topicEntity.Name)
+	topic, err := l.Namespace().NewTopic(l.topicEntity.Name)
 	if err != nil {
 		return fmt.Errorf("failed to create new topic %s: %w", l.topicEntity.Name, err)
 	}
@@ -138,12 +148,12 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	}
 
 	var receiverOpts []servicebus.ReceiverOption
-	if l.prefetchCount != nil {
-		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.prefetchCount))
+	if l.PrefetchCount() != nil {
+		receiverOpts = append(receiverOpts, servicebus.ReceiverWithPrefetchCount(*l.PrefetchCount()))
 	}
 	handlerConcurrency := 1
-	if l.maxConcurrency != nil {
-		handlerConcurrency = *l.maxConcurrency
+	if l.MaxConcurrency() != nil {
+		handlerConcurrency = *l.MaxConcurrency()
 	}
 	subReceiver, err := sub.NewReceiver(ctx, receiverOpts...)
 	if err != nil {
@@ -152,7 +162,7 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	listenerHandle := subReceiver.Listen(ctx,
 		handlers.NewConcurrent(handlerConcurrency,
 			handlers.NewDeadlineContext(
-				handlers.NewPeekLockRenewer(l.lockRenewalInterval, sub,
+				handlers.NewPeekLockRenewer(l.LockRenewalInterval(), sub,
 					handlers.NewShuttleAdapter(handler)),
 			)))
 	l.listenerHandle = listenerHandle
@@ -224,7 +234,7 @@ func (l *Listener) getSubscriptionEntity(
 	ctx context.Context,
 	subscriptionName string) (*servicebus.SubscriptionEntity, error) {
 
-	subscriptionManager, err := l.namespace.NewSubscriptionManager(l.topicEntity.Name)
+	subscriptionManager, err := l.Namespace().NewSubscriptionManager(l.topicEntity.Name)
 	if err != nil {
 		return nil, fmt.Errorf("creating subscription manager failed: %w", err)
 	}
@@ -248,11 +258,13 @@ func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.Subscr
 			return subEntity, nil
 		}
 		mutateSericeDetails := func(s *servicebus.SubscriptionDescription) error {
-			if l.maxDeliveryCount > 0 {
-				s.MaxDeliveryCount = &l.maxDeliveryCount
+			maxDeliveryCount := l.MaxDeliveryCount()
+			if maxDeliveryCount > 0 {
+				s.MaxDeliveryCount = &maxDeliveryCount
 			}
-			if l.lockDuration > time.Duration(0) {
-				return servicebus.SubscriptionWithLockDuration(&l.lockDuration)(s)
+			lockDuration := l.LockDuration()
+			if lockDuration > time.Duration(0) {
+				return servicebus.SubscriptionWithLockDuration(&lockDuration)(s)
 			}
 			return nil
 		}
@@ -261,11 +273,11 @@ func (l *Listener) ensureSubscription(ctx context.Context, sm *servicebus.Subscr
 			attempt++
 			tab.For(ctx).Error(err)
 			// let all errors be retryable for now. application only hit this once on subscription creation.
-			return nil, common.Retryable(err.Error())
+			return nil, amqp.Retryable(err.Error())
 		}
 		return entity, err
 	}
-	entity, err := common.Retry(5, 1*time.Second, ensure)
+	entity, err := amqp.Retry(5, 1*time.Second, ensure)
 	if err != nil {
 		tab.For(ctx).Error(err)
 		return nil, err

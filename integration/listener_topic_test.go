@@ -4,22 +4,23 @@ package integration
 
 import (
 	"context"
+	"github.com/Azure/go-shuttle/topic"
+	"github.com/Azure/go-shuttle/topic/listener"
 	"strings"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
-	"github.com/Azure/go-shuttle/listener"
 	"github.com/Azure/go-shuttle/message"
 )
 
 // TestCreateNewListenerFromConnectionString tests the creation of a listener with a connection string
 func (suite *serviceBusTopicSuite) TestCreateNewListener() {
-	_, err := listener.New(suite.listenerAuthOption)
+	_, err := topic.NewListener(suite.listenerAuthOption)
 	suite.NoError(err)
 }
 
 func (suite *serviceBusTopicSuite) TestListenWithDefault() {
-	listener, err := listener.New(suite.listenerAuthOption)
+	listener, err := topic.NewListener(suite.listenerAuthOption)
 	if suite.NoError(err) {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		go func() {
@@ -37,7 +38,7 @@ func (suite *serviceBusTopicSuite) TestListenWithDefault() {
 }
 
 func (suite *serviceBusTopicSuite) TestListenWithCustomSubscription() {
-	listener, err := listener.New(
+	listener, err := topic.NewListener(
 		suite.listenerAuthOption,
 		listener.WithSubscriptionName("subName"))
 	if suite.NoError(err) {
@@ -57,7 +58,7 @@ func (suite *serviceBusTopicSuite) TestListenWithCustomSubscription() {
 }
 
 func (suite *serviceBusTopicSuite) TestListenWithCustomFilter() {
-	createRule, err := listener.New(
+	createRule, err := topic.NewListener(
 		suite.listenerAuthOption,
 		listener.WithSubscriptionName("default"),
 		listener.WithFilterDescriber("testFilter",
@@ -69,7 +70,7 @@ func (suite *serviceBusTopicSuite) TestListenWithCustomFilter() {
 			servicebus.SQLFilter{Expression: "destinationId LIKE test"},
 		)
 		// check if it correctly replaces an existing rule
-		replaceRuleSub, err := listener.New(
+		replaceRuleSub, err := topic.NewListener(
 			suite.listenerAuthOption,
 			listener.WithSubscriptionName("default"),
 			listener.WithFilterDescriber("testFilter",
