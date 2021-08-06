@@ -164,6 +164,32 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	return listenerHandle.Err()
 }
 
+// DeleteSubscriptions deletes the giving subscriptions
+func (l *Listener) DeleteSubscriptions(ctx context.Context, topicName, subscriptionName []string) error {
+	if l.topicEntity == nil {
+		return fmt.Errorf("entity of topic is nil")
+	}
+
+	subManager, err := l.namespace.NewSubscriptionManager(l.topicEntity.Name)
+	if err != nil {
+		return fmt.Errorf("Failed to create subscription manager, err: %s", err)
+	}
+
+	errorMsg := ""
+	for _, subName := range subscriptionName {
+		err = subManager.Delete(ctx, subName)
+		if err != nil {
+			errorMsg += err.Error()
+		}
+	}
+
+	if errorMsg != "" {
+		return fmt.Errorf(errorMsg)
+	}
+
+	return nil
+}
+
 // Close closes the listener if an active listener exists
 func (l *Listener) Close(ctx context.Context) error {
 	if l.listenerHandle == nil {
