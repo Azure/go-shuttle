@@ -19,55 +19,55 @@ type Option = topic.Option
 
 // Deprecated: use topic package
 func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publisher, error) {
-	return New(ctx, topicName, opts...)
+	return topic.New(ctx, topicName, opts...)
 }
 
 // Deprecated: use topic package
 func WithConnectionString(connStr string) ManagementOption {
-	return WithConnectionString(connStr)
+	return topic.WithConnectionString(connStr)
 }
 
 // Deprecated: use topic package
 func WithEnvironmentName(environmentName string) ManagementOption {
-	return WithEnvironmentName(environmentName)
+	return topic.WithEnvironmentName(environmentName)
 }
 
 // Deprecated: use topic package
 func WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID string) ManagementOption {
-	return WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID)
+	return topic.WithManagedIdentityResourceID(serviceBusNamespaceName, managedIdentityResourceID)
 }
 
 // Deprecated: use topic package
 func WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID string) ManagementOption {
-	return WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID)
+	return topic.WithManagedIdentityClientID(serviceBusNamespaceName, managedIdentityClientID)
 }
 
 // Deprecated: use topic package
 func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) ManagementOption {
-	return WithToken(serviceBusNamespaceName, spt)
+	return topic.WithToken(serviceBusNamespaceName, spt)
 }
 
 // Deprecated: use topic package
 func SetDefaultHeader(headerName, msgKey string) ManagementOption {
-	return SetDefaultHeader(headerName, msgKey)
+	return topic.SetDefaultHeader(headerName, msgKey)
 }
 
 // Deprecated: use topic package
 func WithDuplicateDetection(window *time.Duration) ManagementOption {
-	return WithDuplicateDetection(window)
+	return topic.WithDuplicateDetection(window)
 }
 
 // Deprecated: use topic package
 func SetMessageDelay(delay time.Duration) Option {
-	return SetMessageDelay(delay)
+	return topic.SetMessageDelay(delay)
 }
 
 // Deprecated: use topic package
 func SetMessageID(messageID string) Option {
-	return SetMessageID(messageID)
+	return topic.SetMessageID(messageID)
 }
 
 // Deprecated: use topic package
 func SetCorrelationID(correlationID string) Option {
-	return SetCorrelationID(correlationID)
+	return topic.SetCorrelationID(correlationID)
 }
