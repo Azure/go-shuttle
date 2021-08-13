@@ -14,13 +14,13 @@ services:
     networks:
     - goshuttle-tracing
   go-shuttle-test:
-    working_dir: "/go/pubsub"
+    # working_dir: "/go/pubsub"
     image: ${IMAGE}
     # entrypoint: ["ls"]
     #    command: ["-run", "TestConnectionString/TestPublishAndListenNotRenewingLock", "-tags", "debug"]
     # command: ["-timeout", "6h" , "-run", "TestConnectionString/TestSoakPub"]
     # command: ["-run", "TestConnectionString/TestCompleteCloseToLockExpiry", "-tags", "debug"]
-    command: ["-run", "TestConnectionString"]
+    command: ["-run", "TestConnectionString/TestPublishAndListenRenewLockPassedClaimValidity"]
     env_file:
     - .env
     environment:

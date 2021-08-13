@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/go-shuttle/common/errorhandling"
 	"time"
+
+	"github.com/Azure/go-shuttle/common/errorhandling"
 
 	amqp "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"

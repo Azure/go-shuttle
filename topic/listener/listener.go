@@ -159,10 +159,15 @@ func (l *Listener) Listen(ctx context.Context, handler message.Handler, topicNam
 	if err != nil {
 		return fmt.Errorf("failed to create new subscription receiver %s: %w", l.subscriptionEntity.Name, err)
 	}
+	client, err := sub.GetRPCClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create RPC client for the subscription: %w", err)
+	}
 	listenerHandle := subReceiver.Listen(ctx,
 		handlers.NewConcurrent(handlerConcurrency,
 			handlers.NewDeadlineContext(
-				handlers.NewPeekLockRenewer(l.LockRenewalInterval(), sub,
+				// handlers.NewPeekLockRenewer(l.LockRenewalInterval(), handlers.NewHttpLockRenewer(l.Namespace().Name, sub, l.Namespace().TokenProvider),
+				handlers.NewPeekLockRenewer(l.LockRenewalInterval(), client,
 					handlers.NewShuttleAdapter(handler)),
 			)))
 	l.listenerHandle = listenerHandle
