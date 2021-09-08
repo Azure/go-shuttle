@@ -3,9 +3,9 @@ module github.com/Azure/go-shuttle
 go 1.14
 
 require (
-	github.com/Azure/azure-amqp-common-go/v3 v3.1.0
-	github.com/Azure/azure-service-bus-go v0.10.16
-	github.com/Azure/go-amqp v0.13.11
+	github.com/Azure/azure-amqp-common-go/v3 v3.2.0
+	github.com/Azure/azure-service-bus-go v0.11.1
+	github.com/Azure/go-amqp v0.13.13
 	github.com/Azure/go-autorest/autorest v0.11.19
 	github.com/Azure/go-autorest/autorest/adal v0.9.14
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
