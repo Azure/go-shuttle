@@ -41,8 +41,13 @@ func isConnClosedError(err error) bool {
 	return errors.As(err, &errConnClosed)
 }
 
+func isLinkDetachedError(err error) bool {
+	return errors.Is(err, amqp.ErrLinkDetached)
+}
+
 func IsConnectionDead(err error) bool {
 	return isPermanentNetError(err) ||
+		isLinkDetachedError(err) ||
 		isAmqpInternalError(err) ||
 		isEOF(err) ||
 		isConnClosedError(err)

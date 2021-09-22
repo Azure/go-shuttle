@@ -33,6 +33,7 @@ func TestIsConnectionDead(t *testing.T) {
 		givenError error
 		want       bool
 	}{
+		{name: "linkDetached", givenError: amqp.ErrLinkDetached, want: true},
 		{name: "syscall-timeoutError", givenError: syscall.ETIMEDOUT, want: true},
 		{name: "randomError", givenError: fmt.Errorf("random error"), want: false},
 		{name: "anyAmqpError", givenError: &amqp.Error{}, want: false},
