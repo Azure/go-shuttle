@@ -2,6 +2,8 @@
 
 set -ex
 
+go install gotest.tools/gotestsum@latest
+
 if [ -n "$LOG_DIRECTORY" ]; then
   echo "Log directory defined"
 else
