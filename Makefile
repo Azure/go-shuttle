@@ -9,11 +9,17 @@ endif
 ENVFILE=${SCRIPTPATH}/.env
 
 IMAGE?=${REGISTRY}/pubsubtest
+LOG_DIRECTORY?=/aci/logs/localrun_$(shell date -u +"%FT%H%M%S%Z")
+ACI_CONTAINER_NAME?=tester
 export
 
 .PHONY: test-setup
 test-setup:
 	scripts/test-setup.sh "${ENVFILE}"
+
+.PHONY: test-env
+test-env:
+	scripts/test-env.sh "${ENVFILE}"
 
 .PHONY: cleanup-test-setup
 cleanup-test-setup:
@@ -29,13 +35,16 @@ push-test-image:
 	@docker login -u ${REGISTRY_USER} -p ${REGISTRY_PASSWORD} ${REGISTRY}
 	docker push ${IMAGE}
 
+
 test-aci: clean-aci scripts/containergroup.yaml
 	containerId=$$(az container create --file scripts/containergroup.yaml \
+	--name "${ACI_CONTAINER_NAME}" \
 	--resource-group ${TEST_RESOURCE_GROUP} \
 	--subscription ${AZURE_SUBSCRIPTION_ID} \
+	--environment-variables SUITE=${SUITE} \
 	--verbose \
-	--query id -o tsv) ;\
-	az container logs --ids $${containerId} --follow
+	--query id -o tsv); \
+	./scripts/wait-aci.sh $${containerId}
 
 shell-aci: clean-aci
 	az container create --file scripts/containergroup.yaml \
@@ -44,14 +53,13 @@ shell-aci: clean-aci
 	--command-line "/bin/bash"; \
 	az container attach --name "pubsubtester" --resource-group "${TEST_RESOURCE_GROUP}"
 
-
 scripts/containergroup.yaml:
 	envsubst < scripts/containergroup.template.yaml > scripts/containergroup.yaml
 
 clean-aci:
 	az container delete \
 	--resource-group ${TEST_RESOURCE_GROUP} \
-	--name pubsubtester \
+	--name ${ACI_CONTAINER_NAME} \
 	--subscription ${AZURE_SUBSCRIPTION_ID} \
 	--yes
 
@@ -61,6 +69,25 @@ integration-compose: build-test-image
 	@docker-compose --env-file "${ENVFILE}" up
 
 integration-local:
-	./run-integration.sh -run TestConnectionString
+	LOG_DIRECTORY=. ./run-integration.sh TestConnectionString/TestCreate*
+
+integration-pipeline: scripts/containergroup.yaml
+	SUITE=$$(echo "${SUITE}" | tr '[:upper:]' '[:lower:]') \
+	containerId=$$(az container create --file scripts/containergroup.yaml \
+	--name "bld${ACI_CONTAINER_NAME}-${SUITE}" \
+	--resource-group ${TEST_RESOURCE_GROUP} \
+	--subscription ${AZURE_SUBSCRIPTION_ID} \
+	--verbose \
+	--query id -o tsv); \
+	./scripts/wait-aci.sh $${containerId}
+
+download-junit:
+	az storage file download-batch \
+	--account-name ${STORAGE_ACCOUNT_NAME} \
+	--account-key ${STORAGE_ACCOUNT_KEY} \
+	--source "acilogs" \
+	--pattern "${LOG_DIRECTORY}/*.junit.xml" \
+	--dest . \
+	--output none
 
 

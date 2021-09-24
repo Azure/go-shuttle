@@ -16,34 +16,141 @@ pr:
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- bash: az login --service-principal -u "${CLIENT_ID}" -p "${CLIENT_SECRET}" --tenant "${TENANT_ID}" --output none
-  env:
-    CLIENT_ID: $(INT_CLIENT_ID)
-    CLIENT_SECRET: $(INT_CLIENT_SECRET)
-    TENANT_ID: $(INT_TENANT_ID)
-  displayName: 'az login'
+jobs:
+  - job: image
+    displayName: build and push image
+    steps:
+    - bash: az login --service-principal -u "${CLIENT_ID}" -p "${CLIENT_SECRET}" --tenant "${TENANT_ID}" --output none
+      env:
+        CLIENT_ID: $(INT_CLIENT_ID)
+        CLIENT_SECRET: $(INT_CLIENT_SECRET)
+        TENANT_ID: $(INT_TENANT_ID)
+      displayName: 'az login'
+    - bash: |
+        echo "SERVICEBUS_NAMESPACE_NAME=${SERVICEBUS_NAMESPACE_NAME}" >> .env
+        echo "TEST_LOCATION=${LOCATION}" >> .env
+        echo "TEST_RESOURCE_GROUP=${RESOURCE_GROUP}" >> .env
+        echo "REGISTRY_NAME=${REGISTRY_NAME}" >> .env
+        echo "AZURE_CLIENT_ID=${CLIENT_ID}" >> .env
+        echo "AZURE_CLIENT_SECRET=${CLIENT_SECRET}" >> .env
+        echo "AZURE_TENANT_ID=${TENANT_ID}" >> .env
+        echo "AZURE_SUBSCRIPTION_ID=${SUBSCRIPTION_ID}" >> .env
+        echo "STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}" >> .env
+        make test-setup
+      displayName: setup environment
+      env:
+        SERVICEBUS_NAMESPACE_NAME: $(TEST_SERVICEBUS_NAMESPACE)
+        LOCATION: $(TEST_LOCATION)
+        RESOURCE_GROUP: $(TEST_RESOURCE_GROUP)
+        REGISTRY_NAME: $(TEST_REGISTRY_NAME)
+        CLIENT_ID: $(INT_CLIENT_ID)
+        CLIENT_SECRET: $(INT_CLIENT_SECRET)
+        TENANT_ID: $(INT_TENANT_ID)
+        SUBSCRIPTION_ID: $(INT_SUBSCRIPTION_ID)
+        STORAGE_ACCOUNT_NAME: $(TEST_STORAGE_ACCOUNT_NAME)
+    - bash: make build-test-image && make push-test-image
+      displayName: build and push test image
 
-- bash: |
-      echo "SERVICEBUS_NAMESPACE_NAME=${SERVICEBUS_NAMESPACE_NAME}" >> .env
-      echo "TEST_LOCATION=${LOCATION}" >> .env
-      echo "TEST_RESOURCE_GROUP=${RESOURCE_GROUP}" >> .env
-      echo "REGISTRY_NAME=${REGISTRY_NAME}" >> .env
-      echo "AZURE_CLIENT_ID=${CLIENT_ID}" >> .env
-      echo "AZURE_CLIENT_SECRET=${CLIENT_SECRET}" >> .env
-      echo "AZURE_TENANT_ID=${TENANT_ID}" >> .env
-      echo "AZURE_SUBSCRIPTION_ID=${SUBSCRIPTION_ID}" >> .env
-      make test-setup
-  displayName: setup environment
-  env:
-    SERVICEBUS_NAMESPACE_NAME: $(TEST_SERVICEBUS_NAMESPACE)
-    LOCATION: $(TEST_LOCATION)
-    RESOURCE_GROUP: $(TEST_RESOURCE_GROUP)
-    REGISTRY_NAME: $(TEST_REGISTRY_NAME)
-    CLIENT_ID: $(INT_CLIENT_ID)
-    CLIENT_SECRET: $(INT_CLIENT_SECRET)
-    TENANT_ID: $(INT_TENANT_ID)
-    SUBSCRIPTION_ID: $(INT_SUBSCRIPTION_ID)
+  - job: test
+    displayName: integration tests
+    dependsOn: image
+    timeoutInMinutes: 120
+    strategy:
+      maxParallel: 6
+      matrix:
+        TopicConnectionString:
+          suite: TestConnectionString
+        TopicResourceID:
+          suite: TestResourceID
+        TopicClientID:
+          suite: TestClientId
+        QueueConnectionString:
+          suite: TestQueueConnectionString
+        QueueResourceID:
+          suite: TestQueueResourceID
+        QueueClientID:
+          suite: TestQueueClientId
+    steps:
+    - bash: az login --service-principal -u "${CLIENT_ID}" -p "${CLIENT_SECRET}" --tenant "${TENANT_ID}" --output none
+      env:
+        CLIENT_ID: $(INT_CLIENT_ID)
+        CLIENT_SECRET: $(INT_CLIENT_SECRET)
+        TENANT_ID: $(INT_TENANT_ID)
+      displayName: 'az login'
 
-- bash: make integration
-  displayName: run integration
+    - bash: |
+          echo "SERVICEBUS_NAMESPACE_NAME=${SERVICEBUS_NAMESPACE_NAME}" >> .env
+          echo "TEST_LOCATION=${LOCATION}" >> .env
+          echo "TEST_RESOURCE_GROUP=${RESOURCE_GROUP}" >> .env
+          echo "REGISTRY_NAME=${REGISTRY_NAME}" >> .env
+          echo "AZURE_CLIENT_ID=${CLIENT_ID}" >> .env
+          echo "AZURE_CLIENT_SECRET=${CLIENT_SECRET}" >> .env
+          echo "AZURE_TENANT_ID=${TENANT_ID}" >> .env
+          echo "AZURE_SUBSCRIPTION_ID=${SUBSCRIPTION_ID}" >> .env
+          echo "STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}" >> .env
+          make test-env
+      displayName: setup environment
+      env:
+        SERVICEBUS_NAMESPACE_NAME: $(TEST_SERVICEBUS_NAMESPACE)
+        LOCATION: $(TEST_LOCATION)
+        RESOURCE_GROUP: $(TEST_RESOURCE_GROUP)
+        REGISTRY_NAME: $(TEST_REGISTRY_NAME)
+        CLIENT_ID: $(INT_CLIENT_ID)
+        CLIENT_SECRET: $(INT_CLIENT_SECRET)
+        TENANT_ID: $(INT_TENANT_ID)
+        SUBSCRIPTION_ID: $(INT_SUBSCRIPTION_ID)
+        STORAGE_ACCOUNT_NAME: $(TEST_STORAGE_ACCOUNT_NAME)
+
+    - bash: SUITE=$(suite) make integration-pipeline
+      displayName: run integration
+      env:
+        LOG_DIRECTORY: /aci/logs/$(Build.BuildNumber)
+        ACI_CONTAINER_NAME: $(Build.BuildId)
+        GOTESTSUM_JUNITFILE: /aci/logs/$(Build.BuildNumber)/$(suite).junit.xml
+
+  - job: publish
+    dependsOn: test
+    displayName: publish test results
+    steps:
+    - bash: az login --service-principal -u "${CLIENT_ID}" -p "${CLIENT_SECRET}" --tenant "${TENANT_ID}" --output none
+      env:
+        CLIENT_ID: $(INT_CLIENT_ID)
+        CLIENT_SECRET: $(INT_CLIENT_SECRET)
+        TENANT_ID: $(INT_TENANT_ID)
+      displayName: 'az login'
+
+    - bash: |
+        echo "SERVICEBUS_NAMESPACE_NAME=${SERVICEBUS_NAMESPACE_NAME}" >> .env
+        echo "TEST_LOCATION=${LOCATION}" >> .env
+        echo "TEST_RESOURCE_GROUP=${RESOURCE_GROUP}" >> .env
+        echo "REGISTRY_NAME=${REGISTRY_NAME}" >> .env
+        echo "AZURE_CLIENT_ID=${CLIENT_ID}" >> .env
+        echo "AZURE_CLIENT_SECRET=${CLIENT_SECRET}" >> .env
+        echo "AZURE_TENANT_ID=${TENANT_ID}" >> .env
+        echo "AZURE_SUBSCRIPTION_ID=${SUBSCRIPTION_ID}" >> .env
+        echo "STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}" >> .env
+        make test-env
+      displayName: setup environment
+      env:
+        SERVICEBUS_NAMESPACE_NAME: $(TEST_SERVICEBUS_NAMESPACE)
+        LOCATION: $(TEST_LOCATION)
+        RESOURCE_GROUP: $(TEST_RESOURCE_GROUP)
+        REGISTRY_NAME: $(TEST_REGISTRY_NAME)
+        CLIENT_ID: $(INT_CLIENT_ID)
+        CLIENT_SECRET: $(INT_CLIENT_SECRET)
+        TENANT_ID: $(INT_TENANT_ID)
+        SUBSCRIPTION_ID: $(INT_SUBSCRIPTION_ID)
+        STORAGE_ACCOUNT_NAME: $(TEST_STORAGE_ACCOUNT_NAME)
+
+    - bash: make download-junit
+      displayName: download junit files
+      env:
+        LOG_DIRECTORY: $(Build.BuildNumber)
+
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '**/*.junit.xml'
+        failTaskOnFailedTests: true
+        mergeTestResults: true
+

@@ -5,11 +5,12 @@ package integration
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/go-shuttle/topic/listener"
-	"github.com/Azure/go-shuttle/topic/publisher"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/Azure/go-shuttle/topic/listener"
+	"github.com/Azure/go-shuttle/topic/publisher"
 
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/internal/test"
@@ -107,7 +108,9 @@ func withListenerManagedIdentityClientID() listener.ManagementOption {
 	if managedIdentityClientID == "" {
 		panic("environment variable MANAGED_IDENTITY_CLIENT_ID was not set")
 	}
-	spt, err := adalToken(managedIdentityClientID, adal.NewServicePrincipalTokenFromMSIWithUserAssignedID)
+	spt, err := adalToken(&adal.ManagedIdentityOptions{
+		ClientID: managedIdentityClientID,
+	})
 	if err != nil {
 		panic(err.Error())
 	}
@@ -126,25 +129,20 @@ func withListenerManagedIdentityResourceID() listener.ManagementOption {
 		panic("environment variable MANAGED_IDENTITY_RESOURCE_ID was not set")
 	}
 
-	spt, err := adalToken(managedIdentityResourceID, adal.NewServicePrincipalTokenFromMSIWithIdentityResourceID)
+	spt, err := adalToken(&adal.ManagedIdentityOptions{
+		IdentityResourceID: managedIdentityResourceID,
+	})
 	if err != nil {
 		panic(err)
 	}
 	return listener.WithToken(serviceBusNamespaceName, spt)
 }
 
-type withSpecificIdFunc func(msiEndpoint, resource string, identityResourceID string, callbacks ...adal.TokenRefreshCallback) (*adal.ServicePrincipalToken, error)
-
-func adalToken(id string, getToken withSpecificIdFunc) (*adal.ServicePrincipalToken, error) {
-	msiEndpoint, err := adal.GetMSIVMEndpoint()
-	if err != nil {
-		return nil, err
-	}
-	logrefresh := func(t adal.Token) error {
+func adalToken(idOption *adal.ManagedIdentityOptions) (*adal.ServicePrincipalToken, error) {
+	spt, err := adal.NewServicePrincipalTokenFromManagedIdentity(serviceBusResourceURI, idOption, func(t adal.Token) error {
 		fmt.Printf("refreshing token: %s", t.Expires())
 		return nil
-	}
-	spt, err := getToken(msiEndpoint, serviceBusResourceURI, id, logrefresh)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -160,11 +158,13 @@ func withPublisherManagedIdentityClientID() publisher.ManagementOption {
 	// if managedIdentityClientID is empty then library will assume system assigned managed identity
 	managedIdentityClientID := os.Getenv("MANAGED_IDENTITY_CLIENT_ID")
 
-	token, err := adalToken(managedIdentityClientID, adal.NewServicePrincipalTokenFromMSIWithUserAssignedID)
+	spt, err := adalToken(&adal.ManagedIdentityOptions{
+		ClientID: managedIdentityClientID,
+	})
 	if err != nil {
 		panic(err)
 	}
-	return publisher.WithToken(serviceBusNamespaceName, token)
+	return publisher.WithToken(serviceBusNamespaceName, spt)
 }
 
 func withPublisherManagedIdentityResourceID() publisher.ManagementOption {
@@ -177,19 +177,22 @@ func withPublisherManagedIdentityResourceID() publisher.ManagementOption {
 	if managedIdentityResourceID == "" {
 		panic("environment variable MANAGED_IDENTITY_RESOURCE_ID was not set")
 	}
-	token, err := adalToken(managedIdentityResourceID, adal.NewServicePrincipalTokenFromMSIWithIdentityResourceID)
+	spt, err := adalToken(&adal.ManagedIdentityOptions{
+		IdentityResourceID: managedIdentityResourceID,
+	})
 	if err != nil {
 		panic(err)
 	}
-	return publisher.WithToken(serviceBusNamespaceName, token)
+	return publisher.WithToken(serviceBusNamespaceName, spt)
 }
 
 func (suite *serviceBusTopicSuite) SetupSuite() {
+	t := suite.T()
 	suite.BaseSuite.SetupSuite()
 	suite.TopicName = suite.Prefix + testTopicName + suite.TagID
 	_, err := suite.EnsureTopic(context.Background(), suite.TopicName)
 	if err != nil {
-		suite.T().Fatal(err)
+		t.Fatal(err)
 	}
 }
 
@@ -201,4 +204,5 @@ type publishReceiveTest struct {
 	publisherOptions []publisher.Option
 	publishCount     *int
 	shouldSucceed    bool
+	receiveTimeout   time.Duration
 }

@@ -10,7 +10,7 @@ import (
 
 	"github.com/Azure/go-shuttle/queue"
 	"github.com/Azure/go-shuttle/queue/publisher"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestCreatePublisherWithNewQueue tests the creation of a publisher for a new queue
@@ -23,11 +23,11 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingNewQueue() {
 		ns := suite.GetNewNamespace()
 		tm := ns.NewQueueManager()
 		_, err := tm.Get(context.Background(), queueName)
-		suite.NoError(err)
+		require.NoError(suite.T(), err)
 
 		// delete new queue
 		err = tm.Delete(context.Background(), queueName)
-		suite.NoError(err)
+		require.NoError(suite.T(), err)
 	}
 }
 
@@ -40,7 +40,7 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingExistingQueue() {
 		ns := suite.GetNewNamespace()
 		tm := ns.NewQueueManager()
 		_, err := tm.Get(context.Background(), suite.QueueName)
-		suite.NoError(err)
+		require.NoError(suite.T(), err)
 	}
 }
 
@@ -60,7 +60,7 @@ func (suite *serviceBusQueueSuite) TestPublishAfterIdle() {
 		suite.T().Run(suite.T().Name()+tc.queueName, func(test *testing.T) {
 			test.Parallel()
 			err := testQueueIdleness(suite.publisherAuthOption, tc.queueName, tc.sleepTime)
-			assert.NoError(test, err)
+			require.NoError(test, err)
 		})
 	}
 }
@@ -87,9 +87,7 @@ func (suite *serviceBusQueueSuite) TestSoakPub() {
 		suite.T().Run(suite.T().Name()+tc.queueName, func(test *testing.T) {
 			test.Parallel()
 			err := testQueueSoak(deadline, suite.publisherAuthOption, tc.queueName, tc.sleepTime)
-			if !assert.NoError(test, err) {
-				suite.FailNow(err.Error())
-			}
+			require.NoError(suite.T(), err)
 		})
 	}
 }

@@ -4,13 +4,14 @@ package integration
 
 import (
 	"context"
+	"os"
+	"testing"
+
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-shuttle/internal/test"
 	"github.com/Azure/go-shuttle/queue/listener"
 	"github.com/Azure/go-shuttle/queue/publisher"
 	"github.com/stretchr/testify/suite"
-	"os"
-	"testing"
 )
 
 type serviceBusQueueSuite struct {
@@ -29,6 +30,7 @@ func TestQueueConnectionString(t *testing.T) {
 	t.Parallel()
 	connectionStringSuite := &serviceBusQueueSuite{
 		Prefix:              "conn-",
+		listenerAuthOption:  withListenerConnectionString(),
 		publisherAuthOption: withQueuePublisherConnectionString(),
 	}
 	suite.Run(t, connectionStringSuite)
@@ -38,6 +40,7 @@ func TestQueueClientId(t *testing.T) {
 	t.Parallel()
 	clientIdSuite := &serviceBusQueueSuite{
 		Prefix:              "cid-",
+		listenerAuthOption:  withListenerManagedIdentityClientID(),
 		publisherAuthOption: withQueuePublisherManagedIdentityClientID(),
 	}
 	suite.Run(t, clientIdSuite)
@@ -47,6 +50,7 @@ func TestQueueResourceID(t *testing.T) {
 	t.Parallel()
 	resourceIdSuite := &serviceBusQueueSuite{
 		Prefix:              "rid-",
+		listenerAuthOption:  withListenerManagedIdentityResourceID(),
 		publisherAuthOption: withQueuePublisherManagedIdentityResourceID(),
 	}
 	suite.Run(t, resourceIdSuite)
@@ -70,11 +74,13 @@ func withQueuePublisherManagedIdentityClientID() publisher.ManagementOption {
 	// if managedIdentityClientID is empty then library will assume system assigned managed identity
 	managedIdentityClientID := os.Getenv("MANAGED_IDENTITY_CLIENT_ID")
 
-	token, err := adalToken(managedIdentityClientID, adal.NewServicePrincipalTokenFromMSIWithUserAssignedID)
+	spt, err := adalToken(&adal.ManagedIdentityOptions{
+		ClientID: managedIdentityClientID,
+	})
 	if err != nil {
 		panic(err)
 	}
-	return publisher.WithToken(serviceBusNamespaceName, token)
+	return publisher.WithToken(serviceBusNamespaceName, spt)
 }
 
 func withQueuePublisherManagedIdentityResourceID() publisher.ManagementOption {
@@ -87,7 +93,9 @@ func withQueuePublisherManagedIdentityResourceID() publisher.ManagementOption {
 	if managedIdentityResourceID == "" {
 		panic("environment variable MANAGED_IDENTITY_RESOURCE_ID was not set")
 	}
-	token, err := adalToken(managedIdentityResourceID, adal.NewServicePrincipalTokenFromMSIWithIdentityResourceID)
+	token, err := adalToken(&adal.ManagedIdentityOptions{
+		IdentityResourceID: managedIdentityResourceID,
+	})
 	if err != nil {
 		panic(err)
 	}

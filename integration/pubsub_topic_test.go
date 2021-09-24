@@ -7,52 +7,57 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/go-shuttle/topic"
-	"github.com/Azure/go-shuttle/topic/listener"
-	"github.com/Azure/go-shuttle/topic/publisher"
+	"testing"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/message"
+	"github.com/Azure/go-shuttle/topic"
+	"github.com/Azure/go-shuttle/topic/listener"
+	"github.com/Azure/go-shuttle/topic/publisher"
 	"github.com/devigned/tab"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
 func (suite *serviceBusTopicSuite) TestPublishAndListenUsingDefault() {
+	t := suite.T()
 	pub, err := topic.NewPublisher(context.Background(), suite.TopicName, suite.publisherAuthOption)
-	suite.NoError(err)
+	require.NoError(t, err)
 	l, err := topic.NewListener(suite.listenerAuthOption, listener.WithSubscriptionName("defaultTestSub"))
-	suite.NoError(err)
+	require.NoError(t, err)
 
-	suite.defaultTest(pub, l)
+	defaultTest(t, pub, l, suite.TopicName)
 }
 
 // TestPublishAndListenMessageTwice tests publish and listen the same messages twice
 func (suite *serviceBusTopicSuite) TestPublishAndListenMessageTwice() {
+	t := suite.T()
 	pub, err := topic.NewPublisher(context.Background(), suite.TopicName, suite.publisherAuthOption)
-	suite.NoError(err)
+	require.NoError(t, err)
 	l, err := topic.NewListener(suite.listenerAuthOption, listener.WithSubscriptionName("testTwoMessages"))
-	suite.NoError(err)
+	require.NoError(t, err)
 
-	suite.defaultTestWithMessageTwice(pub, l)
+	defaultTestWithMessageTwice(t, pub, l, suite.TopicName)
 }
 
 // TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
 func (suite *serviceBusTopicSuite) TestPublishAndListenUsingFilter() {
+	t := suite.T()
 	pub, err := topic.NewPublisher(context.Background(), suite.TopicName, suite.publisherAuthOption)
-	suite.NoError(err)
+	require.NoError(t, err)
 	successListener, err := topic.NewListener(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subTypeFilter"),
 		listener.WithFilterDescriber("testFilter", servicebus.SQLFilter{Expression: "type LIKE 'testEvent'"}))
-	suite.NoError(err)
+	require.NoError(t, err)
 	failListener, err := topic.NewListener(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subTypeFilter"),
 		listener.WithFilterDescriber("testFilter", servicebus.SQLFilter{Expression: "type LIKE 'nottestEvent'"}))
 
-	suite.typeFilterTest(pub, successListener, true)
-	suite.typeFilterTest(pub, failListener, false)
+	typeFilterTest(t, pub, successListener, suite.TopicName, true)
+	typeFilterTest(t, pub, failListener, suite.TopicName, false)
 }
 
 type notTestEvent struct {
@@ -61,40 +66,41 @@ type notTestEvent struct {
 
 // TestPublishAndListenWithConnectionStringUsingTypeFilter tests both the publisher and listener with a filter on the event type
 func (suite *serviceBusTopicSuite) TestPublishAndListenUsingTypeFilter() {
+	t := suite.T()
 	pub, err := topic.NewPublisher(context.Background(), suite.TopicName, suite.publisherAuthOption)
-	suite.NoError(err)
+	require.NoError(t, err)
 	// listener with wrong event type. not getting the event
 	failListener, err := topic.NewListener(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subEventTypeFilterFail"),
 		listener.WithTypeFilter(&notTestEvent{}))
-	suite.NoError(err)
-	suite.typeFilterTest(pub, failListener, false)
+	require.NoError(t, err)
+	typeFilterTest(t, pub, failListener, suite.TopicName, false)
 
 	// update subscription to filter on correct event type. succeeds receiving event
 	successListener, err := topic.NewListener(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subEventTypeFilter"),
 		listener.WithTypeFilter(&testEvent{}))
-	suite.typeFilterTest(pub, successListener, true)
+	typeFilterTest(t, pub, successListener, suite.TopicName, true)
 }
 
 // TestPublishAndListenUsingCustomHeaderFilter tests both the publisher and listener with a customer filter
 func (suite *serviceBusTopicSuite) TestPublishAndListenUsingCustomHeaderFilter() {
-	suite.T().Parallel()
+	t := suite.T()
 	// this assumes that the testTopic was created at the start of the test suite
 	pub, err := topic.NewPublisher(
 		context.Background(),
 		suite.TopicName,
 		suite.publisherAuthOption,
 		publisher.SetDefaultHeader("testHeader", "Key"))
-	suite.NoError(err)
+	require.NoError(t, err)
 	successListener, err := topic.NewListener(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subNameHeader"),
 		listener.WithFilterDescriber("testFilter", servicebus.SQLFilter{Expression: "testHeader LIKE 'key'"}))
-	suite.NoError(err)
+	require.NoError(t, err)
 	failListener, err := topic.NewListener(suite.listenerAuthOption,
 		listener.WithSubscriptionName("subNameHeader"),
 		listener.WithFilterDescriber("testFilter", servicebus.SQLFilter{Expression: "testHeader LIKE 'notkey'"}))
-	suite.NoError(err)
+	require.NoError(t, err)
 
 	suite.customHeaderFilterTest(pub, successListener, true)
 	suite.customHeaderFilterTest(pub, failListener, false)
@@ -102,7 +108,7 @@ func (suite *serviceBusTopicSuite) TestPublishAndListenUsingCustomHeaderFilter()
 
 // TestPublishAndListenWithConnectionStringUsingDuplicateDetection tests both the publisher and listener with duplicate detection
 func (suite *serviceBusTopicSuite) TestPublishAndListenUsingDuplicateDetection() {
-	suite.T().Parallel()
+	t := suite.T()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	dupeDetectionTopicName := suite.Prefix + "deduptopic" + suite.TagID
@@ -112,30 +118,31 @@ func (suite *serviceBusTopicSuite) TestPublishAndListenUsingDuplicateDetection()
 		dupeDetectionTopicName,
 		suite.publisherAuthOption,
 		publisher.WithDuplicateDetection(&dupeDetectionWindow))
-	suite.NoError(err)
+	require.NoError(t, err)
 	l, err := topic.NewListener(suite.listenerAuthOption, listener.WithSubscriptionName("subDedup"))
-	suite.NoError(err)
-	suite.duplicateDetectionTest(pub, l, dupeDetectionTopicName)
+	require.NoError(t, err)
+	duplicateDetectionTest(t, pub, l, dupeDetectionTopicName)
 }
 
 func (suite *serviceBusTopicSuite) TestPublishAndListenRetryLater() {
-	suite.T().Parallel()
+	t := suite.T()
+	t.Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	retryLaterTopic := suite.Prefix + "retrylater" + suite.TagID
 	pub, err := topic.NewPublisher(context.Background(), retryLaterTopic, suite.publisherAuthOption)
-	suite.NoError(err)
+	require.NoError(t, err)
 	l, err := topic.NewListener(
 		suite.listenerAuthOption,
 		listener.WithSubscriptionName("subRetryLater"))
-	suite.NoError(err)
+	require.NoError(t, err)
 	// create retryLater event. listener emits retry based on event type
 	event := &retryLaterEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
 	}
-	suite.publishAndReceiveMessageWithRetryAfter(publishReceiveTest{
+	publishAndReceiveMessageWithRetryAfter(t, publishReceiveTest{
 		topicName:       retryLaterTopic,
 		listener:        l,
 		publisher:       pub,
@@ -145,50 +152,87 @@ func (suite *serviceBusTopicSuite) TestPublishAndListenRetryLater() {
 }
 
 func (suite *serviceBusTopicSuite) TestPublishAndListenShortLockDuration() {
-	suite.T().Parallel()
+	t := suite.T()
+	t.Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	shortLockTopic := suite.Prefix + "shortlock" + suite.TagID
 	pub, err := topic.NewPublisher(context.Background(), shortLockTopic, suite.publisherAuthOption)
-	suite.NoError(err)
+	require.NoError(t, err)
 	l, err := topic.NewListener(
 		suite.listenerAuthOption,
 		listener.WithSubscriptionDetails(2*time.Second, 3),
 		listener.WithSubscriptionName("subshortlock"))
-	suite.NoError(err)
+	require.NoError(t, err)
 	// create retryLater event. listener emits retry based on event type
 	event := &testEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
 	}
-	suite.publishAndReceiveMessageWithAutoLockRenewal(publishReceiveTest{
+	publishAndReceiveMessageWithAutoLockRenewal(t, publishReceiveTest{
 		topicName:       shortLockTopic,
 		listener:        l,
 		publisher:       pub,
 		listenerOptions: []listener.Option{listener.WithMessageLockAutoRenewal(1 * time.Second)},
 		shouldSucceed:   true,
+		receiveTimeout:  10 * time.Second,
+	}, event)
+}
+
+func (suite *serviceBusTopicSuite) TestPublishAndListenRenewLockPassedClaimValidity() {
+	//suite.T().Skip()
+	t := suite.T()
+	t.Parallel()
+	// creating a separate topic that was not created at the beginning of the test suite
+	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
+	shortLockTopic := suite.Prefix + "locktestclaim" + suite.TagID
+	pub, err := topic.NewPublisher(context.Background(), shortLockTopic, suite.publisherAuthOption)
+	require.NoError(t, err)
+	l, err := topic.NewListener(
+		suite.listenerAuthOption,
+		listener.WithSubscriptionDetails(30*time.Second, 1),
+		listener.WithSubscriptionName("subclaimtest"))
+	require.NoError(t, err)
+	// create event. listener emits retry based on event type
+	event := &customLockMessage{
+		SleepMinutes: 16,
+	}
+	publishCount := 500
+	publishAndReceiveMessageWithAutoLockRenewal(t, publishReceiveTest{
+		topicName: shortLockTopic,
+		listener:  l,
+		publisher: pub,
+		listenerOptions: []listener.Option{
+			listener.WithMessageLockAutoRenewal(5 * time.Second),
+			listener.WithPrefetchCount(500),
+			listener.WithMaxConcurrency(500),
+		},
+		shouldSucceed:  true,
+		publishCount:   &publishCount,
+		receiveTimeout: 17 * time.Minute,
 	}, event)
 }
 
 func (suite *serviceBusTopicSuite) TestPublishAndListenNotRenewingLock() {
-	suite.T().Parallel()
+	t := suite.T()
+	t.Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	norenewlockTopic := suite.Prefix + "norenewlock" + suite.TagID
 	pub, err := topic.NewPublisher(context.Background(), norenewlockTopic, suite.publisherAuthOption)
-	suite.NoError(err)
+	require.NoError(t, err)
 	l, err := topic.NewListener(
 		suite.listenerAuthOption,
 		listener.WithSubscriptionDetails(2*time.Second, 2),
 		listener.WithSubscriptionName("norenewlock"))
-	suite.NoError(err)
+	require.NoError(t, err)
 	event := &testEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
 	}
-	suite.publishAndReceiveMessageNotRenewingLock(publishReceiveTest{
+	publishAndReceiveMessageNotRenewingLock(t, publishReceiveTest{
 		topicName:       norenewlockTopic,
 		listener:        l,
 		publisher:       pub,
@@ -198,47 +242,48 @@ func (suite *serviceBusTopicSuite) TestPublishAndListenNotRenewingLock() {
 }
 
 func (suite *serviceBusTopicSuite) TestPublishAndListenConcurrentPrefetch() {
-	suite.T().Parallel()
+	t := suite.T()
+	t.Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
 	// note that this topic will also be deleted at the tear down of the suite due to the tagID at the end of the topic name
 	prefetchTopic := suite.Prefix + "prefetch" + suite.TagID
 	pub, err := topic.NewPublisher(context.Background(), prefetchTopic, suite.publisherAuthOption)
-	suite.NoError(err)
+	require.NoError(t, err)
 	l, err := topic.NewListener(
 		suite.listenerAuthOption,
-		listener.WithSubscriptionDetails(60*time.Second, 2),
+		listener.WithSubscriptionDetails(60*time.Second, 1),
 		listener.WithSubscriptionName("prefetch"))
-	suite.NoError(err)
+	require.NoError(t, err)
 	event := &testEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
 	}
-	publishCount := 200
-	suite.publishAndReceiveMessageWithPrefetch(publishReceiveTest{
+	publishCount := 2000
+	publishAndReceiveMessageWithPrefetch(t, publishReceiveTest{
 		topicName: prefetchTopic,
 		listener:  l,
 		publisher: pub,
 		listenerOptions: []listener.Option{
-			listener.WithPrefetchCount(50),
-			listener.WithMessageLockAutoRenewal(10 * time.Second),
-			listener.WithMaxConcurrency(50),
+			listener.WithPrefetchCount(250),
+			listener.WithMessageLockAutoRenewal(20 * time.Second),
+			listener.WithMaxConcurrency(250),
 		},
 		shouldSucceed: true,
 		publishCount:  &publishCount,
 	}, event)
 }
 
-func (suite *serviceBusTopicSuite) defaultTest(p *publisher.Publisher, l *listener.Listener) {
+func defaultTest(t *testing.T, p *publisher.Publisher, l *listener.Listener, topicName string) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
 	}
-	suite.publishAndReceiveMessage(
+	publishAndReceiveMessage(t,
 		publishReceiveTest{
-			topicName:     suite.TopicName,
+			topicName:     topicName,
 			listener:      l,
 			publisher:     p,
 			shouldSucceed: true,
@@ -247,16 +292,16 @@ func (suite *serviceBusTopicSuite) defaultTest(p *publisher.Publisher, l *listen
 	)
 }
 
-func (suite *serviceBusTopicSuite) defaultTestWithMessageTwice(p *publisher.Publisher, l *listener.Listener) {
+func defaultTestWithMessageTwice(t *testing.T, p *publisher.Publisher, l *listener.Listener, topicName string) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
 		Key:   "key1",
 		Value: "value1",
 	}
-	suite.publishAndReceiveMessageTwice(
+	publishAndReceiveMessageTwice(t,
 		publishReceiveTest{
-			topicName:     suite.TopicName,
+			topicName:     topicName,
 			listener:      l,
 			publisher:     p,
 			shouldSucceed: true,
@@ -265,7 +310,7 @@ func (suite *serviceBusTopicSuite) defaultTestWithMessageTwice(p *publisher.Publ
 	)
 }
 
-func (suite *serviceBusTopicSuite) typeFilterTest(p *publisher.Publisher, l *listener.Listener, shouldSucceed bool) {
+func typeFilterTest(t *testing.T, p *publisher.Publisher, l *listener.Listener, topicName string, shouldSucceed bool) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -273,9 +318,9 @@ func (suite *serviceBusTopicSuite) typeFilterTest(p *publisher.Publisher, l *lis
 		Value: "value",
 	}
 	// test with a filter on the event type
-	suite.publishAndReceiveMessage(
+	publishAndReceiveMessage(t,
 		publishReceiveTest{
-			topicName:     suite.TopicName,
+			topicName:     topicName,
 			listener:      l,
 			publisher:     p,
 			shouldSucceed: shouldSucceed,
@@ -285,6 +330,7 @@ func (suite *serviceBusTopicSuite) typeFilterTest(p *publisher.Publisher, l *lis
 }
 
 func (suite *serviceBusTopicSuite) customHeaderFilterTest(pub *publisher.Publisher, l *listener.Listener, shouldSucceed bool) {
+	t := suite.T()
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -292,7 +338,7 @@ func (suite *serviceBusTopicSuite) customHeaderFilterTest(pub *publisher.Publish
 		Value: "value",
 	}
 	// test with a filter on the custom header
-	suite.publishAndReceiveMessage(
+	publishAndReceiveMessage(t,
 		publishReceiveTest{
 			topicName:     suite.TopicName,
 			listener:      l,
@@ -303,7 +349,7 @@ func (suite *serviceBusTopicSuite) customHeaderFilterTest(pub *publisher.Publish
 	)
 }
 
-func (suite *serviceBusTopicSuite) duplicateDetectionTest(pub *publisher.Publisher, l *listener.Listener, topicName string) {
+func duplicateDetectionTest(t *testing.T, pub *publisher.Publisher, l *listener.Listener, topicName string) {
 	// create test event
 	event := &testEvent{
 		ID:    1,
@@ -312,7 +358,7 @@ func (suite *serviceBusTopicSuite) duplicateDetectionTest(pub *publisher.Publish
 	}
 	// test with duplicate detection
 	publishCount := 2
-	suite.publishAndReceiveMessage(
+	publishAndReceiveMessage(t,
 		publishReceiveTest{
 			topicName:        topicName,
 			listener:         l,
@@ -331,7 +377,7 @@ func (suite *serviceBusTopicSuite) duplicateDetectionTest(pub *publisher.Publish
 		Key:   "key2",
 		Value: "value2",
 	}
-	suite.publishAndReceiveMessage(
+	publishAndReceiveMessage(t,
 		publishReceiveTest{
 			topicName:     topicName,
 			listener:      l,
@@ -342,7 +388,7 @@ func (suite *serviceBusTopicSuite) duplicateDetectionTest(pub *publisher.Publish
 	)
 }
 
-func (suite *serviceBusTopicSuite) publishAndReceiveMessage(testConfig publishReceiveTest, event interface{}) {
+func publishAndReceiveMessage(t *testing.T, testConfig publishReceiveTest, event interface{}) {
 	ctx := context.Background()
 	gotMessage := make(chan bool)
 	if testConfig.listenerOptions == nil {
@@ -355,7 +401,7 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessage(testConfig publishRe
 	// setup listener
 	go func() {
 		eventJSON, err := json.Marshal(event)
-		suite.NoError(err)
+		require.NoError(t, err)
 		err = testConfig.listener.Listen(
 			ctx,
 			checkResultHandler(string(eventJSON), reflection.GetType(testEvent{}), gotMessage),
@@ -375,31 +421,33 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessage(testConfig publishRe
 			event,
 			testConfig.publisherOptions...,
 		)
-		suite.NoError(err)
+		require.NoError(t, err)
 	}
 
 	select {
 	case isSuccessful := <-gotMessage:
 		if testConfig.shouldSucceed != isSuccessful {
-			suite.FailNow("Test did not succeed")
+			t.Log("Test did not succeed")
+			t.FailNow()
 		}
 	case <-time.After(15 * time.Second):
 		if testConfig.shouldSucceed {
-			suite.FailNow("Test didn't finish on time")
+			t.Log("Test didn't finish on time")
+			t.FailNow()
 		}
 	}
 	err := testConfig.listener.Close(ctx)
-	suite.NoError(err)
+	require.NoError(t, err)
 }
 
-func (suite *serviceBusTopicSuite) publishAndReceiveMessageWithRetryAfter(testConfig publishReceiveTest, event interface{}) {
+func publishAndReceiveMessageWithRetryAfter(t *testing.T, testConfig publishReceiveTest, event interface{}) {
 	ctx := context.Background()
 	gotMessage := make(chan bool)
 
 	// setup listener
 	go func() {
 		eventJSON, err := json.Marshal(event)
-		suite.NoError(err)
+		require.NoError(t, err)
 		err = testConfig.listener.Listen(
 			ctx,
 			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
@@ -422,24 +470,26 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageWithRetryAfter(testCo
 			event,
 			testConfig.publisherOptions...,
 		)
-		suite.NoError(err)
+		require.NoError(t, err)
 	}
 
 	select {
 	case isSuccessful := <-gotMessage:
 		if testConfig.shouldSucceed != isSuccessful {
-			suite.FailNow("Test did not succeed")
+			t.FailNow()
 		}
+		t.Log("Message succesfully completed")
 	case <-time.After(10 * time.Second):
 		if testConfig.shouldSucceed {
-			suite.FailNow("Test didn't finish on time")
+			t.Log("Test didn't finish on time")
+			t.FailNow()
 		}
 	}
 	err := testConfig.listener.Close(ctx)
-	suite.NoError(err)
+	require.NoError(t, err)
 }
 
-func (suite *serviceBusTopicSuite) publishAndReceiveMessageTwice(testConfig publishReceiveTest, event interface{}) {
+func publishAndReceiveMessageTwice(t *testing.T, testConfig publishReceiveTest, event interface{}) {
 	ctx := context.Background()
 	gotMessage := make(chan bool)
 	if testConfig.listenerOptions == nil {
@@ -452,7 +502,7 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageTwice(testConfig publ
 	// setup listener
 	go func() {
 		eventJSON, err := json.Marshal(event)
-		suite.NoError(err)
+		require.NoError(t, err)
 		err = testConfig.listener.Listen(
 			ctx,
 			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
@@ -469,16 +519,17 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageTwice(testConfig publ
 		event,
 		testConfig.publisherOptions...,
 	)
-	suite.NoError(err)
+	require.NoError(t, err)
 
 	select {
 	case isSuccessful := <-gotMessage:
 		if testConfig.shouldSucceed != isSuccessful {
-			suite.FailNow("Test did not succeed")
+			t.FailNow()
 		}
 	case <-time.After(10 * time.Second):
 		if testConfig.shouldSucceed {
-			suite.FailNow("Test didn't finish on time")
+			t.Log("Test didn't finish on time")
+			t.FailNow()
 		}
 	}
 
@@ -489,33 +540,35 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageTwice(testConfig publ
 		event,
 		testConfig.publisherOptions...,
 	)
-	suite.NoError(err)
+	require.NoError(t, err)
 
 	select {
 	case isSuccessful := <-gotMessage:
 		if testConfig.shouldSucceed != isSuccessful {
-			suite.FailNow("Test did not succeed")
+			t.FailNow()
 		}
 	case <-time.After(10 * time.Second):
 		if testConfig.shouldSucceed {
-			suite.FailNow("Test didn't finish on time")
+			t.Log("Test didn't finish on time")
+			t.FailNow()
 		}
 	}
 
 	err = testConfig.listener.Close(ctx)
-	suite.NoError(err)
+	require.NoError(t, err)
 }
 
-func (suite *serviceBusTopicSuite) publishAndReceiveMessageWithAutoLockRenewal(testConfig publishReceiveTest, event interface{}) {
-	ctx := context.Background()
+func publishAndReceiveMessageWithAutoLockRenewal(t *testing.T, testConfig publishReceiveTest, event interface{}) {
+	sendCtx := context.Background()
+	listenCtx := context.Background()
 	gotMessage := make(chan bool)
 
 	// setup listener
 	go func() {
 		eventJSON, err := json.Marshal(event)
-		suite.NoError(err)
+		require.NoError(t, err)
 		testConfig.listener.Listen(
-			ctx,
+			listenCtx,
 			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
@@ -528,29 +581,41 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageWithAutoLockRenewal(t
 		publishCount = *testConfig.publishCount
 	}
 	for i := 0; i < publishCount; i++ {
-		err := testConfig.publisher.Publish(
-			ctx,
-			event,
-			testConfig.publisherOptions...,
-		)
-		suite.NoError(err)
+		go func() {
+			err := testConfig.publisher.Publish(
+				sendCtx,
+				event,
+				testConfig.publisherOptions...,
+			)
+			require.NoError(t, err)
+		}()
 	}
-
-	select {
-	case isSuccessful := <-gotMessage:
-		if testConfig.shouldSucceed != isSuccessful {
-			suite.FailNow("Test did not succeed")
-		}
-	case <-time.After(5 * time.Second):
-		if testConfig.shouldSucceed {
-			suite.FailNow("Test didn't finish on time")
+	completedCount := 0
+	deadline := time.After(testConfig.receiveTimeout)
+	for completedCount < publishCount {
+		select {
+		case isSuccessful := <-gotMessage:
+			t.Log("Processed message ", completedCount)
+			if testConfig.shouldSucceed != isSuccessful {
+				t.Fail()
+				completedCount = publishCount //exit
+			} else {
+				completedCount++
+				t.Log("Message successfully completed ", completedCount)
+			}
+		case <-deadline:
+			if testConfig.shouldSucceed {
+				t.Log("Message successfully completed ", completedCount)
+				t.FailNow()
+			}
+			completedCount = publishCount // exit
 		}
 	}
-	err := testConfig.listener.Close(ctx)
-	suite.NoError(err)
+	err := testConfig.listener.Close(listenCtx)
+	require.NoError(t, err)
 }
 
-func (suite *serviceBusTopicSuite) publishAndReceiveMessageNotRenewingLock(testConfig publishReceiveTest, event interface{}) {
+func publishAndReceiveMessageNotRenewingLock(t *testing.T, testConfig publishReceiveTest, event interface{}) {
 	parenrCtx := context.Background()
 	returnedHandler := make(chan message.Handler, 1)
 	lockRenewalFailureHandler := message.HandleFunc(func(ctx context.Context, msg *message.Message) message.Handler {
@@ -558,13 +623,15 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageNotRenewingLock(testC
 		defer sp.End()
 		tab.StringAttribute("msg.DeliveryCount", fmt.Sprint(msg.Message().DeliveryCount))
 		tab.StringAttribute("msg.LockedUntil", fmt.Sprint(msg.Message().SystemProperties.LockedUntil))
+		t.Logf("[%s] msg.DeliveryCount: %d \n", time.Now().In(time.UTC), msg.Message().DeliveryCount)
+		t.Logf("[%s] msg.LockedUntil: %s \n", time.Now().In(time.UTC), msg.Message().SystemProperties.LockedUntil)
 
 		// the shortlock is set at 1 second in the listener setup
 		// We sleep for longer to trigger the lock renewal in the listener.
 		// if the renewal works, then the message completion will succeed.
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 
-		fmt.Printf("[%s] trying to complete!\n", time.Now())
+		t.Logf("[%s] trying to complete!\n", time.Now())
 		// Force inline completion to retrieve resulting handler
 		res := msg.Complete().Do(ctx, nil, msg.Message())
 		// push the returned handler into the channel to trigger the assertion below
@@ -588,23 +655,23 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageNotRenewingLock(testC
 		event,
 		testConfig.publisherOptions...,
 	)
-	suite.NoError(err)
+	require.NoError(t, err)
 
 	// expect error handler returned
 	select {
 	case h := <-returnedHandler:
 		// This shows that the handler Complete call returns an error when the lock
 		// on the message has expired.
-		assert.True(suite.T(), message.IsError(h))
+		assert.True(t, message.IsError(h))
 	case <-time.After(12 * time.Second):
-		suite.T().Errorf("message never reached the handler or is hanging")
+		t.Errorf("message never reached the handler or is hanging")
 	}
 	err = testConfig.listener.Close(parenrCtx)
 	time.Sleep(2 * time.Second)
-	suite.NoError(err)
+	require.NoError(t, err)
 }
 
-func (suite *serviceBusTopicSuite) publishAndReceiveMessageWithPrefetch(testConfig publishReceiveTest, event *testEvent) {
+func publishAndReceiveMessageWithPrefetch(t *testing.T, testConfig publishReceiveTest, event *testEvent) {
 	parentCtx := context.Background()
 	returnedHandler := make(chan message.Handler, *testConfig.publishCount)
 	lockRenewalFailureHandler := message.HandleFunc(func(ctx context.Context, msg *message.Message) message.Handler {
@@ -614,7 +681,7 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageWithPrefetch(testConf
 		tab.StringAttribute("msg.LockedUntil", fmt.Sprint(msg.Message().SystemProperties.LockedUntil))
 
 		// simulate work
-		time.Sleep(20 * time.Second)
+		time.Sleep(10 * time.Second)
 
 		fmt.Printf("[%s] trying to complete ID %s!\n", time.Now().Format(time.RFC3339), msg.Message().ID)
 		// Force inline completion to retrieve resulting handler
@@ -633,67 +700,61 @@ func (suite *serviceBusTopicSuite) publishAndReceiveMessageWithPrefetch(testConf
 			testConfig.listenerOptions...,
 		)
 	}()
-	time.Sleep(2 * time.Second)
-	if err := testConfig.listener.Close(parentCtx); err != nil {
-		fmt.Printf("error on close is OK here. no message received yet: %s", err)
-	}
+	time.Sleep(5 * time.Second)
 
 	// publish all the events
 	for i := 0; i < *testConfig.publishCount; i++ {
 		event.ID = i
-		err := testConfig.publisher.Publish(
-			parentCtx,
-			event,
-			testConfig.publisherOptions...)
-		if err != nil {
-			suite.T().Errorf(err.Error())
-		}
+		go func(e testEvent) {
+			err := testConfig.publisher.Publish(
+				parentCtx,
+				event,
+				testConfig.publisherOptions...)
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			t.Log("Published event", e.ID)
+		}(*event)
 	}
 
 	fmt.Printf("\n!!!!!!!!!!!! PUBLISH DONE. START LISTENING!!!!!!!!!\n")
-
-	// restart the listener
-	go func() {
-		testConfig.listener.Listen(
-			parentCtx,
-			lockRenewalFailureHandler,
-			testConfig.topicName,
-			testConfig.listenerOptions...,
-		)
-	}()
 
 	totalHandled := 0
 	run := true
 
 	// expect only success handler returned
-	maxTime := 1 * time.Minute
+	maxTime := 5 * time.Minute
 	timeout := time.NewTimer(maxTime)
 	for run {
 		select {
 		case h := <-returnedHandler:
 			// This shows that the handler Complete call returns an error when the lock
 			// on the message has expired.
-			assert.True(suite.T(), message.IsDone(h), "should return a doneHandler on success")
+			assert.True(t, message.IsDone(h), "should return a doneHandler on success")
 			if message.IsError(h) {
-				suite.T().Errorf("failed to handle message succesfully")
-				suite.T().FailNow()
+				t.Errorf("failed to handle message succesfully")
+				t.FailNow()
 			}
 			totalHandled++
-			suite.T().Log("successfully processed msg", totalHandled)
+			t.Log("successfully processed msg", totalHandled)
 			if totalHandled == *testConfig.publishCount {
 				run = false
 				timeout.Stop()
 			}
 		case <-timeout.C:
-			suite.T().Errorf("took over %s seconds for %d messages", maxTime, *testConfig.publishCount)
+			t.Errorf("took over %s seconds for %d messages", maxTime, *testConfig.publishCount)
 			run = false
 		}
 	}
 
 	err := testConfig.listener.Close(parentCtx)
 	if err != nil {
-		suite.T().Errorf("failed to close the listener: %s", err)
+		t.Errorf("failed to close the listener: %s", err)
 	}
+}
+
+type customLockMessage struct {
+	SleepMinutes int
 }
 
 func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- bool) message.Handler {
@@ -731,6 +792,31 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				// We sleep for longer to trigger the lock renewal in the listener.
 				// if the renewal works, then the message completion will succeed.
 				time.Sleep(3 * time.Second)
+				resHandler := message.Complete().Do(ctx, nil, msg.Message()) //if renew failed, complete will fail and we don't return Done().
+				if message.IsDone(resHandler) {
+					ch <- true
+				} else if message.IsError(resHandler) {
+					resHandler = resHandler.Do(ctx, nil, msg.Message())
+					ch <- false
+				}
+				return resHandler
+			}
+			if publishedMsgType == reflection.GetType(customLockMessage{}) {
+				// the shortlock is set at 1 second in the listener setup
+				// We sleep for longer to trigger the lock renewal in the listener.
+				// if the renewal works, then the message completion will succeed.
+				fmt.Println("=== Handling message ===")
+				lockMessage := &customLockMessage{}
+				err := json.Unmarshal([]byte(msg.Data()), lockMessage)
+				if err != nil {
+					fmt.Println("=== failed unmarshalling :", err)
+					ch <- false
+					return message.Complete().Do(ctx, nil, msg.Message())
+				}
+				sleepTime := time.Duration(int64(lockMessage.SleepMinutes) * int64(time.Minute))
+				fmt.Println("=== sleeping for ", sleepTime)
+				time.Sleep(sleepTime)
+				fmt.Println("=== done sleeping! ")
 				resHandler := message.Complete().Do(ctx, nil, msg.Message()) //if renew failed, complete will fail and we don't return Done().
 				if message.IsDone(resHandler) {
 					ch <- true

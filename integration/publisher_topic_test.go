@@ -11,63 +11,71 @@ import (
 	"github.com/Azure/go-shuttle/topic"
 	"github.com/Azure/go-shuttle/topic/publisher"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestCreatePublisherWithNewTopic tests the creation of a publisher for a new topic
 func (suite *serviceBusTopicSuite) TestCreatePublisherUsingNewTopic() {
-	suite.T().Parallel()
+	t := suite.T()
+	t.Parallel()
 	topicName := "newTopic" + suite.TagID
 	_, err := topic.NewPublisher(context.Background(), topicName, suite.publisherAuthOption)
-	if suite.NoError(err) {
+
+	if assert.NoError(t, err) {
 		// make sure that topic exists
 		ns := suite.GetNewNamespace()
 		tm := ns.NewTopicManager()
 		_, err := tm.Get(context.Background(), topicName)
-		suite.NoError(err)
+		require.NoError(t, err)
 
 		// delete new topic
 		err = tm.Delete(context.Background(), topicName)
-		suite.NoError(err)
+		require.NoError(t, err)
 	}
 }
 
 // TestCreatePublisherWithExistingTopic tests the creation of a publisher for an existing topic and a connection string
 func (suite *serviceBusTopicSuite) TestCreatePublisherUsingExistingTopic() {
+	t := suite.T()
+	t.Parallel()
 	// this assumes that the testTopic was created at the start of the test suite
 	_, err := topic.NewPublisher(context.Background(), suite.TopicName, suite.publisherAuthOption)
-	if suite.NoError(err) {
+	if assert.NoError(t, err) {
 		// make sure that topic exists
 		ns := suite.GetNewNamespace()
 		tm := ns.NewTopicManager()
 		_, err := tm.Get(context.Background(), suite.TopicName)
-		suite.NoError(err)
+		require.NoError(t, err)
 	}
 }
 
 // TestPublishAfterIdle tests the creation of a publisher for an existing topic and a connection string
 func (suite *serviceBusTopicSuite) TestPublishAfterIdle() {
-	suite.T().Parallel()
+	t := suite.T()
+	t.Parallel()
 	type idlenessTest struct {
 		topicName string
 		sleepTime time.Duration
 	}
 
 	tests := []idlenessTest{
-		{topicName: "idle6min", sleepTime: 5 * time.Minute},
+		{topicName: "idle1min", sleepTime: 1 * time.Minute},
+		{topicName: "idle3min", sleepTime: 3 * time.Minute},
+		{topicName: "idle6min", sleepTime: 6 * time.Minute},
 	}
 	for _, idleTestCase := range tests {
 		tc := idleTestCase
-		suite.T().Run(suite.T().Name()+tc.topicName, func(test *testing.T) {
-			test.Parallel()
+		t.Run(t.Name()+tc.topicName, func(tt *testing.T) {
 			err := testIdleness(suite.publisherAuthOption, tc.topicName, tc.sleepTime)
-			assert.NoError(test, err)
+			require.NoError(tt, err)
 		})
 	}
 }
 
 // TestPublishAfterIdle tests the creation of a publisher for an existing topic and a connection string
 func (suite *serviceBusTopicSuite) TestSoakPub() {
-	suite.T().Parallel()
+	t := suite.T()
+	t.Parallel()
 	type idlenessTest struct {
 		topicName string
 		sleepTime time.Duration
@@ -76,7 +84,7 @@ func (suite *serviceBusTopicSuite) TestSoakPub() {
 	tests := []idlenessTest{
 		{topicName: "soakinterval2sec", sleepTime: 2 * time.Second},
 		{topicName: "soakinterval30sec", sleepTime: 30 * time.Second},
-		{topicName: "soakinterval5min", sleepTime: 2 * time.Minute},
+		{topicName: "soakinterval2min", sleepTime: 2 * time.Minute},
 	}
 
 	soakTime := 10 * time.Minute
@@ -84,12 +92,10 @@ func (suite *serviceBusTopicSuite) TestSoakPub() {
 
 	for _, soak := range tests {
 		tc := soak
-		suite.T().Run(suite.T().Name()+tc.topicName, func(test *testing.T) {
-			test.Parallel()
+		t.Run(t.Name()+tc.topicName, func(tt *testing.T) {
+			tt.Parallel()
 			err := testTopicSoak(deadline, suite.publisherAuthOption, tc.topicName, tc.sleepTime)
-			if !assert.NoError(test, err) {
-				suite.FailNow(err.Error())
-			}
+			require.NoError(tt, err)
 		})
 	}
 }
@@ -121,6 +127,7 @@ func testTopicSoak(ctx context.Context, authOptions publisher.ManagementOption, 
 		select {
 		case <-time.After(idleTime):
 		case <-ctx.Done():
+			ok = false
 			continue
 		}
 	}
@@ -132,11 +139,13 @@ func testIdleness(authOptions publisher.ManagementOption, topicName string, idle
 	if err != nil {
 		return err
 	}
-	p.Publish(context.TODO(), &testEvent{
+	if err = p.Publish(context.TODO(), &testEvent{
 		ID:    1,
 		Key:   "key1",
 		Value: "value1",
-	})
+	}); err != nil {
+		return err
+	}
 	time.Sleep(idleTime)
 	return p.Publish(context.TODO(), &testEvent{
 		ID:    2,

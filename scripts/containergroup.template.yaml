@@ -1,4 +1,3 @@
-name: pubsubtester
 apiVersion: '2019-12-01'
 location: westus2
 identity:
@@ -7,13 +6,16 @@ identity:
     "${MANAGED_IDENTITY_RESOURCE_ID}": {}
 properties:
   containers:
-  - name: tester
+  - name: integration
     properties:
       image: ${IMAGE}
       resources: # Resource requirements of the instance
         requests:
-          memoryInGB: 2
-          cpu: 2
+          memoryInGB: 16
+          cpu: 4
+      volumeMounts:
+      - mountPath: /aci/logs
+        name: logs
       environmentVariables:
       - name: AZURE_CLIENT_SECRET
         secureValue: ${AZURE_CLIENT_SECRET}
@@ -35,9 +37,25 @@ properties:
         value: ${TEST_LOCATION}
       - name: TEST_RESOURCE_GROUP
         value: ${TEST_RESOURCE_GROUP}
+      - name: STORAGE_ACCOUNT_NAME
+        value: ${STORAGE_ACCOUNT_NAME}
+      - name: LOG_DIRECTORY
+        value: ${LOG_DIRECTORY}
+      - name: SUITE
+        value: ${SUITE}
+      - name: GOTESTSUM_JUNITFILE
+        value: ${GOTESTSUM_JUNITFILE}
+      - name: START_SLEEP
+        value: 90
   imageRegistryCredentials: # Credentials to pull a private image
   - server: ${REGISTRY}
     username: ${REGISTRY_USER}
     password: ${REGISTRY_PASSWORD}
   restartPolicy: Never
   osType: Linux
+  volumes:
+  - name: logs
+    azureFile:
+      sharename: acilogs
+      storageAccountName: ${STORAGE_ACCOUNT_NAME}
+      storageAccountKey: ${STORAGE_ACCOUNT_KEY}
