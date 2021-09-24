@@ -46,7 +46,7 @@ properties:
       - name: GOTESTSUM_JUNITFILE
         value: ${GOTESTSUM_JUNITFILE}
       - name: START_SLEEP
-        value: 60
+        value: 90
   imageRegistryCredentials: # Credentials to pull a private image
   - server: ${REGISTRY}
     username: ${REGISTRY_USER}
