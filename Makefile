@@ -81,6 +81,15 @@ integration-pipeline: scripts/containergroup.yaml
 	--query id -o tsv); \
 	./scripts/wait-aci.sh $${containerId}
 
+integration-clean-aci:
+	SUITE=$$(echo "${SUITE}" | tr '[:upper:]' '[:lower:]') \
+	az container delete \
+	--resource-group ${TEST_RESOURCE_GROUP} \
+	--name "bld${ACI_CONTAINER_NAME}-${SUITE}" \
+	--subscription ${AZURE_SUBSCRIPTION_ID} \
+	--verbose \
+	--yes
+
 download-junit:
 	az storage file download-batch \
 	--account-name ${STORAGE_ACCOUNT_NAME} \
