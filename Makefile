@@ -83,12 +83,10 @@ integration-pipeline: scripts/containergroup.yaml
 
 integration-clean-aci:
 	SUITE=$$(echo "${SUITE}" | tr '[:upper:]' '[:lower:]') \
-	az container delete \
-	--resource-group ${TEST_RESOURCE_GROUP} \
-	--name "bld${ACI_CONTAINER_NAME}-${SUITE}" \
-	--subscription ${AZURE_SUBSCRIPTION_ID} \
-	--verbose \
-	--yes
+	az rest \
+	--method delete \
+	--uri "/subscriptions/{subscriptionId}/resourceGroups/${TEST_RESOURCE_GROUP}/providers/Microsoft.ContainerInstance/containerGroups/bld${ACI_CONTAINER_NAME}-${SUITE}?api-version=2019-12-01" \
+	--subscription 2b03bfb8-e885-4566-a62a-909a11d71692
 
 download-junit:
 	az storage file download-batch \
