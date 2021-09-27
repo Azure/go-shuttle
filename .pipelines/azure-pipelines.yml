@@ -108,6 +108,12 @@ jobs:
         ACI_CONTAINER_NAME: $(Build.BuildId)
         GOTESTSUM_JUNITFILE: /aci/logs/$(Build.BuildNumber)/$(suite).junit.xml
 
+    - bash: SUITE=$(suite) make integration-clean-aci
+      condition: always()
+      displayName: clean ACI $(suite)
+      env:
+        ACI_CONTAINER_NAME: $(Build.BuildId)
+
   - job: publish
     dependsOn: test
     displayName: publish test results
