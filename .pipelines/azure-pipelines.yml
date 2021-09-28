@@ -14,8 +14,7 @@ pr:
     - main
 
 pool:
-  name: 1ES-AKS-Elastic-DevInfra-Normal-Pool
-  vmImage: ubuntu-latest
+  name: 1ES-AKS-Elastic-DevInfra-Prod-Pool
 
 jobs:
   - job: image
