@@ -44,6 +44,24 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingExistingQueue() {
 	}
 }
 
+// TestCreatePublisherWithDeadLetterForwardUsingNewQueue tests the creation of a publisher for a new queue
+func (suite *serviceBusQueueSuite) TestCreatePublisherWithDeadLetterForwardUsingNewQueue() {
+	suite.T().Parallel()
+	queueName := "newQueue" + suite.TagID
+	_, err := queue.NewPublisher(context.Background(), queueName, suite.publisherAuthOption, publisher.WithForwardDeadLetteredMessagesTo(queueName+"DLQ", 1000))
+	if suite.NoError(err) {
+		// make sure that queue exists
+		ns := suite.GetNewNamespace()
+		tm := ns.NewQueueManager()
+		_, err := tm.Get(context.Background(), queueName)
+		require.NoError(suite.T(), err)
+
+		// delete new queue
+		err = tm.Delete(context.Background(), queueName)
+		require.NoError(suite.T(), err)
+	}
+}
+
 // TestPublishAfterIdle tests the creation of a publisher for an existing queue and a connection string
 func (suite *serviceBusQueueSuite) TestPublishAfterIdle() {
 	suite.T().Parallel()
