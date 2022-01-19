@@ -46,7 +46,8 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingExistingQueue() {
 
 // TestCreatePublisherWithDeadLetterForwardUsingNewQueue tests the creation of a publisher for a new queue
 func (suite *serviceBusQueueSuite) TestCreatePublisherWithDeadLetterForwardUsingNewQueue() {
-	suite.T().Parallel()
+	testContext := suite.T()
+	suite.Parallel()
 	queueName := "newQueue" + suite.TagID
 	_, err := queue.NewPublisher(context.Background(), queueName, suite.publisherAuthOption, publisher.WithForwardDeadLetteredMessagesTo(queueName+"DLQ", 1000))
 	if suite.NoError(err) {
@@ -54,11 +55,11 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherWithDeadLetterForwardUsing
 		ns := suite.GetNewNamespace()
 		tm := ns.NewQueueManager()
 		_, err := tm.Get(context.Background(), queueName)
-		require.NoError(suite.T(), err)
+		require.NoError(testContext, err)
 
 		// delete new queue
 		err = tm.Delete(context.Background(), queueName)
-		require.NoError(suite.T(), err)
+		require.NoError(testContext, err)
 	}
 }
 
