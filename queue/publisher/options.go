@@ -1,13 +1,17 @@
 package publisher
 
 import (
-	"github.com/Azure/go-shuttle/common"
-	"github.com/Azure/go-shuttle/common/options/publisheropts"
+	"context"
 	"time"
 
-	"github.com/Azure/azure-service-bus-go"
+	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/go-shuttle/common"
+	"github.com/Azure/go-shuttle/common/options/publisheropts"
 )
+
+type DeadLetterTarget struct {
+}
 
 // ManagementOption provides structure for configuring a new Publisher
 type ManagementOption = publisheropts.ManagementOption
@@ -51,6 +55,24 @@ func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 func WithDuplicateDetection(window *time.Duration) ManagementOption {
 	return func(p common.Publisher) error {
 		p.(QueuePublisher).AppendQueueManagementOption(servicebus.QueueEntityWithDuplicateDetection(window))
+		return nil
+	}
+}
+
+// WithForwardDeadLetteredMessagesTo forwards deadlettered messages to a targetable queue, the identity must have management permissions on said queue
+func WithForwardDeadLetteredMessagesTo(deadLetterTargetName string, deliveryCount int) ManagementOption {
+	return func(p common.Publisher) error {
+		qm := p.Namespace().NewQueueManager()
+
+		if _, err := qm.Put(context.Background(), deadLetterTargetName, servicebus.QueueEntityWithMaxDeliveryCount(int32(deliveryCount))); err != nil {
+			return err
+		}
+
+		deadLetterTarget, err := p.Namespace().NewQueueManager().Get(context.Background(), deadLetterTargetName)
+		if err != nil {
+			return err
+		}
+		p.(QueuePublisher).AppendQueueManagementOption(servicebus.QueueEntityWithForwardDeadLetteredMessagesTo(deadLetterTarget))
 		return nil
 	}
 }
