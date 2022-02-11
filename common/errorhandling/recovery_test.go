@@ -41,7 +41,7 @@ func TestIsConnectionDead(t *testing.T) {
 		{name: "sb.ErrConnClosed", givenError: servicebus.ErrConnectionClosed("Blah"), want: true},
 		{name: "AmqpInternalError", givenError: &amqp.Error{
 			Condition:   amqp.ErrorInternalError,
-			Description: "The service was unable to process the request",
+			Description: "The service was unable to process the request, please retry",
 			Info:        nil,
 		}, want: true},
 		{name: "temporaryError", givenError: temporaryError{}, want: false},
