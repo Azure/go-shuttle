@@ -24,7 +24,7 @@ func isAmqpInternalError(err error) bool {
 	var amqpErr *amqp.Error
 	return errors.As(err, &amqpErr) &&
 		amqpErr.Condition == amqp.ErrorInternalError &&
-		strings.HasPrefix("the service was unable to process the request", strings.ToLower(amqpErr.Description))
+		strings.HasPrefix(strings.ToLower(amqpErr.Description), "the service was unable to process the request")
 }
 
 func isPermanentNetError(err error) bool {
