@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package integration
@@ -47,7 +48,7 @@ func (suite *serviceBusQueueSuite) TestCreatePublisherUsingExistingQueue() {
 // TestCreatePublisherWithDeadLetterForwardUsingNewQueue tests the creation of a publisher for a new queue
 func (suite *serviceBusQueueSuite) TestCreatePublisherWithDeadLetterForwardUsingNewQueue() {
 	testContext := suite.T()
-	suite.Parallel()
+	suite.T().Parallel()
 	queueName := "newQueue" + suite.TagID
 	_, err := queue.NewPublisher(context.Background(), queueName, suite.publisherAuthOption, publisher.WithForwardDeadLetteredMessagesTo(queueName+"DLQ", 1000))
 	if suite.NoError(err) {
