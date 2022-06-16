@@ -1,24 +1,25 @@
+//go:build integration
 // +build integration
 
 package integration
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/devigned/tab"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/message"
 	"github.com/Azure/go-shuttle/topic"
 	"github.com/Azure/go-shuttle/topic/listener"
 	"github.com/Azure/go-shuttle/topic/publisher"
-	"github.com/devigned/tab"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
@@ -181,7 +182,7 @@ func (suite *serviceBusTopicSuite) TestPublishAndListenShortLockDuration() {
 }
 
 func (suite *serviceBusTopicSuite) TestPublishAndListenRenewLockPassedClaimValidity() {
-	//suite.T().Skip()
+	// suite.T().Skip()
 	t := suite.T()
 	t.Parallel()
 	// creating a separate topic that was not created at the beginning of the test suite
@@ -400,11 +401,11 @@ func publishAndReceiveMessage(t *testing.T, testConfig publishReceiveTest, event
 
 	// setup listener
 	go func() {
-		eventJSON, err := json.Marshal(event)
+		eventBytes, err := testConfig.publisher.Marshaller().Marshal(event)
 		require.NoError(t, err)
 		err = testConfig.listener.Listen(
 			ctx,
-			checkResultHandler(string(eventJSON), reflection.GetType(testEvent{}), gotMessage),
+			checkResultHandler(string(eventBytes), reflection.GetType(testEvent{}), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
@@ -446,11 +447,11 @@ func publishAndReceiveMessageWithRetryAfter(t *testing.T, testConfig publishRece
 
 	// setup listener
 	go func() {
-		eventJSON, err := json.Marshal(event)
+		eventBytes, err := testConfig.publisher.Marshaller().Marshal(event)
 		require.NoError(t, err)
 		err = testConfig.listener.Listen(
 			ctx,
-			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
+			checkResultHandler(string(eventBytes), reflection.GetType(event), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
@@ -501,11 +502,11 @@ func publishAndReceiveMessageTwice(t *testing.T, testConfig publishReceiveTest, 
 
 	// setup listener
 	go func() {
-		eventJSON, err := json.Marshal(event)
+		eventBytes, err := testConfig.publisher.Marshaller().Marshal(event)
 		require.NoError(t, err)
 		err = testConfig.listener.Listen(
 			ctx,
-			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
+			checkResultHandler(string(eventBytes), reflection.GetType(event), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
@@ -565,11 +566,11 @@ func publishAndReceiveMessageWithAutoLockRenewal(t *testing.T, testConfig publis
 
 	// setup listener
 	go func() {
-		eventJSON, err := json.Marshal(event)
+		eventBytes, err := testConfig.publisher.Marshaller().Marshal(event)
 		require.NoError(t, err)
 		testConfig.listener.Listen(
 			listenCtx,
-			checkResultHandler(string(eventJSON), reflection.GetType(event), gotMessage),
+			checkResultHandler(string(eventBytes), reflection.GetType(event), gotMessage),
 			testConfig.topicName,
 			testConfig.listenerOptions...,
 		)
@@ -598,7 +599,7 @@ func publishAndReceiveMessageWithAutoLockRenewal(t *testing.T, testConfig publis
 			t.Log("Processed message ", completedCount)
 			if testConfig.shouldSucceed != isSuccessful {
 				t.Fail()
-				completedCount = publishCount //exit
+				completedCount = publishCount // exit
 			} else {
 				completedCount++
 				t.Log("Message successfully completed ", completedCount)
@@ -792,7 +793,7 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				// We sleep for longer to trigger the lock renewal in the listener.
 				// if the renewal works, then the message completion will succeed.
 				time.Sleep(3 * time.Second)
-				resHandler := message.Complete().Do(ctx, nil, msg.Message()) //if renew failed, complete will fail and we don't return Done().
+				resHandler := message.Complete().Do(ctx, nil, msg.Message()) // if renew failed, complete will fail and we don't return Done().
 				if message.IsDone(resHandler) {
 					ch <- true
 				} else if message.IsError(resHandler) {
@@ -807,7 +808,7 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				// if the renewal works, then the message completion will succeed.
 				fmt.Println("=== Handling message ===")
 				lockMessage := &customLockMessage{}
-				err := json.Unmarshal([]byte(msg.Data()), lockMessage)
+				err := msg.Unmarshal(msg.Message().Data, lockMessage)
 				if err != nil {
 					fmt.Println("=== failed unmarshalling :", err)
 					ch <- false
@@ -817,7 +818,7 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				fmt.Println("=== sleeping for ", sleepTime)
 				time.Sleep(sleepTime)
 				fmt.Println("=== done sleeping! ")
-				resHandler := message.Complete().Do(ctx, nil, msg.Message()) //if renew failed, complete will fail and we don't return Done().
+				resHandler := message.Complete().Do(ctx, nil, msg.Message()) // if renew failed, complete will fail and we don't return Done().
 				if message.IsDone(resHandler) {
 					ch <- true
 				} else if message.IsError(resHandler) {

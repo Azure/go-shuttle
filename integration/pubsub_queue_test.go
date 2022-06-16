@@ -9,22 +9,15 @@ import (
 	"fmt"
 	"time"
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-	"github.com/Azure/go-shuttle/marshal"
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-	"github.com/Azure/go-shuttle/queue"
-	"github.com/Azure/go-shuttle/queue/listener"
-	"github.com/Azure/go-shuttle/queue/publisher"
-
 	"github.com/devigned/tab"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/go-shuttle/internal/reflection"
+	"github.com/Azure/go-shuttle/marshal"
 	"github.com/Azure/go-shuttle/message"
+	"github.com/Azure/go-shuttle/queue"
+	"github.com/Azure/go-shuttle/queue/listener"
+	"github.com/Azure/go-shuttle/queue/publisher"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
