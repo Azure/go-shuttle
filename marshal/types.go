@@ -19,7 +19,7 @@ func init() {
 
 type Marshaller interface {
 	Marshal(v interface{}) ([]byte, error)
-	Unmarshal(data []byte, v any) error
+	Unmarshal(data []byte, v interface{}) error
 	ContentType() string
 }
 
@@ -50,7 +50,7 @@ func (p *ProtoMarshaller) Marshal(v interface{}) ([]byte, error) {
 	return proto.Marshal(message)
 }
 
-func (p *ProtoMarshaller) Unmarshal(data []byte, v any) error {
+func (p *ProtoMarshaller) Unmarshal(data []byte, v interface{}) error {
 	message, ok := v.(proto.Message)
 	if !ok {
 		return fmt.Errorf("v must be a protobuf Message")
@@ -61,7 +61,7 @@ func (p *ProtoMarshaller) Unmarshal(data []byte, v any) error {
 type JsonMarshaller struct {
 }
 
-func (j *JsonMarshaller) Unmarshal(data []byte, v any) error {
+func (j *JsonMarshaller) Unmarshal(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
 }
 
