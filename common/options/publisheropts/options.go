@@ -118,3 +118,22 @@ func SetCorrelationID(correlationID string) Option {
 		return nil
 	}
 }
+
+// SetUserProperty sets a SetUserProperty on the message.
+func SetUserProperty(key string, value interface{}) Option {
+	return func(msg *servicebus.Message) error {
+		if msg == nil {
+			return errors.New("message is nil. cannot set user property")
+		}
+		if msg.UserProperties == nil {
+			msg.UserProperties = map[string]interface{}{}
+		}
+		msg.UserProperties[key] = value
+		return nil
+	}
+}
+
+// SetMessage provides a func that will configure the message before sending it.
+func SetMessage(messageConfigurator func(msg *servicebus.Message) error) Option {
+	return messageConfigurator
+}

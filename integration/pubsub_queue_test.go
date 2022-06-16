@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"time"
 
+	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/devigned/tab"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/Azure/go-shuttle/common/options/publisheropts"
 	"github.com/Azure/go-shuttle/integration/protomsg"
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/marshal"
@@ -40,6 +42,16 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenProtoMessage() {
 	suite.NoError(err)
 
 	suite.defaultTest(pub, l)
+}
+
+// TestPublishAndListenUsingDefault tests both the publisher and listener with default configurations
+func (suite *serviceBusQueueSuite) TestPublishAndListenWithUserProperties() {
+	pub, err := queue.NewPublisher(context.Background(), suite.QueueName, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := queue.NewListener(suite.listenerAuthOption)
+	suite.NoError(err)
+
+	suite.userPropertiesTest(pub, l)
 }
 
 // TestPublishAndListenMessageTwice tests publish and listen the same messages twice
@@ -118,6 +130,37 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenShortLockDuration() {
 		listenerOptions: []listener.Option{listener.WithMessageLockAutoRenewal(1 * time.Second)},
 		shouldSucceed:   true,
 	}, event)
+}
+
+type userPropertyEvent struct {
+	ID    int
+	Key   string
+	Value string
+}
+
+func (suite *serviceBusQueueSuite) userPropertiesTest(p *publisher.Publisher, l *listener.Listener) {
+	// create test event
+	event := userPropertyEvent{
+		ID:    1,
+		Key:   "key",
+		Value: "value",
+	}
+	suite.publishAndReceiveMessage(
+		publishReceiveQueueTest{
+			queueName:     suite.QueueName,
+			listener:      l,
+			publisher:     p,
+			shouldSucceed: true,
+			publisherOptions: []publisheropts.Option{
+				publisheropts.SetUserProperty("testProperty", 1),
+				publisheropts.SetMessage(func(msg *servicebus.Message) error {
+					msg.Label = "LabelSet"
+					return nil
+				}),
+			},
+		},
+		event,
+	)
 }
 
 func (suite *serviceBusQueueSuite) defaultTest(p *publisher.Publisher, l *listener.Listener) {
@@ -245,7 +288,7 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessage(testConfig publishRe
 
 	// setup listener
 	go func() {
-		suite.T().Logf(" %s starting listener for", suite.T().Name())
+		suite.T().Logf(" %s starting listener", suite.T().Name())
 		eventBytes, err := testConfig.publisher.Marshaller().Marshal(event)
 		suite.NoError(err)
 		err = testConfig.listener.Listen(
@@ -260,7 +303,7 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessage(testConfig publishRe
 		publishCount = *testConfig.publishCount
 	}
 	for i := 0; i < publishCount; i++ {
-		suite.T().Logf("%s - publishing msg %d", suite.T().Name(), i)
+		suite.T().Logf("%s - publishing msg %d of type %t", suite.T().Name(), i, event)
 		err := testConfig.publisher.Publish(
 			ctx,
 			event,

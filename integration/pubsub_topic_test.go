@@ -764,12 +764,14 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 			if publishedMsg != msg.Data() {
 				errHandler := message.Error(errors.New("published message and received message are different"))
 				res := errHandler.Do(ctx, nil, msg.Message()) // Call do to attempt to abandon the message before closing the connection
+				fmt.Println("fail data equality")
 				ch <- false
 				return res
 			}
 			if publishedMsgType != msg.Type() {
 				errHandler := message.Error(errors.New("published message type and received message type are different"))
 				res := errHandler.Do(ctx, nil, msg.Message()) // Call do to attempt to abandon the message before closing the connection
+				fmt.Println("fail type equality")
 				ch <- false
 				return res
 			}
@@ -787,6 +789,33 @@ func checkResultHandler(publishedMsg string, publishedMsgType string, ch chan<- 
 				} else {
 					return message.RetryLater(1 * time.Second)
 				}
+			}
+			if publishedMsgType == reflection.GetType(userPropertyEvent{}) {
+				userProp, ok := msg.Message().UserProperties["testProperty"]
+				if !ok {
+					fmt.Println("fail get from user property")
+					res := message.Complete().Do(ctx, nil, msg.Message())
+					ch <- false
+					return res
+				}
+				if msg.Message().Label != "LabelSet" {
+					fmt.Printf("label : %s\n", msg.Message().Label)
+					fmt.Println("fail label or user prop equality")
+					res := message.Complete().Do(ctx, nil, msg.Message())
+					ch <- false
+					return res
+				}
+				if userProp.(int64) != 1 {
+					fmt.Printf("type : %T\n", userProp)
+					fmt.Printf("prop : %v\n", msg.Message().UserProperties)
+					fmt.Println("fail user prop equality")
+					res := message.Complete().Do(ctx, nil, msg.Message())
+					ch <- false
+					return res
+				}
+				res := message.Complete().Do(ctx, nil, msg.Message())
+				ch <- true
+				return res
 			}
 			if publishedMsgType == reflection.GetType(shortLockMessage{}) {
 				// the shortlock is set at 1 second in the listener setup
