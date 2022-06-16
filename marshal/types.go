@@ -23,7 +23,7 @@ type Marshaller interface {
 	ContentType() string
 }
 
-var DefaultMarshallerRegistry map[string]Marshaller
+var DefaultMarshallerRegistry = map[string]Marshaller{}
 
 func RegisterMarshaller(marshaller Marshaller) {
 	DefaultMarshallerRegistry[marshaller.ContentType()] = marshaller
