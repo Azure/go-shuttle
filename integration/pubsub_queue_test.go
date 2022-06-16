@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package integration
@@ -6,20 +7,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/devigned/tab"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/Azure/go-shuttle/integration/protomsg"
+	"github.com/Azure/go-shuttle/internal/reflection"
+	"github.com/Azure/go-shuttle/marshal"
+	"github.com/Azure/go-shuttle/message"
 	"github.com/Azure/go-shuttle/queue"
 	"github.com/Azure/go-shuttle/queue/listener"
 	"github.com/Azure/go-shuttle/queue/publisher"
-	"time"
-
-	"github.com/Azure/go-shuttle/internal/reflection"
-	"github.com/Azure/go-shuttle/message"
-	"github.com/devigned/tab"
-	"github.com/stretchr/testify/assert"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
 func (suite *serviceBusQueueSuite) TestPublishAndListenUsingDefault() {
 	pub, err := queue.NewPublisher(context.Background(), suite.QueueName, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := queue.NewListener(suite.listenerAuthOption)
+	suite.NoError(err)
+
+	suite.defaultTest(pub, l)
+}
+
+// TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
+func (suite *serviceBusQueueSuite) TestPublishAndListenProtoMessage() {
+	pub, err := queue.NewPublisher(context.Background(), suite.QueueName, suite.publisherAuthOption)
+	pub.SetMarshaller(marshal.ProtobufMarshaller)
 	suite.NoError(err)
 	l, err := queue.NewListener(suite.listenerAuthOption)
 	suite.NoError(err)
@@ -107,7 +122,7 @@ func (suite *serviceBusQueueSuite) TestPublishAndListenShortLockDuration() {
 
 func (suite *serviceBusQueueSuite) defaultTest(p *publisher.Publisher, l *listener.Listener) {
 	// create test event
-	event := &testEvent{
+	event := &protomsg.TestEvent{
 		ID:    1,
 		Key:   "key",
 		Value: "value",
@@ -230,22 +245,22 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessage(testConfig publishRe
 
 	// setup listener
 	go func() {
-		eventJSON, err := json.Marshal(event)
+		suite.T().Logf(" %s starting listener for", suite.T().Name())
+		eventBytes, err := testConfig.publisher.Marshaller().Marshal(event)
 		suite.NoError(err)
 		err = testConfig.listener.Listen(
 			ctx,
-			checkResultHandler(string(eventJSON), reflection.GetType(testEvent{}), gotMessage),
+			checkResultHandler(string(eventBytes), reflection.GetType(event), gotMessage),
 			testConfig.queueName,
 			testConfig.listenerOptions...,
 		)
 	}()
-	// publish after the listener is setup
-	time.Sleep(5 * time.Second)
 	publishCount := 1
 	if testConfig.publishCount != nil {
 		publishCount = *testConfig.publishCount
 	}
 	for i := 0; i < publishCount; i++ {
+		suite.T().Logf("%s - publishing msg %d", suite.T().Name(), i)
 		err := testConfig.publisher.Publish(
 			ctx,
 			event,
@@ -286,8 +301,6 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessageWithRetryAfter(testCo
 			fmt.Printf("ERROR: %s", err)
 		}
 	}()
-	// publish after the listener is setup
-	time.Sleep(5 * time.Second)
 	publishCount := 1
 	if testConfig.publishCount != nil {
 		publishCount = *testConfig.publishCount
@@ -337,9 +350,6 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessageTwice(testConfig publ
 		)
 	}()
 
-	// publish after the listener is setup
-	time.Sleep(5 * time.Second)
-
 	err := testConfig.publisher.Publish(
 		ctx,
 		event,
@@ -358,8 +368,6 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessageTwice(testConfig publ
 		}
 	}
 
-	// publish same message again
-	time.Sleep(5 * time.Second)
 	err = testConfig.publisher.Publish(
 		ctx,
 		event,
@@ -397,8 +405,6 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessageWithAutoLockRenewal(t
 			testConfig.listenerOptions...,
 		)
 	}()
-	// publish after the listener is setup
-	time.Sleep(5 * time.Second)
 	publishCount := 1
 	if testConfig.publishCount != nil {
 		publishCount = *testConfig.publishCount
@@ -457,8 +463,6 @@ func (suite *serviceBusQueueSuite) publishAndReceiveMessageNotRenewingLock(testC
 			testConfig.listenerOptions...,
 		)
 	}()
-	// publish after the listener is setup
-	time.Sleep(5 * time.Second)
 	err := testConfig.publisher.Publish(
 		parenrCtx,
 		event,

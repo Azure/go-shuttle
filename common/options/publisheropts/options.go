@@ -2,12 +2,15 @@ package publisheropts
 
 import (
 	"errors"
+	"time"
+
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
+
 	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/internal/aad"
 	sbinternal "github.com/Azure/go-shuttle/internal/servicebus"
-	"time"
+	"github.com/Azure/go-shuttle/marshal"
 )
 
 // ManagementOption provides structure for configuring a new Publisher
@@ -71,6 +74,14 @@ func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) 
 func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 	return func(p common.Publisher) error {
 		p.AppendHeader(headerName, msgKey)
+		return nil
+	}
+}
+
+// SetDefaultHeader adds a header to every message published using the value specified from the message body
+func SetMessageMarshaller(marshaller marshal.Marshaller) ManagementOption {
+	return func(p common.Publisher) error {
+		p.SetMarshaller(marshaller)
 		return nil
 	}
 }

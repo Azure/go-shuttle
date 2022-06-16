@@ -5,6 +5,8 @@ import (
 	"time"
 
 	servicebus "github.com/Azure/azure-service-bus-go"
+
+	"github.com/Azure/go-shuttle/marshal"
 )
 
 // Message is the wrapping type of service bus message with a type
@@ -56,4 +58,12 @@ func (m *Message) Error(err error) Handler {
 // This happens in memory and does not impact servicebus message max retry limit
 func (m *Message) RetryLater(retryAfter time.Duration) Handler {
 	return RetryLater(retryAfter)
+}
+
+func (m *Message) Unmarshal(data []byte, v interface{}) error {
+	marshaller, ok := marshal.DefaultMarshallerRegistry[m.msg.ContentType]
+	if !ok {
+		return fmt.Errorf("no marshaller registered for content-type %s", m.msg.ContentType)
+	}
+	return marshaller.Unmarshal(data, v)
 }
