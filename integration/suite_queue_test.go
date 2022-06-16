@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package integration
@@ -8,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/Azure/go-shuttle/internal/test"
 	"github.com/Azure/go-shuttle/queue/listener"
 	"github.com/Azure/go-shuttle/queue/publisher"
-	"github.com/stretchr/testify/suite"
 )
 
 type serviceBusQueueSuite struct {

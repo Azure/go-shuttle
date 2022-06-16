@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package integration
@@ -8,7 +9,13 @@ import (
 	"fmt"
 	"time"
 
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
 	"github.com/Azure/go-shuttle/marshal"
+=======
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
 	"github.com/Azure/go-shuttle/queue"
 	"github.com/Azure/go-shuttle/queue/listener"
 	"github.com/Azure/go-shuttle/queue/publisher"
