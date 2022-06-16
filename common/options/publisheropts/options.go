@@ -78,10 +78,21 @@ func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 	}
 }
 
-// SetDefaultHeader adds a header to every message published using the value specified from the message body
+// SetMessageMarshaller sets the message marshaller for this publisher. defaults to json.
 func SetMessageMarshaller(marshaller marshal.Marshaller) ManagementOption {
 	return func(p common.Publisher) error {
 		p.SetMarshaller(marshaller)
+		return nil
+	}
+}
+
+// SetScheduleAt schedules a message in the future
+func SetScheduleAt(t time.Time) Option {
+	return func(msg *servicebus.Message) error {
+		if msg == nil {
+			return errors.New("message is nil. cannot set schedule at")
+		}
+		msg.ScheduleAt(t)
 		return nil
 	}
 }
