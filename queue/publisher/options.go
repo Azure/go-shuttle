@@ -9,6 +9,7 @@ import (
 
 	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/common/options/publisheropts"
+	"github.com/Azure/go-shuttle/marshal"
 )
 
 type DeadLetterTarget struct {
@@ -79,7 +80,7 @@ func WithForwardDeadLetteredMessagesTo(deadLetterTargetName string, deliveryCoun
 }
 
 // WithDefaultMessageMarshaller sets the Marshaller for the published message. Defaults to Json Marshaller
-func WithDefaultMessageMarshaller(marshaller common.Marshaller) ManagementOption {
+func WithDefaultMessageMarshaller(marshaller marshal.Marshaller) ManagementOption {
 	return publisheropts.SetMessageMarshaller(marshaller)
 }
 

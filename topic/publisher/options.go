@@ -8,6 +8,7 @@ import (
 
 	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/common/options/publisheropts"
+	"github.com/Azure/go-shuttle/marshal"
 )
 
 // ManagementOption provides structure for configuring a new Publisher
@@ -48,7 +49,7 @@ func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 }
 
 // WithDefaultMessageMarshaller sets the Marshaller for the published message. Defaults to Json Marshaller
-func WithDefaultMessageMarshaller(marshaller common.Marshaller) ManagementOption {
+func WithDefaultMessageMarshaller(marshaller marshal.Marshaller) ManagementOption {
 	return publisheropts.SetMessageMarshaller(marshaller)
 }
 
