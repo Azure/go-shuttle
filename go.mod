@@ -12,7 +12,6 @@ require (
 	github.com/devigned/tab v0.1.1
 	github.com/devigned/tab/opentracing v0.1.3
 	github.com/gin-gonic/gin v1.7.1 // indirect
-	github.com/gogo/protobuf v1.1.1
 	github.com/joho/godotenv v1.3.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.11.0
@@ -25,7 +24,7 @@ require (
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
-	google.golang.org/protobuf v1.26.0-rc.1
+	google.golang.org/protobuf v1.28.0
 	nhooyr.io/websocket v1.8.7 // indirect
 )
 
