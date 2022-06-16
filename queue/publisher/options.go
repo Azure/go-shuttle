@@ -6,6 +6,7 @@ import (
 
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
+
 	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/common/options/publisheropts"
 )
@@ -75,6 +76,11 @@ func WithForwardDeadLetteredMessagesTo(deadLetterTargetName string, deliveryCoun
 		p.(QueuePublisher).AppendQueueManagementOption(servicebus.QueueEntityWithForwardDeadLetteredMessagesTo(deadLetterTarget))
 		return nil
 	}
+}
+
+// WithDefaultMessageMarshaller sets the Marshaller for the published message. Defaults to Json Marshaller
+func WithDefaultMessageMarshaller(marshaller common.Marshaller) ManagementOption {
+	return publisheropts.SetMessageMarshaller(marshaller)
 }
 
 // SetMessageDelay schedules a message in the future

@@ -1,8 +1,9 @@
 package common
 
 import (
-	servicebus "github.com/Azure/azure-service-bus-go"
 	"time"
+
+	servicebus "github.com/Azure/azure-service-bus-go"
 )
 
 var _ Listener = &ListenerSettings{}
@@ -87,12 +88,15 @@ type Publisher interface {
 	Headers() map[string]string
 	SetNamespace(namespace *servicebus.Namespace)
 	AppendHeader(k, v string)
+	Marshaller() Marshaller
+	SetMarshaller(Marshaller)
 }
 
 // PublisherSettings is a struct to contain service bus entities relevant to publishing to a queue
 type PublisherSettings struct {
-	namespace *servicebus.Namespace
-	headers   map[string]string
+	namespace  *servicebus.Namespace
+	headers    map[string]string
+	marshaller Marshaller
 }
 
 func (p *PublisherSettings) Namespace() *servicebus.Namespace {
@@ -103,8 +107,16 @@ func (p *PublisherSettings) Headers() map[string]string {
 	return p.headers
 }
 
+func (p *PublisherSettings) Marshaller() Marshaller {
+	return p.marshaller
+}
+
 func (p *PublisherSettings) SetNamespace(namespace *servicebus.Namespace) {
 	p.namespace = namespace
+}
+
+func (p *PublisherSettings) SetMarshaller(marshaller Marshaller) {
+	p.marshaller = marshaller
 }
 
 func (p *PublisherSettings) AppendHeader(key, value string) {
@@ -112,4 +124,9 @@ func (p *PublisherSettings) AppendHeader(key, value string) {
 		p.headers = make(map[string]string)
 	}
 	p.headers[key] = value
+}
+
+type Marshaller interface {
+	Marshal(v interface{}) ([]byte, error)
+	ContentType() string
 }

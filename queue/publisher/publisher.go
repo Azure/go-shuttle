@@ -2,17 +2,18 @@ package publisher
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	amqp "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/devigned/tab"
+
 	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/common/errorhandling"
 	"github.com/Azure/go-shuttle/internal/reflection"
+	"github.com/Azure/go-shuttle/marshal"
 	"github.com/Azure/go-shuttle/prometheus/publisher"
-	"github.com/devigned/tab"
 )
 
 type QueuePublisher interface {
@@ -41,6 +42,7 @@ func New(ctx context.Context, queueName string, opts ...ManagementOption) (*Publ
 	}
 	publisher := &Publisher{PublisherSettings: common.PublisherSettings{}}
 	publisher.SetNamespace(ns)
+	publisher.SetMarshaller(marshal.JSONMarshaller)
 	for _, opt := range opts {
 		err := opt(publisher)
 		if err != nil {
@@ -62,10 +64,10 @@ func New(ctx context.Context, queueName string, opts ...ManagementOption) (*Publ
 func (p *Publisher) Publish(ctx context.Context, msg interface{}, opts ...Option) error {
 	ctx, s := tab.StartSpan(ctx, "go-shuttle.publisher.Publish")
 	defer s.End()
-	msgJSON, err := json.Marshal(msg)
+	msgBytes, err := p.PublisherSettings.Marshaller().Marshal(msg)
 
 	// adding in user properties to enable filtering on listener side
-	sbMsg := servicebus.NewMessageFromString(string(msgJSON))
+	sbMsg := servicebus.NewMessageFromString(string(msgBytes))
 	sbMsg.UserProperties = make(map[string]interface{})
 	sbMsg.UserProperties["type"] = reflection.GetType(msg)
 

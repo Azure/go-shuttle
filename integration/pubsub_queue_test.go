@@ -6,20 +6,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/Azure/go-shuttle/marshal"
 	"github.com/Azure/go-shuttle/queue"
 	"github.com/Azure/go-shuttle/queue/listener"
 	"github.com/Azure/go-shuttle/queue/publisher"
-	"time"
+
+	"github.com/devigned/tab"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/message"
-	"github.com/devigned/tab"
-	"github.com/stretchr/testify/assert"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
 func (suite *serviceBusQueueSuite) TestPublishAndListenUsingDefault() {
 	pub, err := queue.NewPublisher(context.Background(), suite.QueueName, suite.publisherAuthOption)
+	suite.NoError(err)
+	l, err := queue.NewListener(suite.listenerAuthOption)
+	suite.NoError(err)
+
+	suite.defaultTest(pub, l)
+}
+
+// TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
+func (suite *serviceBusQueueSuite) TestPublishAndListenProtoMessage() {
+	pub, err := queue.NewPublisher(context.Background(), suite.QueueName, suite.publisherAuthOption)
+	pub.SetMarshaller(marshal.ProtobufMarshaller)
 	suite.NoError(err)
 	l, err := queue.NewListener(suite.listenerAuthOption)
 	suite.NoError(err)

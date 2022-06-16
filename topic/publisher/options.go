@@ -5,6 +5,7 @@ import (
 
 	"github.com/Azure/azure-service-bus-go"
 	"github.com/Azure/go-autorest/autorest/adal"
+
 	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/common/options/publisheropts"
 )
@@ -44,6 +45,11 @@ func WithToken(serviceBusNamespaceName string, spt *adal.ServicePrincipalToken) 
 // SetDefaultHeader adds a header to every message published using the value specified from the message body
 func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 	return publisheropts.SetDefaultHeader(headerName, msgKey)
+}
+
+// WithDefaultMessageMarshaller sets the Marshaller for the published message. Defaults to Json Marshaller
+func WithDefaultMessageMarshaller(marshaller common.Marshaller) ManagementOption {
+	return publisheropts.SetMessageMarshaller(marshaller)
 }
 
 // SetDuplicateDetection guarantees that the topic will have exactly-once delivery over a user-defined span of time.
