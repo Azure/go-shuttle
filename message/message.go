@@ -60,7 +60,7 @@ func (m *Message) RetryLater(retryAfter time.Duration) Handler {
 	return RetryLater(retryAfter)
 }
 
-func (m *Message) Unmarshal(data []byte, v any) error {
+func (m *Message) Unmarshal(data []byte, v interface{}) error {
 	marshaller, ok := marshal.DefaultMarshallerRegistry[m.msg.ContentType]
 	if !ok {
 		return fmt.Errorf("no marshaller registered for content-type %s", m.msg.ContentType)

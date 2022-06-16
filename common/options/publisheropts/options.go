@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/internal/aad"
 	sbinternal "github.com/Azure/go-shuttle/internal/servicebus"
+	"github.com/Azure/go-shuttle/marshal"
 )
 
 // ManagementOption provides structure for configuring a new Publisher
@@ -78,7 +79,7 @@ func SetDefaultHeader(headerName, msgKey string) ManagementOption {
 }
 
 // SetDefaultHeader adds a header to every message published using the value specified from the message body
-func SetMessageMarshaller(marshaller common.Marshaller) ManagementOption {
+func SetMessageMarshaller(marshaller marshal.Marshaller) ManagementOption {
 	return func(p common.Publisher) error {
 		p.SetMarshaller(marshaller)
 		return nil
