@@ -110,6 +110,9 @@ func (p *PublisherSettings) Headers() map[string]string {
 }
 
 func (p *PublisherSettings) Marshaller() marshal.Marshaller {
+	if p.marshaller == nil {
+		return marshal.JSONMarshaller
+	}
 	return p.marshaller
 }
 

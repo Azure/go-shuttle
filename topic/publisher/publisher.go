@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/Azure/go-shuttle/common/errorhandling"
+	"github.com/Azure/go-shuttle/marshal"
 
 	amqp "github.com/Azure/azure-amqp-common-go/v3"
 	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/devigned/tab"
+
 	"github.com/Azure/go-shuttle/common"
 	"github.com/Azure/go-shuttle/internal/reflection"
 	"github.com/Azure/go-shuttle/prometheus/publisher"
-	"github.com/devigned/tab"
 )
 
 type TopicPublisher interface {
@@ -42,6 +44,7 @@ func New(ctx context.Context, topicName string, opts ...ManagementOption) (*Publ
 	}
 	publisher := &Publisher{PublisherSettings: common.PublisherSettings{}}
 	publisher.SetNamespace(ns)
+	publisher.SetMarshaller(marshal.JSONMarshaller)
 	for _, opt := range opts {
 		err := opt(publisher)
 		if err != nil {
