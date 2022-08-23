@@ -3,9 +3,9 @@ package listener
 import (
 	"fmt"
 
-	prom "github.com/prometheus/client_golang/prometheus"
-
 	servicebus "github.com/Azure/azure-service-bus-go"
+	prom "github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 const (
@@ -15,7 +15,11 @@ const (
 	successLabel       = "success"
 )
 
-var Metrics Recorder = newRegistry()
+var (
+	metricsRegistry = newRegistry()
+
+	Metrics Recorder = metricsRegistry
+)
 
 func newRegistry() *Registry {
 	return &Registry{
@@ -109,4 +113,49 @@ func (m *Registry) DecConcurrentMessageCount(msg *servicebus.Message) {
 func (m *Registry) IncMessageDeadlineReachedCount(msg *servicebus.Message) {
 	labels := getMessageTypeLabel(msg)
 	m.MessageDeadlineReachedCount.With(labels).Inc()
+}
+
+type Informer struct {
+	registry *Registry
+}
+
+func NewInformer() *Informer {
+	return &Informer{registry: metricsRegistry}
+}
+
+func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
+	var total float64
+	collect(i.registry.MessageLockRenewedCount, func(m dto.Metric) {
+		if !hasLabel(m, successLabel, "false") {
+			return
+		}
+		total += m.GetCounter().GetValue()
+	})
+	return total, nil
+}
+
+func hasLabel(m dto.Metric, key string, value string) bool {
+	for _, pair := range m.Label {
+		if pair == nil {
+			continue
+		}
+		if pair.GetName() == key && pair.GetValue() == value {
+			return true
+		}
+	}
+	return false
+}
+
+// collect calls the function for each metric associated with the Collector
+func collect(col prom.Collector, do func(dto.Metric)) {
+	c := make(chan prom.Metric)
+	go func(c chan prom.Metric) {
+		col.Collect(c)
+		close(c)
+	}(c)
+	for x := range c { // eg range across distinct label vector values
+		m := dto.Metric{}
+		_ = x.Write(&m)
+		do(m)
+	}
 }
