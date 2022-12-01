@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
 
@@ -35,11 +36,26 @@ type Processor struct {
 }
 
 // ProcessorOptions configures the processor
+// MaxConcurrency defaults to 1. Not setting MaxConcurrency, or setting it to 0 or a negative value will fallback to the default.
+// ReceiveInterval defaults to 2 seconds if not set.
 type ProcessorOptions struct {
-	MaxConcurrency int
+	MaxConcurrency  int
+	ReceiveInterval *time.Duration
 }
 
 func NewProcessor(receiver *azservicebus.Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
+	opts := &ProcessorOptions{
+		MaxConcurrency:  1,
+		ReceiveInterval: to.Ptr(1 * time.Second),
+	}
+	if options != nil {
+		if options.ReceiveInterval != nil {
+			opts.ReceiveInterval = options.ReceiveInterval
+		}
+		if options.MaxConcurrency <= 0 {
+			opts.MaxConcurrency = options.MaxConcurrency
+		}
+	}
 	return &Processor{
 		receiver: receiver,
 		handle:   handler,
@@ -50,13 +66,18 @@ func NewProcessor(receiver *azservicebus.Receiver, handler HandlerFunc, options 
 // Start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) Start(ctx context.Context) error {
 	for ctx.Err() == nil {
-		maxMessages := p.options.MaxConcurrency - len(p.concurrencyTokens)
-		msgs, err := p.receiver.ReceiveMessages(ctx, maxMessages, &azservicebus.ReceiveMessagesOptions{})
-		if err != nil {
-			return err
-		}
-		for _, msg := range msgs {
-			p.process(ctx, msg)
+		select {
+		case <-time.After(*p.options.ReceiveInterval):
+			maxMessages := p.options.MaxConcurrency - len(p.concurrencyTokens)
+			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, &azservicebus.ReceiveMessagesOptions{})
+			if err != nil {
+				return err
+			}
+			for _, msg := range messages {
+				p.process(ctx, msg)
+			}
+		case <-ctx.Done():
+			break
 		}
 	}
 	return ctx.Err()
