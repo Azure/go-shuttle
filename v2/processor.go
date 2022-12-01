@@ -48,8 +48,13 @@ type ProcessorOptions struct {
 	ReceiveInterval *time.Duration
 }
 
+<<<<<<< HEAD
 func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := ProcessorOptions{
+=======
+func NewProcessor(receiver *azservicebus.Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
+	opts := &ProcessorOptions{
+>>>>>>> 7877df9 (timer pump)
 		MaxConcurrency:  1,
 		ReceiveInterval: to.Ptr(1 * time.Second),
 	}
@@ -57,7 +62,11 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 		if options.ReceiveInterval != nil {
 			opts.ReceiveInterval = options.ReceiveInterval
 		}
+<<<<<<< HEAD
 		if options.MaxConcurrency >= 0 {
+=======
+		if options.MaxConcurrency <= 0 {
+>>>>>>> 7877df9 (timer pump)
 			opts.MaxConcurrency = options.MaxConcurrency
 		}
 	}
@@ -82,7 +91,11 @@ func (p *Processor) Start(ctx context.Context) error {
 		select {
 		case <-time.After(*p.options.ReceiveInterval):
 			maxMessages := p.options.MaxConcurrency - len(p.concurrencyTokens)
+<<<<<<< HEAD
 			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
+=======
+			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, &azservicebus.ReceiveMessagesOptions{})
+>>>>>>> 7877df9 (timer pump)
 			if err != nil {
 				return err
 			}
