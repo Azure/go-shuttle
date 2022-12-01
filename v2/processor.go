@@ -44,7 +44,7 @@ type ProcessorOptions struct {
 }
 
 func NewProcessor(receiver *azservicebus.Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
-	opts := &ProcessorOptions{
+	opts := ProcessorOptions{
 		MaxConcurrency:  1,
 		ReceiveInterval: to.Ptr(1 * time.Second),
 	}
@@ -59,7 +59,7 @@ func NewProcessor(receiver *azservicebus.Receiver, handler HandlerFunc, options 
 	return &Processor{
 		receiver: receiver,
 		handle:   handler,
-		options:  *options,
+		options:  opts,
 	}
 }
 
