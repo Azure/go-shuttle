@@ -9,6 +9,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
 
+type Receiver interface {
+	ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
+	MessageSettler
+}
+
 // MessageSettler is passed to the handlers. it exposes the message settling functionality from the receiver needed within the handler.
 type MessageSettler interface {
 	AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error
@@ -29,7 +34,7 @@ type LockRenewer interface {
 // Processor encapsulates the message pump and concurrency handling of servicebus.
 // it exposes a handler API to provides a middleware based message processing pipeline.
 type Processor struct {
-	receiver          *azservicebus.Receiver
+	receiver          Receiver
 	options           ProcessorOptions
 	handle            HandlerFunc
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor
@@ -43,7 +48,7 @@ type ProcessorOptions struct {
 	ReceiveInterval *time.Duration
 }
 
-func NewProcessor(receiver *azservicebus.Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
+func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := ProcessorOptions{
 		MaxConcurrency:  1,
 		ReceiveInterval: to.Ptr(1 * time.Second),
@@ -52,24 +57,32 @@ func NewProcessor(receiver *azservicebus.Receiver, handler HandlerFunc, options 
 		if options.ReceiveInterval != nil {
 			opts.ReceiveInterval = options.ReceiveInterval
 		}
-		if options.MaxConcurrency <= 0 {
+		if options.MaxConcurrency >= 0 {
 			opts.MaxConcurrency = options.MaxConcurrency
 		}
 	}
 	return &Processor{
-		receiver: receiver,
-		handle:   handler,
-		options:  opts,
+		receiver:          receiver,
+		handle:            handler,
+		options:           opts,
+		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
 	}
 }
 
 // Start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) Start(ctx context.Context) error {
+	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
+	if err != nil {
+		return err
+	}
+	for i, msg := range messages {
+		p.process(ctx, msg)
+	}
 	for ctx.Err() == nil {
 		select {
 		case <-time.After(*p.options.ReceiveInterval):
 			maxMessages := p.options.MaxConcurrency - len(p.concurrencyTokens)
-			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, &azservicebus.ReceiveMessagesOptions{})
+			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
 			if err != nil {
 				return err
 			}
@@ -84,11 +97,11 @@ func (p *Processor) Start(ctx context.Context) error {
 }
 
 func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedMessage) {
-	defer func() {
-		<-p.concurrencyTokens
-	}()
 	p.concurrencyTokens <- struct{}{}
 	go func() {
+		defer func() {
+			<-p.concurrencyTokens
+		}()
 		msgContext, cancel := context.WithCancel(ctx)
 		defer cancel()
 		p.handle(msgContext, p.receiver, message)
