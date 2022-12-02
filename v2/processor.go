@@ -75,7 +75,7 @@ func (p *Processor) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for i, msg := range messages {
+	for _, msg := range messages {
 		p.process(ctx, msg)
 	}
 	for ctx.Err() == nil {
