@@ -89,6 +89,20 @@ func TestNewProcessor_CanSetMaxConcurrency(t *testing.T) {
 	a.Equal(10, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 10")
 }
 
+func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {
+	messages := make(chan *azservicebus.ReceivedMessage, messageCount)
+	for i := 0; i < messageCount; i++ {
+		messages <- &azservicebus.ReceivedMessage{}
+	}
+	return messages
+}
+
+func enqueueCount(q chan *azservicebus.ReceivedMessage, messageCount int) {
+	for i := 0; i < messageCount; i++ {
+		q <- &azservicebus.ReceivedMessage{}
+	}
+}
+
 func TestNewProcessor_Interval(t *testing.T) {
 	// with an message processing that takes 10ms and an interval polling every 20 ms,
 	// we should call receive exactly 3 times to consume all the messages.
