@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/devigned/tab"
 )
 
 type Receiver interface {
@@ -118,6 +119,42 @@ func NewPanicHandler(handler HandlerFunc) HandlerFunc {
 	}
 }
 
+// NewTracingHandler extracts the context from the message Application property if available, or from the existing
+// context if not, and starts a span
+func NewTracingHandler(handler HandlerFunc) HandlerFunc {
+	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
+		if message != nil && message.ApplicationProperties != nil {
+			ctx = ExtractMessageContext(ctx, message)
+		}
+
+		ctx, span := tab.StartSpan(ctx, "go-shuttle.receiver.Handle")
+		if message != nil {
+			span.AddAttributes(
+				tab.StringAttribute("message.id", message.MessageID),
+				tab.StringAttribute("message.correlationId", *message.CorrelationID))
+			if message.ScheduledEnqueueTime != nil {
+				span.AddAttributes(tab.StringAttribute("message.scheduledEnqueuedTime", message.ScheduledEnqueueTime.String()))
+			}
+			if message.TimeToLive != nil {
+				span.AddAttributes(tab.StringAttribute("message.ttl", message.TimeToLive.String()))
+			}
+		} else {
+			span.Logger().Info("warning: message is nil")
+		}
+		handler(ctx, settler, message)
+	}
+}
+
+// ExtractMessageContext extracts the context within the message's Application Properties or, in case of error, returns
+// the given context
+func ExtractMessageContext(ctx context.Context, message *azservicebus.ReceivedMessage) context.Context {
+	messageCtx, ok := message.ApplicationProperties["ctx"].(context.Context)
+	if !ok {
+		return ctx
+	}
+	return messageCtx
+}
+
 // NewRenewLockHandler starts a renewlock goroutine for each message received.
 func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handler HandlerFunc) HandlerFunc {
 	plr := &peekLockRenewer{
@@ -168,4 +205,15 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			alive = false
 		}
 	}
+}
+
+type Sender interface {
+	SendMessage(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
+}
+
+// SendMessageWithContext takes a given context, Sender and message and puts the context in the message's Application
+// properties
+func SendMessageWithContext(ctx context.Context, sender Sender, message *azservicebus.Message, options *azservicebus.SendMessageOptions) {
+	message.ApplicationProperties["ctx"] = ctx
+	sender.SendMessage(ctx, message, options)
 }
