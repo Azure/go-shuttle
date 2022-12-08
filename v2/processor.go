@@ -123,11 +123,9 @@ func NewPanicHandler(handler HandlerFunc) HandlerFunc {
 // context if not, and starts a span
 func NewTracingHandler(handler HandlerFunc) HandlerFunc {
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
-		if message != nil && message.ApplicationProperties != nil {
-			ctx = ExtractMessageContext(ctx, message)
-		}
+		ctx, span := tab.StartSpanWithRemoteParent(ctx, "go-shuttle.receiver.Handle", carrierAdapter(message))
+		defer span.End()
 
-		ctx, span := tab.StartSpan(ctx, "go-shuttle.receiver.Handle")
 		if message != nil {
 			span.AddAttributes(
 				tab.StringAttribute("message.id", message.MessageID),
@@ -145,14 +143,9 @@ func NewTracingHandler(handler HandlerFunc) HandlerFunc {
 	}
 }
 
-// ExtractMessageContext extracts the context within the message's Application Properties or, in case of error, returns
-// the given context
-func ExtractMessageContext(ctx context.Context, message *azservicebus.ReceivedMessage) context.Context {
-	messageCtx, ok := message.ApplicationProperties["ctx"].(context.Context)
-	if !ok {
-		return ctx
-	}
-	return messageCtx
+// carrierAdapter wraps a Received Message so that it implements the tab.Carrier interface
+func carrierAdapter(message *azservicebus.ReceivedMessage) tab.Carrier {
+	return &MessageWrapper{Message: message}
 }
 
 // NewRenewLockHandler starts a renewlock goroutine for each message received.
@@ -207,13 +200,19 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 	}
 }
 
-type Sender interface {
-	SendMessage(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
+type MessageWrapper struct {
+	Message *azservicebus.ReceivedMessage
 }
 
-// SendMessageWithContext takes a given context, Sender and message and puts the context in the message's Application
-// properties
-func SendMessageWithContext(ctx context.Context, sender Sender, message *azservicebus.Message, options *azservicebus.SendMessageOptions) {
-	message.ApplicationProperties["ctx"] = ctx
-	sender.SendMessage(ctx, message, options)
+// Set implements tab.Carrier interface
+func (mw *MessageWrapper) Set(key string, value interface{}) {
+	if mw.Message.ApplicationProperties == nil {
+		mw.Message.ApplicationProperties = make(map[string]interface{})
+	}
+	mw.Message.ApplicationProperties[key] = value
+}
+
+// GetKeyValues implements tab.Carrier interface
+func (mw *MessageWrapper) GetKeyValues() map[string]interface{} {
+	return mw.Message.ApplicationProperties
 }
