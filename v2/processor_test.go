@@ -134,18 +134,18 @@ func TestNewProcessor_ReceiveDeltaConcurrencyOnly(t *testing.T) {
 	a.Error(err, "expect to exit with error because we consumed all configured messages")
 	a.Equal(3, len(rcv.ReceiveCalls), "there should be 4 entry in the ReceiveCalls array")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 1 initially")
-	a.Equal(0, rcv.ReceiveCalls[1], "the processor has no go-routine available")
+	a.Equal(1, rcv.ReceiveCalls[1], "the processor should receive 1 when the previous message is done processing and exit")
 	a.Equal(1, rcv.ReceiveCalls[2], "the processor should receive 1 when the previous message is done processing and exit")
 }
 
 func TestNewProcessor_ReceiveDelta(t *testing.T) {
 	// with an message processing that takes 10ms and an interval polling every 20 ms,
-	// we should call receive exactly 3 times to consume all the messages.
+	// we should call receive exactly 2 times to consume all the messages.
 	a := require.New(t)
 	rcv := &fakeReceiver{
 		fakeSettler:           &fakeSettler{},
 		SetupReceivedMessages: messagesChannel(5),
-		SetupMaxReceiveCalls:  3,
+		SetupMaxReceiveCalls:  2,
 	}
 	processor := v2.NewProcessor(rcv, MyHandler(1*time.Second), &v2.ProcessorOptions{
 		MaxConcurrency:  10,
@@ -166,8 +166,21 @@ func TestNewProcessor_ReceiveDelta(t *testing.T) {
 	close(rcv.SetupReceivedMessages)
 	<-done
 	a.Error(processorError, "expect to exit with error because we consumed all configured messages")
-	a.Equal(3, len(rcv.ReceiveCalls), "should be called 3 times")
+	a.Equal(2, len(rcv.ReceiveCalls), "should be called 3 times")
 	a.Equal(10, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 10 initially")
 	a.Equal(5, rcv.ReceiveCalls[1], "the processor should request 5 (delta)")
-	a.Equal(0, rcv.ReceiveCalls[2], "the processor should request 0 (delta)")
+}
+
+func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {
+	messages := make(chan *azservicebus.ReceivedMessage, messageCount)
+	for i := 0; i < messageCount; i++ {
+		messages <- &azservicebus.ReceivedMessage{}
+	}
+	return messages
+}
+
+func enqueueCount(q chan *azservicebus.ReceivedMessage, messageCount int) {
+	for i := 0; i < messageCount; i++ {
+		q <- &azservicebus.ReceivedMessage{}
+	}
 }

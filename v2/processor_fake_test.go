@@ -75,17 +75,3 @@ func (f *fakeReceiver) ReceiveMessages(_ context.Context, maxMessages int, _ *az
 
 	return result, f.SetupReceiveError
 }
-
-func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {
-	messages := make(chan *azservicebus.ReceivedMessage, messageCount)
-	for i := 0; i < messageCount; i++ {
-		messages <- &azservicebus.ReceivedMessage{}
-	}
-	return messages
-}
-
-func enqueueCount(q chan *azservicebus.ReceivedMessage, messageCount int) {
-	for i := 0; i < messageCount; i++ {
-		q <- &azservicebus.ReceivedMessage{}
-	}
-}

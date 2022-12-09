@@ -176,5 +176,4 @@ func initTracing() (io.Closer, error) {
 		return nil, err
 	}
 	return closer, nil
-
 }
