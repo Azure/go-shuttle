@@ -7,7 +7,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	"github.com/devigned/tab"
 )
 
 type Receiver interface {
@@ -119,35 +118,6 @@ func NewPanicHandler(handler HandlerFunc) HandlerFunc {
 	}
 }
 
-// NewTracingHandler extracts the context from the message Application property if available, or from the existing
-// context if not, and starts a span
-func NewTracingHandler(handler HandlerFunc) HandlerFunc {
-	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
-		ctx, span := tab.StartSpanWithRemoteParent(ctx, "go-shuttle.receiver.Handle", carrierAdapter(message))
-		defer span.End()
-
-		if message != nil {
-			span.AddAttributes(
-				tab.StringAttribute("message.id", message.MessageID),
-				tab.StringAttribute("message.correlationId", *message.CorrelationID))
-			if message.ScheduledEnqueueTime != nil {
-				span.AddAttributes(tab.StringAttribute("message.scheduledEnqueuedTime", message.ScheduledEnqueueTime.String()))
-			}
-			if message.TimeToLive != nil {
-				span.AddAttributes(tab.StringAttribute("message.ttl", message.TimeToLive.String()))
-			}
-		} else {
-			span.Logger().Info("warning: message is nil")
-		}
-		handler(ctx, settler, message)
-	}
-}
-
-// carrierAdapter wraps a Received Message so that it implements the tab.Carrier interface
-func carrierAdapter(message *azservicebus.ReceivedMessage) tab.Carrier {
-	return &MessageWrapper{Message: message}
-}
-
 // NewRenewLockHandler starts a renewlock goroutine for each message received.
 func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handler HandlerFunc) HandlerFunc {
 	plr := &peekLockRenewer{
@@ -206,13 +176,18 @@ type MessageWrapper struct {
 
 // Set implements tab.Carrier interface
 func (mw *MessageWrapper) Set(key string, value interface{}) {
-	if mw.Message.ApplicationProperties == nil {
-		mw.Message.ApplicationProperties = make(map[string]interface{})
+	if mw.Message != nil {
+		if mw.Message.ApplicationProperties == nil {
+			mw.Message.ApplicationProperties = make(map[string]interface{})
+		}
+		mw.Message.ApplicationProperties[key] = value
 	}
-	mw.Message.ApplicationProperties[key] = value
 }
 
 // GetKeyValues implements tab.Carrier interface
 func (mw *MessageWrapper) GetKeyValues() map[string]interface{} {
-	return mw.Message.ApplicationProperties
+	if mw.Message != nil {
+		return mw.Message.ApplicationProperties
+	}
+	return nil
 }
