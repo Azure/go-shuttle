@@ -34,5 +34,27 @@ func NewTracingHandler(handler v2.HandlerFunc) v2.HandlerFunc {
 
 // carrierAdapter wraps a Received Message so that it implements the tab.Carrier interface
 func carrierAdapter(message *azservicebus.ReceivedMessage) tab.Carrier {
-	return &v2.MessageWrapper{Message: message}
+	return &messageWrapper{message: message}
+}
+
+type messageWrapper struct {
+	message *azservicebus.ReceivedMessage
+}
+
+// Set implements tab.Carrier interface
+func (mw *messageWrapper) Set(key string, value interface{}) {
+	if mw.message != nil {
+		if mw.message.ApplicationProperties == nil {
+			mw.message.ApplicationProperties = make(map[string]interface{})
+		}
+		mw.message.ApplicationProperties[key] = value
+	}
+}
+
+// GetKeyValues implements tab.Carrier interface
+func (mw *messageWrapper) GetKeyValues() map[string]interface{} {
+	if mw.message != nil {
+		return mw.message.ApplicationProperties
+	}
+	return nil
 }

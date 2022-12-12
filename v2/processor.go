@@ -183,28 +183,6 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 	}
 }
 
-type MessageWrapper struct {
-	Message *azservicebus.ReceivedMessage
-}
-
-// Set implements tab.Carrier interface
-func (mw *MessageWrapper) Set(key string, value interface{}) {
-	if mw.Message != nil {
-		if mw.Message.ApplicationProperties == nil {
-			mw.Message.ApplicationProperties = make(map[string]interface{})
-		}
-		mw.Message.ApplicationProperties[key] = value
-	}
-}
-
-// GetKeyValues implements tab.Carrier interface
-func (mw *MessageWrapper) GetKeyValues() map[string]interface{} {
-	if mw.Message != nil {
-		return mw.Message.ApplicationProperties
-	}
-	return nil
-}
-
 // dumb log until we integrate logging
 func log(a ...any) {
 	if os.Getenv("GOSHUTTLE_LOG") == "ALL" {
