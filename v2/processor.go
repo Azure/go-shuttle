@@ -51,7 +51,6 @@ type ProcessorOptions struct {
 	EnrichContextFunc func(ctx context.Context, message *azservicebus.ReceivedMessage)
 }
 
-
 func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := ProcessorOptions{
 		MaxConcurrency:  1,
