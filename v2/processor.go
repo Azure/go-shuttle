@@ -9,6 +9,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/go-shuttle/v2/metrics"
+	"github.com/devigned/tab"
 )
 
 type Receiver interface {
@@ -46,9 +48,8 @@ type Processor struct {
 // MaxConcurrency defaults to 1. Not setting MaxConcurrency, or setting it to 0 or a negative value will fallback to the default.
 // ReceiveInterval defaults to 2 seconds if not set.
 type ProcessorOptions struct {
-	MaxConcurrency    int
-	ReceiveInterval   *time.Duration
-	EnrichContextFunc func(ctx context.Context, message *azservicebus.ReceivedMessage)
+	MaxConcurrency  int
+	ReceiveInterval *time.Duration
 }
 
 func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
@@ -75,7 +76,8 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 // Start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) Start(ctx context.Context) error {
 	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
-	log("received ", len(messages), " messages - initial")
+	log(ctx, "received ", len(messages), " messages - initial")
+	metrics.Processor.IncMessageReceived(float64(len(messages)))
 	if err != nil {
 		return err
 	}
@@ -90,7 +92,8 @@ func (p *Processor) Start(ctx context.Context) error {
 				break
 			}
 			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
-			log("received ", len(messages), " messages from loop")
+			log(ctx, "received ", len(messages), " messages from loop")
+			metrics.Processor.IncMessageReceived(float64(len(messages)))
 			if err != nil {
 				return err
 			}
@@ -98,11 +101,11 @@ func (p *Processor) Start(ctx context.Context) error {
 				p.process(ctx, msg)
 			}
 		case <-ctx.Done():
-			log("context done, stop receiving")
+			log(ctx, "context done, stop receiving")
 			break
 		}
 	}
-	log("exiting processor")
+	log(ctx, "exiting processor")
 	return ctx.Err()
 }
 
@@ -113,7 +116,10 @@ func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedM
 		defer cancel()
 		defer func() {
 			<-p.concurrencyTokens
+			metrics.Processor.IncMessageHandled(message)
+			metrics.Processor.DecConcurrentMessageCount(message)
 		}()
+		metrics.Processor.IncConcurrentMessageCount(message)
 		p.handle(msgContext, p.receiver, message)
 	}()
 }
@@ -151,41 +157,60 @@ type peekLockRenewer struct {
 }
 
 func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *azservicebus.ReceivedMessage) {
-	// _, span := tracing.StartSpanFromMessageAndContext(ctx, "go-shuttle.peeklock.startPeriodicRenewal", message)
-	// defer span.End()
 	count := 0
 	for alive := true; alive; {
 		select {
 		case <-time.After(*plr.renewalInterval):
-			log("renewing lock")
+			log(ctx, "renewing lock")
 			count++
-			// tab.For(ctx).Debug("Renewing message lock", tab.Int64Attribute("count", int64(count)))
+			tab.For(ctx).Debug("Renewing message lock", tab.Int64Attribute("count", int64(count)))
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
 			if err != nil {
-				log("ERROR failed to renew lock")
-				// listener.Metrics.IncMessageLockRenewedFailure(message)
+				log(ctx, "failed to renew lock: ", err)
+				metrics.Processor.IncMessageLockRenewedFailure(message)
 				// I don't think this is a problem. the context is canceled when the message processing is over.
 				// this can happen if we already entered the interval case when the message is completing.
-				// tab.For(ctx).Info("failed to renew the peek lock", tab.StringAttribute("reason", err.Error()))
+				tab.For(ctx).Error(fmt.Errorf("failed to renew lock: %w", err))
 				return
 			}
-			// tab.For(ctx).Debug("renewed lock success")
-			// listener.Metrics.IncMessageLockRenewedSuccess(message)
+			tab.For(ctx).Debug("renewed lock success")
+			metrics.Processor.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
-			log("Context Done, stop lock renewal")
-			// tab.For(ctx).Info("Stopping periodic renewal")
+			log(ctx, ctx, "context done: stopping periodic renewal")
+			tab.For(ctx).Info("stopping periodic renewal")
 			err := ctx.Err()
 			if errors.Is(err, context.DeadlineExceeded) {
-				// listener.Metrics.IncMessageDeadlineReachedCount(message)
+				metrics.Processor.IncMessageDeadlineReachedCount(message)
 			}
 			alive = false
 		}
 	}
 }
 
-// dumb log until we integrate logging
-func log(a ...any) {
+type Logger interface {
+	Info(s string)
+	Warn(s string)
+	Error(s string)
+}
+
+var getLogger = func(_ context.Context) Logger { return &printLogger{} }
+
+type printLogger struct{}
+
+func (l *printLogger) Info(s string) {
+	fmt.Println(append(append([]any{}, "INFO - ", time.Now().UTC(), " - "), s)...)
+}
+
+func (l *printLogger) Warn(s string) {
+	fmt.Println(append(append([]any{}, "WARN - ", time.Now().UTC(), " - "), s)...)
+}
+
+func (l *printLogger) Error(s string) {
+	fmt.Println(append(append([]any{}, "ERROR - ", time.Now().UTC(), " - "), s)...)
+}
+
+func log(ctx context.Context, a ...any) {
 	if os.Getenv("GOSHUTTLE_LOG") == "ALL" {
-		fmt.Println(append(append([]any{}, time.Now().UTC(), " - "), a...)...)
+		getLogger(ctx).Info(fmt.Sprint(append(append([]any{}, time.Now().UTC(), " - "), a...)...))
 	}
 }
