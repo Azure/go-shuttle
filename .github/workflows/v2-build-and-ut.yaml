@@ -1,0 +1,29 @@
+name: Build and Unit Tests for v2
+
+on:
+  push:
+    branches: [ main, jkatariya/ci ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18
+
+      - name: Build
+        run: |
+          cd v2
+          go build -v ./...
+
+      - name: Unit Tests
+        run: |
+          cd v2
+          go test -v ./...
