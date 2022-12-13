@@ -58,11 +58,12 @@ func getMessageTypeLabel(msg *azservicebus.ReceivedMessage) prom.Labels {
 }
 
 func (m *Registry) Init(reg prom.Registerer) {
-	reg.MustRegister(m.MessageHandledCount,
+	reg.MustRegister(
+		m.MessageReceivedCount,
+		m.MessageHandledCount,
 		m.MessageLockRenewedCount,
 		m.MessageDeadlineReachedCount,
-		m.ConcurrentMessageCount,
-		m.ConnectionRecovery)
+		m.ConcurrentMessageCount)
 }
 
 type Registry struct {
@@ -71,7 +72,6 @@ type Registry struct {
 	MessageLockRenewedCount     *prom.CounterVec
 	MessageDeadlineReachedCount *prom.CounterVec
 	ConcurrentMessageCount      *prom.GaugeVec
-	ConnectionRecovery          *prom.CounterVec
 }
 
 type Recorder interface {
