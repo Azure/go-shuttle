@@ -35,36 +35,52 @@ func TestRegistry_Init(t *testing.T) {
 
 }
 
-func TestInformer_GetMetric(t *testing.T) {
-	g := NewWithT(t)
-	r := newRegistry()
-	registerer := prometheus.NewRegistry()
-	informer := &Informer{registry: r}
-
-	// before init
-	count, err := informer.GetMessageLockRenewedFailureCount()
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(count).To(Equal(float64(0)))
-
-	// after init, count 0
-	g.Expect(func() { r.Init(registerer) }).ToNot(Panic())
-	count, err = informer.GetMessageLockRenewedFailureCount()
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(count).To(Equal(float64(0)))
-
-	// count incremented
-	msg := &azservicebus.ReceivedMessage{}
-	msg.ApplicationProperties = map[string]interface{}{
-		"type": "someType",
+func TestMetrics(t *testing.T) {
+	type testcase struct {
+		name string
+		msg  *azservicebus.ReceivedMessage
 	}
-	r.IncMessageLockRenewedFailure(msg)
-	count, err = informer.GetMessageLockRenewedFailureCount()
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(count).To(Equal(float64(1)))
+	for _, tc := range []testcase{
+		{
+			name: "no type property",
+			msg:  &azservicebus.ReceivedMessage{},
+		},
+		{
+			name: "with type property",
+			msg: &azservicebus.ReceivedMessage{
+				ApplicationProperties: map[string]interface{}{
+					"type": "someType",
+				},
+			},
+		},
+	} {
+		g := NewWithT(t)
+		r := newRegistry()
+		registerer := prometheus.NewRegistry()
+		informer := &Informer{registry: r}
 
-	// count failure only
-	r.IncMessageLockRenewedSuccess(msg)
-	count, err = informer.GetMessageLockRenewedFailureCount()
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(count).To(Equal(float64(1)))
+		// before init
+		count, err := informer.GetMessageLockRenewedFailureCount()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+
+		// after init, count 0
+		g.Expect(func() { r.Init(registerer) }).ToNot(Panic())
+		count, err = informer.GetMessageLockRenewedFailureCount()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+
+		// count incremented
+		r.IncMessageLockRenewedFailure(tc.msg)
+		count, err = informer.GetMessageLockRenewedFailureCount()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(1)))
+
+		// count failure only
+		r.IncMessageLockRenewedSuccess(tc.msg)
+		count, err = informer.GetMessageLockRenewedFailureCount()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(1)))
+	}
+
 }
