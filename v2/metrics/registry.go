@@ -3,6 +3,7 @@ package metrics
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	prom "github.com/prometheus/client_golang/prometheus"
@@ -105,7 +106,7 @@ func (m *Registry) IncMessageLockRenewedFailure(msg *azservicebus.ReceivedMessag
 // IncMessageHandled increase the message Handled
 func (m *Registry) IncMessageHandled(msg *azservicebus.ReceivedMessage) {
 	labels := getMessageTypeLabel(msg)
-	labels[deliveryCountLabel] = fmt.Sprintf("%d", msg.DeliveryCount)
+	labels[deliveryCountLabel] = strconv.FormatUint(uint64(msg.DeliveryCount), 10)
 	m.MessageHandledCount.With(labels).Inc()
 }
 
