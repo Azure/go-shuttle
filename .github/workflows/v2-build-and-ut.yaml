@@ -2,7 +2,7 @@ name: Build and Unit Tests for v2
 
 on:
   push:
-    branches: [ main, jkatariya/ci ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
