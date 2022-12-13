@@ -1,3 +1,4 @@
+// Package metrics allows to configure, record and read go-shuttle metrics
 package metrics
 
 import (
@@ -16,8 +17,9 @@ const (
 )
 
 var (
-	metricsRegistry          = newRegistry()
-	Processor       Recorder = metricsRegistry
+	metricsRegistry = newRegistry()
+	// Processor exposes a Recorder interface to manipulate the Processor metrics.
+	Processor Recorder = metricsRegistry
 )
 
 func newRegistry() *Registry {
@@ -74,6 +76,7 @@ type Registry struct {
 	ConcurrentMessageCount      *prom.GaugeVec
 }
 
+// Recorder allows to initialize the metric registry and increase/decrease the registered metrics at runtime.
 type Recorder interface {
 	Init(registerer prom.Registerer)
 	IncMessageDeadlineReachedCount(msg *azservicebus.ReceivedMessage)
@@ -85,49 +88,59 @@ type Recorder interface {
 	IncConcurrentMessageCount(msg *azservicebus.ReceivedMessage)
 }
 
+// IncMessageLockRenewedSuccess increase the message lock renewal success counter
 func (m *Registry) IncMessageLockRenewedSuccess(msg *azservicebus.ReceivedMessage) {
 	labels := getMessageTypeLabel(msg)
 	labels[successLabel] = "true"
 	m.MessageLockRenewedCount.With(labels).Inc()
 }
 
+// IncMessageLockRenewedFailure increase the message lock renewal failure counter
 func (m *Registry) IncMessageLockRenewedFailure(msg *azservicebus.ReceivedMessage) {
 	labels := getMessageTypeLabel(msg)
 	labels[successLabel] = "false"
 	m.MessageLockRenewedCount.With(labels).Inc()
 }
 
+// IncMessageHandled increase the message Handled
 func (m *Registry) IncMessageHandled(msg *azservicebus.ReceivedMessage) {
 	labels := getMessageTypeLabel(msg)
 	labels[deliveryCountLabel] = fmt.Sprintf("%d", msg.DeliveryCount)
 	m.MessageHandledCount.With(labels).Inc()
 }
 
+// IncConcurrentMessageCount increases the concurrent message counter
 func (m *Registry) IncConcurrentMessageCount(msg *azservicebus.ReceivedMessage) {
 	m.ConcurrentMessageCount.With(getMessageTypeLabel(msg)).Inc()
 }
 
+// DecConcurrentMessageCount decreases the concurrent message counter
 func (m *Registry) DecConcurrentMessageCount(msg *azservicebus.ReceivedMessage) {
 	m.ConcurrentMessageCount.With(getMessageTypeLabel(msg)).Dec()
 }
 
+// IncMessageDeadlineReachedCount increases the message deadline reached counter
 func (m *Registry) IncMessageDeadlineReachedCount(msg *azservicebus.ReceivedMessage) {
 	labels := getMessageTypeLabel(msg)
 	m.MessageDeadlineReachedCount.With(labels).Inc()
 }
 
+// IncMessageReceived increases the message received counter
 func (m *Registry) IncMessageReceived(count float64) {
 	m.MessageReceivedCount.With(map[string]string{}).Add(count)
 }
 
+// Informer allows to inspect metrics value stored in the registry at runtime
 type Informer struct {
 	registry *Registry
 }
 
+// NewInformer creates an Informer for the current registry
 func NewInformer() *Informer {
 	return &Informer{registry: metricsRegistry}
 }
 
+// GetMessageLockRenewedFailureCount retrieves the current value of the MessageLockRenewedFailureCount metric
 func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 	var total float64
 	collect(i.registry.MessageLockRenewedCount, func(m dto.Metric) {

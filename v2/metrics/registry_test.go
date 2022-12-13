@@ -31,6 +31,8 @@ func TestRegistry_Init(t *testing.T) {
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
 	g.Expect(fRegistry.collectors).To(HaveLen(5))
+	Processor.IncMessageReceived(10)
+
 }
 
 func TestInformer_GetMetric(t *testing.T) {
