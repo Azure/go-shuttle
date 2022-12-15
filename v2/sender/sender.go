@@ -8,25 +8,36 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
 
+// MessageBody is a type to represent that an input message body can be of any type
 type MessageBody any
 
+// SendHandlerFunction is a function that is used to modify the ServiceBus message before sending
 type SendHandlerFunction func(ctx context.Context, msg *azservicebus.Message)
 
+// CustomSender is a wrapper around the ServiceBus sender that allows for users to introduce middleware to modify the ServiceBus message before it's sent
 type CustomSender interface {
 	SendMessage(ctx context.Context, mb MessageBody, options *azservicebus.SendMessageOptions, middleware SendHandlerFunction) error
 }
 
+// Sender is an interface that allows users to substitute their own senders for the default ServiceBus sender when making a CustomSender
+type Sender interface {
+	SendMessage(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
+}
+
+// DefaultSender contains a Sender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
 type DefaultSender struct {
-	sender     *azservicebus.Sender
+	sender     Sender
 	marshaller Marshaller
 }
 
 var _ CustomSender = &DefaultSender{}
 
-func NewDefaultSender(sender *azservicebus.Sender, marshaller Marshaller) *DefaultSender {
+// NewDefaultSender takes in a Sender and a Marshaller to create a new object that can send messages to the ServiceBus queue
+func NewDefaultSender(sender Sender, marshaller Marshaller) *DefaultSender {
 	return &DefaultSender{sender: sender, marshaller: marshaller}
 }
 
+// SendMessage marshals the input struct, runs middleware to modify the returned ServiceBus message, and uses the Sender to send the message to the ServiceBus queue
 func (d *DefaultSender) SendMessage(ctx context.Context, mb MessageBody, options *azservicebus.SendMessageOptions, middleware SendHandlerFunction) error {
 	// uses a marshaller to marshal the message into a service bus message
 	msg, err := d.marshaller.Marshal(mb)
