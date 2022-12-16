@@ -22,7 +22,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           working-directory: v2
-
+          args: --print-issued-lines=true --path-prefix string
       - name: Build
         run: |
           cd v2

@@ -62,10 +62,10 @@ func randomString(prefix string, length int) string {
 }
 
 func TestSuite(t *testing.T) {
-    t.Helper()
-    if os.Getenv("INTEGRATION") == "" {
-        t.Skip("skipping integration tests, set environment variable INTEGRATION")
-    }
+	t.Helper()
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("skipping integration tests, set environment variable INTEGRATION")
+	}
 	suite.Run(t, &SBSuite{Prefix: "v5"})
 }
 
@@ -155,7 +155,10 @@ func (s *SBSuite) EnsureTopicSubscription(ctx context.Context, t *testing.T, top
 
 func (s *SBSuite) TearDownSuite() {
 	p, _ := os.FindProcess(syscall.Getpid())
-	p.Signal(syscall.SIGINT)
+	err := p.Signal(syscall.SIGINT)
+	if err != nil {
+		return
+	}
 }
 
 func (s *SBSuite) SetupTest() {
