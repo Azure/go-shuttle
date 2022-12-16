@@ -76,7 +76,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 // Start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) Start(ctx context.Context) error {
 	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
-	log(ctx, "received ", len(messages), " messages - initial")
+	Log(ctx, "received ", len(messages), " messages - initial")
 	metrics.Processor.IncMessageReceived(float64(len(messages)))
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func (p *Processor) Start(ctx context.Context) error {
 				break
 			}
 			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
-			log(ctx, "received ", len(messages), " messages from loop")
+			Log(ctx, "received ", len(messages), " messages from loop")
 			metrics.Processor.IncMessageReceived(float64(len(messages)))
 			if err != nil {
 				return err
@@ -101,11 +101,11 @@ func (p *Processor) Start(ctx context.Context) error {
 				p.process(ctx, msg)
 			}
 		case <-ctx.Done():
-			log(ctx, "context done, stop receiving")
+			Log(ctx, "context done, stop receiving")
 			break
 		}
 	}
-	log(ctx, "exiting processor")
+	Log(ctx, "exiting processor")
 	return ctx.Err()
 }
 
@@ -161,12 +161,12 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 	for alive := true; alive; {
 		select {
 		case <-time.After(*plr.renewalInterval):
-			log(ctx, "renewing lock")
+			Log(ctx, "renewing lock")
 			count++
 			tab.For(ctx).Debug("Renewing message lock", tab.Int64Attribute("count", int64(count)))
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
 			if err != nil {
-				log(ctx, "failed to renew lock: ", err)
+				Log(ctx, "failed to renew lock: ", err)
 				metrics.Processor.IncMessageLockRenewedFailure(message)
 				// I don't think this is a problem. the context is canceled when the message processing is over.
 				// this can happen if we already entered the interval case when the message is completing.
@@ -176,7 +176,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			tab.For(ctx).Debug("renewed lock success")
 			metrics.Processor.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
-			log(ctx, ctx, "context done: stopping periodic renewal")
+			Log(ctx, ctx, "context done: stopping periodic renewal")
 			tab.For(ctx).Info("stopping periodic renewal")
 			err := ctx.Err()
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -209,7 +209,7 @@ func (l *printLogger) Error(s string) {
 	fmt.Println(append(append([]any{}, "ERROR - ", time.Now().UTC(), " - "), s)...)
 }
 
-func log(ctx context.Context, a ...any) {
+func Log(ctx context.Context, a ...any) {
 	if os.Getenv("GOSHUTTLE_LOG") == "ALL" {
 		getLogger(ctx).Info(fmt.Sprint(append(append([]any{}, time.Now().UTC(), " - "), a...)...))
 	}

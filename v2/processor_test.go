@@ -74,7 +74,7 @@ func TestNewProcessor_CanSetMaxConcurrency(t *testing.T) {
 	a := require.New(t)
 	rcv := &fakeReceiver{
 		fakeSettler:           &fakeSettler{},
-		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage, 0),
+		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage),
 	}
 	close(rcv.SetupReceivedMessages)
 	processor := v2.NewProcessor(rcv, MyHandler(0*time.Second), &v2.ProcessorOptions{

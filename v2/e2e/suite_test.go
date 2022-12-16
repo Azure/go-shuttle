@@ -38,9 +38,9 @@ type SBSuite struct {
 	Namespace      string
 	ResourceGroup  string
 	TagID          string
-	closer         io.Closer
-	sbAdminClient  *azadmin.Client
-	sbClient       *azservicebus.Client
+	//closer         io.Closer - TODO: implement functionality to use this, commenting for linter
+	sbAdminClient *azadmin.Client
+	sbClient      *azservicebus.Client
 }
 
 func (s *SBSuite) GetSender(queueOrTopic string) (*azservicebus.Sender, error) {

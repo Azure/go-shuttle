@@ -87,7 +87,7 @@ func MarshalHandler(marshaller Marshaller, mb MessageBody, options SendOption) S
 	return func(ctx context.Context, msg *azservicebus.Message) {
 		marshalledMsg, err := marshaller.Marshal(mb)
 		if err != nil {
-			// what do we want to do here?
+			Log(ctx, "failed to marshal message: %s", err)
 		}
 		options(ctx, marshalledMsg)
 	}
