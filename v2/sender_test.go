@@ -25,11 +25,11 @@ func ContentTypeVerifyer(expectedContentType string, t *testing.T) SendOption {
 	}
 }
 
-func MessageIdVerifyer(expectedContent string, t *testing.T) SendOption {
+func MessageIdVerifyer(expectedId string, t *testing.T) SendOption {
 	return func(ctx context.Context, message *azservicebus.Message) {
 		body := *message.MessageID
-		if body != expectedContent {
-			t.Errorf("expected %s, got %s", expectedContent, body)
+		if body != expectedId {
+			t.Errorf("expected %s, got %s", expectedId, body)
 		}
 	}
 }
@@ -45,6 +45,16 @@ func TestHandlers_SetType(t *testing.T) {
 	verifyContentTypeHandler := ContentTypeVerifyer("ContosoCreateUserRequest", t)
 	blankMsg := &azservicebus.Message{}
 	handler := SetTypeHandler(testStruct, verifyContentTypeHandler)
+	handler(context.Background(), blankMsg)
+
+}
+
+func TestHandlers_SetMessageId(t *testing.T) {
+	randId := "testmessageid"
+
+	verifyMessageIdHandler := MessageIdVerifyer(randId, t)
+	blankMsg := &azservicebus.Message{}
+	handler := SetMessageIdHandler(&randId, verifyMessageIdHandler)
 	handler(context.Background(), blankMsg)
 
 }
