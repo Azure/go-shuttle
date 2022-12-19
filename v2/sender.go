@@ -11,12 +11,9 @@ import (
 // MessageBody is a type to represent that an input message body can be of any type
 type MessageBody any
 
-// SendOption is a function that is used to modify the ServiceBus message before sending
-type SendOption func(ctx context.Context, msg *azservicebus.Message)
-
 // CustomSender is a wrapper around the ServiceBus sender that allows for users to introduce middleware to modify the ServiceBus message before it's sent
 type CustomSender interface {
-	SendMessage(ctx context.Context, mb MessageBody, options SendOption) error
+	SendMessage(ctx context.Context, mb MessageBody, options ...func(ctx context.Context, msg *azservicebus.Message) error) error
 }
 
 // SBSender is satisfied by *azservicebus.Sender
@@ -42,7 +39,7 @@ func NewSender(sender SBSender, options SenderOptions) *Sender {
 }
 
 // SendMessage marshals the input struct, runs middleware to modify the returned ServiceBus message, and uses the Sender to send the message to the ServiceBus queue
-func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options SendOption) error {
+func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(ctx context.Context, msg *azservicebus.Message) error) error {
 	// uses a marshaller to marshal the message into a service bus message
 	msg, err := d.options.Marshaller().Marshal(mb)
 	if err != nil {
@@ -50,15 +47,17 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options SendOp
 	}
 
 	// run user-provided middleware
-	if options != nil {
-		options(ctx, msg)
+	for _, option := range options {
+		err := option(ctx, msg)
+		if err != nil {
+			return fmt.Errorf("failed to run middleware: %s", err)
+		}
 	}
 
 	err = d.sbSender.SendMessage(ctx, msg, &azservicebus.SendMessageOptions{}) // sendMessageOptions currently does nothing
 	if err != nil {
 		return fmt.Errorf("failed to send message: %s", err)
 	}
-
 	return nil
 }
 
@@ -67,29 +66,20 @@ func (s SenderOptions) Marshaller() Marshaller {
 }
 
 // SetTypeHandler sets the ServiceBus message's type to the original struct's type
-func SetTypeHandler(mb MessageBody, options SendOption) SendOption {
-	return func(ctx context.Context, msg *azservicebus.Message) {
+func SetTypeHandler(mb MessageBody) func(ctx context.Context, msg *azservicebus.Message) error {
+	return func(ctx context.Context, msg *azservicebus.Message) error {
 		msgType := GetMessageType(mb)
 		msg.ContentType = &msgType
-		options(ctx, msg)
+
+		return nil
 	}
 }
 
 // SetMessageIdHandler sets the ServiceBus message's ID to a user-specified value
-func SetMessageIdHandler(messageId *string, options SendOption) SendOption {
-	return func(ctx context.Context, msg *azservicebus.Message) {
+func SetMessageIdHandler(messageId *string) func(ctx context.Context, msg *azservicebus.Message) error {
+	return func(ctx context.Context, msg *azservicebus.Message) error {
 		msg.MessageID = messageId
-		options(ctx, msg)
-	}
-}
-
-func MarshalHandler(marshaller Marshaller, mb MessageBody, options SendOption) SendOption {
-	return func(ctx context.Context, msg *azservicebus.Message) {
-		marshalledMsg, err := marshaller.Marshal(mb)
-		if err != nil {
-			log(ctx, "failed to marshal message: %s", err)
-		}
-		options(ctx, marshalledMsg)
+		return nil
 	}
 }
 

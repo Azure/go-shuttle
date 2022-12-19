@@ -13,7 +13,7 @@ type Marshaller interface {
 	ContentType() string
 }
 
-const JsonContentType = "application/json"
+const jsonContentType = "application/json"
 const protobufContentType = "application/x-protobuf"
 
 // DefaultJSONMarshaller is the default marshaller for JSON messages
@@ -45,7 +45,7 @@ func (j *DefaultJSONMarshaller) Unmarshal(msg *azservicebus.Message, mb MessageB
 
 // ContentType returns the content type for the JSON marshaller
 func (j *DefaultJSONMarshaller) ContentType() string {
-	return JsonContentType
+	return jsonContentType
 }
 
 // Marshal marshals the user-input struct into a protobuf message and returns a new ServiceBus message with the protofbuf message as the body

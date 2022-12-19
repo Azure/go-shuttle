@@ -7,33 +7,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
 
-func ContentVerifyer(expectedContent string, t *testing.T) SendOption {
-	return func(ctx context.Context, message *azservicebus.Message) {
-		body := message.Body
-		if string(body) != expectedContent {
-			t.Errorf("expected %s, got %s", expectedContent, body)
-		}
-	}
-}
-
-func ContentTypeVerifyer(expectedContentType string, t *testing.T) SendOption {
-	return func(ctx context.Context, message *azservicebus.Message) {
-		contentType := *message.ContentType
-		if contentType != expectedContentType {
-			t.Errorf("expected %s, got %s", expectedContentType, contentType)
-		}
-	}
-}
-
-func MessageIdVerifyer(expectedId string, t *testing.T) SendOption {
-	return func(ctx context.Context, message *azservicebus.Message) {
-		body := *message.MessageID
-		if body != expectedId {
-			t.Errorf("expected %s, got %s", expectedId, body)
-		}
-	}
-}
-
 func TestHandlers_SetType(t *testing.T) {
 	type ContosoCreateUserRequest struct {
 		FirstName string
@@ -42,19 +15,30 @@ func TestHandlers_SetType(t *testing.T) {
 	}
 
 	testStruct := ContosoCreateUserRequest{}
-	verifyContentTypeHandler := ContentTypeVerifyer("ContosoCreateUserRequest", t)
+	expectedContentType := "ContosoCreateUserRequest"
 	blankMsg := &azservicebus.Message{}
-	handler := SetTypeHandler(testStruct, verifyContentTypeHandler)
-	handler(context.Background(), blankMsg)
+	handler := SetTypeHandler(testStruct)
+	err := handler(context.Background(), blankMsg)
+	if err != nil {
+		t.Errorf("Unexpected error in set type test: %s", err)
+	}
+	if *blankMsg.ContentType != expectedContentType {
+		t.Errorf("for contenttype expected %s, got %s", expectedContentType, *blankMsg.ContentType)
+
+	}
 
 }
 
 func TestHandlers_SetMessageId(t *testing.T) {
 	randId := "testmessageid"
 
-	verifyMessageIdHandler := MessageIdVerifyer(randId, t)
 	blankMsg := &azservicebus.Message{}
-	handler := SetMessageIdHandler(&randId, verifyMessageIdHandler)
-	handler(context.Background(), blankMsg)
-
+	handler := SetMessageIdHandler(&randId)
+	err := handler(context.Background(), blankMsg)
+	if err != nil {
+		t.Errorf("Unexpected error in set message id test: %s", err)
+	}
+	if *blankMsg.MessageID != randId {
+		t.Errorf("for message id expected %s, got %s", randId, *blankMsg.MessageID)
+	}
 }
