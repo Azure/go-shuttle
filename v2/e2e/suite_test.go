@@ -38,9 +38,9 @@ type SBSuite struct {
 	Namespace      string
 	ResourceGroup  string
 	TagID          string
-	//closer         io.Closer - TODO: implement functionality to use this, commenting for linter
-	sbAdminClient *azadmin.Client
-	sbClient      *azservicebus.Client
+	closer         io.Closer
+	sbAdminClient  *azadmin.Client
+	sbClient       *azservicebus.Client
 }
 
 func (s *SBSuite) GetSender(queueOrTopic string) (*azservicebus.Sender, error) {
@@ -155,10 +155,7 @@ func (s *SBSuite) EnsureTopicSubscription(ctx context.Context, t *testing.T, top
 
 func (s *SBSuite) TearDownSuite() {
 	p, _ := os.FindProcess(syscall.Getpid())
-	err := p.Signal(syscall.SIGINT)
-	if err != nil {
-		return
-	}
+	p.Signal(syscall.SIGINT)
 }
 
 func (s *SBSuite) SetupTest() {
