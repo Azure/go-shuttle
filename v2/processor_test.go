@@ -43,6 +43,7 @@ func ExampleProcessor() {
 		v2.NewPanicHandler(
 			v2.NewRenewLockHandler(receiver, &lockRenewalInterval,
 				MyHandler(0*time.Second))), &v2.ProcessorOptions{MaxConcurrency: 10})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	err = p.Start(ctx)
 	if err != nil {
