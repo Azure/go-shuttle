@@ -4,8 +4,13 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+)
+
+const (
+	msgTypeField = "type"
 )
 
 // MessageBody is a type to represent that an input message body can be of any type
@@ -13,18 +18,18 @@ type MessageBody any
 
 // CustomSender is a wrapper around the ServiceBus sender that allows for users to introduce middleware to modify the ServiceBus message before it's sent
 type CustomSender interface {
-	SendMessage(ctx context.Context, mb MessageBody, options ...func(ctx context.Context, msg *azservicebus.Message) error) error
+	SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error
 }
 
-// SBSender is satisfied by *azservicebus.Sender
-type SBSender interface {
+// AzServiceBusSender is satisfied by *azservicebus.Sender
+type AzServiceBusSender interface {
 	SendMessage(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
 }
 
 // Sender contains an SBSender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
 type Sender struct {
-	sbSender SBSender
-	options  SenderOptions
+	sbSender AzServiceBusSender
+	options  *SenderOptions
 }
 
 type SenderOptions struct {
@@ -34,30 +39,36 @@ type SenderOptions struct {
 var _ CustomSender = &Sender{}
 
 // NewSender takes in a Sender and a Marshaller to create a new object that can send messages to the ServiceBus queue
-func NewSender(sender SBSender, options SenderOptions) *Sender {
+func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
+	if options == nil {
+		options = &SenderOptions{marshaller: &DefaultJSONMarshaller{}}
+	}
 	return &Sender{sbSender: sender, options: options}
 }
 
 // SendMessage marshals the input struct, runs middleware to modify the returned ServiceBus message, and uses the Sender to send the message to the ServiceBus queue
-func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(ctx context.Context, msg *azservicebus.Message) error) error {
+func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error {
 	// uses a marshaller to marshal the message into a service bus message
 	msg, err := d.options.Marshaller().Marshal(mb)
 	if err != nil {
-		return fmt.Errorf("failed to marshal original struct into ServiceBus message: %s", err)
+		return fmt.Errorf("failed to marshal original struct into ServiceBus message: %w", err)
 	}
 
-	// run user-provided middleware
+	// set type in application properties
+	msgType := getMessageType(mb)
+	msg.ApplicationProperties = map[string]interface{}{msgTypeField: msgType}
+
+	// run user-provided msg options
 	for _, option := range options {
-		err := option(ctx, msg)
-		if err != nil {
-			return fmt.Errorf("failed to run middleware: %s", err)
+		if err := option(msg); err != nil {
+			return fmt.Errorf("failed to run message options: %w", err)
 		}
 	}
 
-	err = d.sbSender.SendMessage(ctx, msg, &azservicebus.SendMessageOptions{}) // sendMessageOptions currently does nothing
-	if err != nil {
-		return fmt.Errorf("failed to send message: %s", err)
+	if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
+		return fmt.Errorf("failed to send message: %w", err)
 	}
+
 	return nil
 }
 
@@ -65,25 +76,40 @@ func (s SenderOptions) Marshaller() Marshaller {
 	return s.marshaller
 }
 
-// SetTypeHandler sets the ServiceBus message's type to the original struct's type
-func SetTypeHandler(mb MessageBody) func(ctx context.Context, msg *azservicebus.Message) error {
-	return func(ctx context.Context, msg *azservicebus.Message) error {
-		msgType := GetMessageType(mb)
-		msg.ContentType = &msgType
-
-		return nil
-	}
-}
-
-// SetMessageIdHandler sets the ServiceBus message's ID to a user-specified value
-func SetMessageIdHandler(messageId *string) func(ctx context.Context, msg *azservicebus.Message) error {
-	return func(ctx context.Context, msg *azservicebus.Message) error {
+// SetMessageId sets the ServiceBus message's ID to a user-specified value
+func SetMessageId(messageId *string) func(msg *azservicebus.Message) error {
+	return func(msg *azservicebus.Message) error {
 		msg.MessageID = messageId
 		return nil
 	}
 }
 
-func GetMessageType(mb MessageBody) string {
+// SetCorrelationId sets the ServiceBus message's correlation ID to a user-specified value
+func SetCorrelationId(correlationId *string) func(msg *azservicebus.Message) error {
+	return func(msg *azservicebus.Message) error {
+		msg.CorrelationID = correlationId
+		return nil
+	}
+}
+
+// SetScheduleAt schedules a message to be enqueued in the future
+func SetScheduleAt(t time.Time) func(msg *azservicebus.Message) error {
+	return func(msg *azservicebus.Message) error {
+		msg.ScheduledEnqueueTime = &t
+		return nil
+	}
+}
+
+// SetMessageDelay schedules a message in the future
+func SetMessageDelay(delay time.Duration) func(msg *azservicebus.Message) error {
+	return func(msg *azservicebus.Message) error {
+		newTime := time.Now().Add(delay)
+		msg.ScheduledEnqueueTime = &newTime
+		return nil
+	}
+}
+
+func getMessageType(mb MessageBody) string {
 	var msgType string
 	vo := reflect.ValueOf(mb)
 	if vo.Kind() == reflect.Ptr {
