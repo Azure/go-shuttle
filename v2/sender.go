@@ -16,11 +16,6 @@ const (
 // MessageBody is a type to represent that an input message body can be of any type
 type MessageBody any
 
-// CustomSender is a wrapper around the ServiceBus sender that allows for users to introduce middleware to modify the ServiceBus message before it's sent
-type CustomSender interface {
-	SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error
-}
-
 // AzServiceBusSender is satisfied by *azservicebus.Sender
 type AzServiceBusSender interface {
 	SendMessage(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
@@ -36,8 +31,6 @@ type SenderOptions struct {
 	marshaller Marshaller
 }
 
-var _ CustomSender = &Sender{}
-
 // NewSender takes in a Sender and a Marshaller to create a new object that can send messages to the ServiceBus queue
 func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 	if options == nil {
@@ -46,7 +39,6 @@ func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 	return &Sender{sbSender: sender, options: options}
 }
 
-// SendMessage marshals the input struct, runs middleware to modify the returned ServiceBus message, and uses the Sender to send the message to the ServiceBus queue
 func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error {
 	// uses a marshaller to marshal the message into a service bus message
 	msg, err := d.options.Marshaller().Marshal(mb)
@@ -54,11 +46,9 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 		return fmt.Errorf("failed to marshal original struct into ServiceBus message: %w", err)
 	}
 
-	// set type in application properties
 	msgType := getMessageType(mb)
 	msg.ApplicationProperties = map[string]interface{}{msgTypeField: msgType}
 
-	// run user-provided msg options
 	for _, option := range options {
 		if err := option(msg); err != nil {
 			return fmt.Errorf("failed to run message options: %w", err)
