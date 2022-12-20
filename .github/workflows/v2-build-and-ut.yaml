@@ -27,5 +27,3 @@ jobs:
         run: |
           cd v2
           go test -v ./...
-
-
