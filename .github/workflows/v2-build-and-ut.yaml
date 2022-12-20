@@ -27,3 +27,9 @@ jobs:
         run: |
           cd v2
           go test -v ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          working-directory: v2
+          args: --print-issued-lines=true --path-prefix string
