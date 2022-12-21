@@ -9,7 +9,7 @@ import (
 	shuttle "github.com/Azure/go-shuttle/v2"
 )
 
-func ExampleSettlingHandler() {
+func ExampleNewSettlementHandler() {
 	tokenCredential, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		panic(err)
