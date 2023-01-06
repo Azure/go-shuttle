@@ -77,10 +77,10 @@ type ManagedSettlingOptions struct {
 
 // NewManagedSettlingHandler allows to configure Retry decision logic and delay strategy.
 // It also adapts the handler to let the user return an error from the handler, instead of a settlement.
-// the settlment is infered from the handler's return value.
+// the settlement is inferred from the handler's return value.
 // error -> abandon
 // nil -> complete
-// the RetryDecision can be overriden and can inspect the error returned to decide to retry the message or not.
+// the RetryDecision can be overridden and can inspect the error returned to decide to retry the message or not.
 // this allows to define error types that shouldn't be retried (and moved directly to the deadletter queue)
 func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSettlingFunc) *ManagedSettler {
 	options := &ManagedSettlingOptions{
