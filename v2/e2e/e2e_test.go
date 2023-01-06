@@ -31,7 +31,8 @@ func (s *SBSuite) TestPublishAndListen_ConcurrentLockRenewal() {
 		p := v2.NewProcessor(receiver,
 			v2.NewPanicHandler(
 				v2.NewRenewLockHandler(receiver, &lockRenewalInterval,
-					testHandler(t, success, sendCount))), &v2.ProcessorOptions{MaxConcurrency: 25})
+					v2.NewSettlementHandler(nil,
+						testHandler(t, success, sendCount)))), &v2.ProcessorOptions{MaxConcurrency: 25})
 
 		t.Logf("start processor...")
 		err = p.Start(ctx)
@@ -58,22 +59,18 @@ func (s *SBSuite) TestPublishAndListen_ConcurrentLockRenewal() {
 	}
 }
 
-func testHandler(t *testing.T, success chan bool, expectedCount int) v2.HandlerFunc {
+func testHandler(t *testing.T, success chan bool, expectedCount int) v2.Settler {
 	var count uint32
-	return func(ctx context.Context, settler v2.MessageSettler, message *azservicebus.ReceivedMessage) {
+	return func(ctx context.Context, message *azservicebus.ReceivedMessage) v2.Settlement {
 		t.Logf("Processing message.\n Delivery Count: %d\n", message.DeliveryCount)
 		t.Logf("ID: %s - Locked Until: %s\n", message.MessageID, message.LockedUntil)
 		t.Logf("sleeping...")
 		atomic.AddUint32(&count, 1)
 		time.Sleep(12 * time.Second)
 		t.Logf("completing message...")
-		err := settler.CompleteMessage(ctx, message, nil)
-		t.Logf("completed %d messages!", count)
-		if err != nil {
-			success <- false
-		}
 		if count == uint32(expectedCount) {
 			success <- true
 		}
+		return &v2.Complete{}
 	}
 }

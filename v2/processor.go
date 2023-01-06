@@ -27,8 +27,16 @@ type MessageSettler interface {
 	RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error
 }
 
+type Handler interface {
+	Handle(context.Context, MessageSettler, *azservicebus.ReceivedMessage)
+}
+
 // HandlerFunc is a func to handle the message received from a subscription
 type HandlerFunc func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage)
+
+func (f HandlerFunc) Handle(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
+	f(ctx, settler, message)
+}
 
 // LockRenewer abstracts the servicebus receiver client to only expose lock renewal
 type LockRenewer interface {
@@ -40,7 +48,7 @@ type LockRenewer interface {
 type Processor struct {
 	receiver          Receiver
 	options           ProcessorOptions
-	handle            HandlerFunc
+	handle            Handler
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor
 }
 
@@ -113,6 +121,7 @@ func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedM
 	p.concurrencyTokens <- struct{}{}
 	go func() {
 		msgContext, cancel := context.WithCancel(ctx)
+		// cancel messageContext when we get out of this goroutine
 		defer cancel()
 		defer func() {
 			<-p.concurrencyTokens
@@ -120,24 +129,24 @@ func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedM
 			metrics.Processor.DecConcurrentMessageCount(message)
 		}()
 		metrics.Processor.IncConcurrentMessageCount(message)
-		p.handle(msgContext, p.receiver, message)
+		p.handle.Handle(msgContext, p.receiver, message)
 	}()
 }
 
 // NewPanicHandler recovers panics from downstream handlers
-func NewPanicHandler(handler HandlerFunc) HandlerFunc {
+func NewPanicHandler(handler Handler) HandlerFunc {
 	defer func() {
 		if err := recover(); err != nil {
 			panic(fmt.Sprintf("failed to recover panic: %s", err))
 		}
 	}()
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
-		handler(ctx, settler, message)
+		handler.Handle(ctx, settler, message)
 	}
 }
 
 // NewRenewLockHandler starts a renewlock goroutine for each message received.
-func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handler HandlerFunc) HandlerFunc {
+func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handler Handler) HandlerFunc {
 	plr := &peekLockRenewer{
 		next:            handler,
 		lockRenewer:     lockRenewer,
@@ -145,7 +154,7 @@ func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handl
 	}
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 		go plr.startPeriodicRenewal(ctx, message)
-		handler(ctx, settler, message)
+		handler.Handle(ctx, settler, message)
 	}
 }
 
@@ -153,7 +162,7 @@ func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handl
 // or until the passed in context is canceled.
 // it is a pass through handler if the renewalInterval is nil
 type peekLockRenewer struct {
-	next            HandlerFunc
+	next            Handler
 	lockRenewer     LockRenewer
 	renewalInterval *time.Duration
 }
@@ -170,10 +179,14 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			if err != nil {
 				log(ctx, "failed to renew lock: ", err)
 				metrics.Processor.IncMessageLockRenewedFailure(message)
-				// I don't think this is a problem. the context is canceled when the message processing is over.
-				// this can happen if we already entered the interval case when the message is completing.
+				// The context is canceled when the message handler returns from the processor.
+				// This can happen if we already entered the interval case when the message processing completes.
+				// The best we can do is log and retry on the next tick. The sdk already retries operations on recoverable network errors.
 				tab.For(ctx).Error(fmt.Errorf("failed to renew lock: %w", err))
-				return
+				// on error, we continue to the next loop iteration.
+				// if the context is Done, we will enter the ctx.Done() case and exit the renewal.
+				// if the error is anything else, we keep retrying the renewal
+				continue
 			}
 			tab.For(ctx).Debug("renewed lock success")
 			metrics.Processor.IncMessageLockRenewedSuccess(message)
