@@ -71,10 +71,17 @@ type ManagedSettlingOptions struct {
 	RetryDecision RetryDecision
 	// RetryDelayStrategy is invoked when a message handling does not complete successfully
 	// and the RetryDecision decides to retry the message.
-	// The handler will sleep for the time calculated before Abandoning the message.
+	// The handler will sleep for the time calculated by the delayStrategy before Abandoning the message.
 	RetryDelayStrategy RetryDelayStrategy
 }
 
+// NewManagedSettlingHandler allows to configure Retry decision logic and delay strategy.
+// It also adapts the handler to let the user return an error from the handler, instead of a settlement.
+// the settlment is infered from the handler's return value.
+// error -> abandon
+// nil -> complete
+// the RetryDecision can be overriden and can inspect the error returned to decide to retry the message or not.
+// this allows to define error types that shouldn't be retried (and moved directly to the deadletter queue)
 func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSettlingFunc) *ManagedSettler {
 	options := &ManagedSettlingOptions{
 		RetryDecision:      &MaxAttemptsRetryDecision{MaxAttempts: 5},
