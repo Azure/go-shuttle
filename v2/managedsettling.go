@@ -107,6 +107,7 @@ func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSett
 
 func (m *ManagedSettler) handleError(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage, handleErr error) {
 	if !m.options.RetryDecision.CanRetry(handleErr, message) {
+		log(ctx, "moving message to dead letter queue because processing failed to an error: %s", handleErr)
 		deadLetterSettlement.settle(ctx, settler, message, &azservicebus.DeadLetterOptions{
 			ErrorDescription:   to.Ptr("ManagedSettlingHandlerDeadLettering"),
 			Reason:             to.Ptr(handleErr.Error()),
