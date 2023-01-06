@@ -1,4 +1,4 @@
-package v2_test
+package shuttle_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	shuttle "github.com/Azure/go-shuttle/v2"
+	"github.com/Azure/go-shuttle/v2"
 )
 
 func ExampleNewManagedSettlingHandler() {

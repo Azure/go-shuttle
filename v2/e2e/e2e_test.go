@@ -9,7 +9,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"github.com/stretchr/testify/require"
 
-	v2 "github.com/Azure/go-shuttle/v2"
+	"github.com/Azure/go-shuttle/v2"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
@@ -28,11 +28,11 @@ func (s *SBSuite) TestPublishAndListen_ConcurrentLockRenewal() {
 		receiver, err := s.sbClient.NewReceiverForSubscription(topicName, subscriptionName, nil)
 		require.NoError(t, err)
 		lockRenewalInterval := 2 * time.Second
-		p := v2.NewProcessor(receiver,
-			v2.NewPanicHandler(
-				v2.NewRenewLockHandler(receiver, &lockRenewalInterval,
-					v2.NewSettlementHandler(nil,
-						testHandler(t, success, sendCount)))), &v2.ProcessorOptions{MaxConcurrency: 25})
+		p := shuttle.NewProcessor(receiver,
+			shuttle.NewPanicHandler(
+				shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval,
+					shuttle.NewSettlementHandler(nil,
+						testHandler(t, success, sendCount)))), &shuttle.ProcessorOptions{MaxConcurrency: 25})
 
 		t.Logf("start processor...")
 		err = p.Start(ctx)
@@ -59,9 +59,9 @@ func (s *SBSuite) TestPublishAndListen_ConcurrentLockRenewal() {
 	}
 }
 
-func testHandler(t *testing.T, success chan bool, expectedCount int) v2.Settler {
+func testHandler(t *testing.T, success chan bool, expectedCount int) shuttle.Settler {
 	var count uint32
-	return func(ctx context.Context, message *azservicebus.ReceivedMessage) v2.Settlement {
+	return func(ctx context.Context, message *azservicebus.ReceivedMessage) shuttle.Settlement {
 		t.Logf("Processing message.\n Delivery Count: %d\n", message.DeliveryCount)
 		t.Logf("ID: %s - Locked Until: %s\n", message.MessageID, message.LockedUntil)
 		t.Logf("sleeping...")
@@ -71,6 +71,6 @@ func testHandler(t *testing.T, success chan bool, expectedCount int) v2.Settler 
 		if count == uint32(expectedCount) {
 			success <- true
 		}
-		return &v2.Complete{}
+		return &shuttle.Complete{}
 	}
 }

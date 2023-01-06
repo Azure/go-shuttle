@@ -1,4 +1,4 @@
-package v2_test
+package shuttle_test
 
 import (
 	"context"
@@ -11,11 +11,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	v2 "github.com/Azure/go-shuttle/v2"
+	"github.com/Azure/go-shuttle/v2"
 )
 
-func MyHandler(timePerMessage time.Duration) v2.HandlerFunc {
-	return func(ctx context.Context, settler v2.MessageSettler, message *azservicebus.ReceivedMessage) {
+func MyHandler(timePerMessage time.Duration) shuttle.HandlerFunc {
+	return func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
 		// logic
 		time.Sleep(timePerMessage)
 		err := settler.CompleteMessage(ctx, message, nil)
@@ -39,10 +39,10 @@ func ExampleProcessor() {
 		panic(err)
 	}
 	lockRenewalInterval := 10 * time.Second
-	p := v2.NewProcessor(receiver,
-		v2.NewPanicHandler(
-			v2.NewRenewLockHandler(receiver, &lockRenewalInterval,
-				MyHandler(0*time.Second))), &v2.ProcessorOptions{MaxConcurrency: 10})
+	p := shuttle.NewProcessor(receiver,
+		shuttle.NewPanicHandler(
+			shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval,
+				MyHandler(0*time.Second))), &shuttle.ProcessorOptions{MaxConcurrency: 10})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	err = p.Start(ctx)
@@ -61,7 +61,7 @@ func TestNewProcessor_DefaultsToMaxConcurrency1(t *testing.T) {
 		fakeSettler:           &fakeSettler{},
 		SetupReceivedMessages: messages,
 	}
-	processor := v2.NewProcessor(rcv, MyHandler(0*time.Second), nil)
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	err := processor.Start(ctx)
@@ -77,7 +77,7 @@ func TestNewProcessor_CanSetMaxConcurrency(t *testing.T) {
 		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage),
 	}
 	close(rcv.SetupReceivedMessages)
-	processor := v2.NewProcessor(rcv, MyHandler(0*time.Second), &v2.ProcessorOptions{
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
 		MaxConcurrency: 10,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -100,7 +100,7 @@ func TestNewProcessor_Interval(t *testing.T) {
 	}
 	close(rcv.SetupReceivedMessages)
 
-	processor := v2.NewProcessor(rcv, MyHandler(10*time.Millisecond), &v2.ProcessorOptions{
+	processor := shuttle.NewProcessor(rcv, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
 		MaxConcurrency:  3,
 		ReceiveInterval: to.Ptr(20 * time.Millisecond),
 	})
@@ -124,7 +124,7 @@ func TestNewProcessor_ReceiveDeltaConcurrencyOnly(t *testing.T) {
 		SetupMaxReceiveCalls:  3,
 	}
 	close(rcv.SetupReceivedMessages)
-	processor := v2.NewProcessor(rcv, MyHandler(20*time.Millisecond), &v2.ProcessorOptions{
+	processor := shuttle.NewProcessor(rcv, MyHandler(20*time.Millisecond), &shuttle.ProcessorOptions{
 		MaxConcurrency:  1,
 		ReceiveInterval: to.Ptr(12 * time.Millisecond),
 	})
@@ -147,7 +147,7 @@ func TestNewProcessor_ReceiveDelta(t *testing.T) {
 		SetupReceivedMessages: messagesChannel(5),
 		SetupMaxReceiveCalls:  2,
 	}
-	processor := v2.NewProcessor(rcv, MyHandler(1*time.Second), &v2.ProcessorOptions{
+	processor := shuttle.NewProcessor(rcv, MyHandler(1*time.Second), &shuttle.ProcessorOptions{
 		MaxConcurrency:  10,
 		ReceiveInterval: to.Ptr(20 * time.Millisecond),
 	})
