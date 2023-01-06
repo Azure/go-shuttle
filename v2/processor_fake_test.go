@@ -1,4 +1,4 @@
-package v2_test
+package shuttle_test
 
 import (
 	"context"

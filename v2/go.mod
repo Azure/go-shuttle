@@ -3,7 +3,7 @@ go 1.18
 module github.com/Azure/go-shuttle/v2
 
 require (
-	github.com/Azure/azure-amqp-common-go/v3 v3.2.0
+	github.com/Azure/azure-amqp-common-go/v3 v3.2.3
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.0.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.0.0
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.1.3

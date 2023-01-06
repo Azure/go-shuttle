@@ -10,8 +10,8 @@ import (
 
 // NewTracingHandler extracts the context from the message Application property if available, or from the existing
 // context if not, and starts a span
-func NewTracingHandler(handler v2.HandlerFunc) v2.HandlerFunc {
-	return func(ctx context.Context, settler v2.MessageSettler, message *azservicebus.ReceivedMessage) {
+func NewTracingHandler(handler shuttle.HandlerFunc) shuttle.HandlerFunc {
+	return func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
 		ctx, span := tab.StartSpanWithRemoteParent(ctx, "go-shuttle.receiver.Handle", carrierAdapter(message))
 		defer span.End()
 

@@ -1,8 +1,9 @@
-package v2
+package shuttle
 
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"google.golang.org/protobuf/proto"
 )
