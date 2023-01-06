@@ -10,7 +10,7 @@ import (
 	shuttle "github.com/Azure/go-shuttle/v2"
 )
 
-func ExampleManagedSettlingHandler() {
+func ExampleNewManagedSettlingHandler() {
 	tokenCredential, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		panic(err)
