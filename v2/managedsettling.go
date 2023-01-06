@@ -83,9 +83,13 @@ type ManagedSettlingOptions struct {
 // the RetryDecision can be overridden and can inspect the error returned to decide to retry the message or not.
 // this allows to define error types that shouldn't be retried (and moved directly to the deadletter queue)
 func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSettlingFunc) *ManagedSettler {
+	const (
+		defaultRetryDecisionMaxAttempts = 5
+		defaultDelay                    = 5 * time.Second
+	)
 	options := &ManagedSettlingOptions{
-		RetryDecision:      &MaxAttemptsRetryDecision{MaxAttempts: 5},
-		RetryDelayStrategy: &ConstantDelayStrategy{Delay: 5 * time.Second},
+		RetryDecision:      &MaxAttemptsRetryDecision{MaxAttempts: defaultRetryDecisionMaxAttempts},
+		RetryDelayStrategy: &ConstantDelayStrategy{Delay: defaultDelay},
 	}
 	if opts != nil {
 		if opts.RetryDecision != nil {
