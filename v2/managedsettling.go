@@ -31,7 +31,7 @@ func (m *ManagedSettler) Handle(ctx context.Context, settler MessageSettler, mes
 		// if we fail to complete the message, we log the error and let the message lock expire.
 		// we cannot do more at this point.
 	}
-	m.options.OnComplete(ctx, message)
+	m.options.OnCompleted(ctx, message)
 }
 
 // RetryDecision allows to provide custom retry decision.
@@ -77,8 +77,8 @@ type ManagedSettlingOptions struct {
 	RetryDelayStrategy RetryDelayStrategy
 	// OnFailure is a func that is invoked when the handler returns an error. It is invoked after the message is abandoned or deadlettered.
 	OnFailure func(context.Context, *azservicebus.ReceivedMessage, error)
-	// OnComplete is a func that is invoked when the handler does not return any error. it is invoked after the message is completed.
-	OnComplete func(context.Context, *azservicebus.ReceivedMessage)
+	// OnCompleted is a func that is invoked when the handler does not return any error. it is invoked after the message is completed.
+	OnCompleted func(context.Context, *azservicebus.ReceivedMessage)
 }
 
 // NewManagedSettlingHandler allows to configure Retry decision logic and delay strategy.
@@ -96,9 +96,9 @@ func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSett
 	options := &ManagedSettlingOptions{
 		RetryDecision:      &MaxAttemptsRetryDecision{MaxAttempts: defaultRetryDecisionMaxAttempts},
 		RetryDelayStrategy: &ConstantDelayStrategy{Delay: defaultDelay},
-		OnComplete: func(ctx context.Context, message *azservicebus.ReceivedMessage) {
-			if opts.OnComplete != nil {
-				opts.OnComplete(ctx, message)
+		OnCompleted: func(ctx context.Context, message *azservicebus.ReceivedMessage) {
+			if opts.OnCompleted != nil {
+				opts.OnCompleted(ctx, message)
 			}
 		},
 		OnFailure: func(ctx context.Context, message *azservicebus.ReceivedMessage, err error) {

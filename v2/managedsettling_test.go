@@ -115,7 +115,7 @@ func TestManagedSettler_Handle(t *testing.T) {
 				OnFailure: func(ctx context.Context, msg *azservicebus.ReceivedMessage, err error) {
 					tc.hooks.onFailureCalled = true
 				},
-				OnComplete: func(ctx context.Context, msg *azservicebus.ReceivedMessage) {
+				OnCompleted: func(ctx context.Context, msg *azservicebus.ReceivedMessage) {
 					tc.hooks.onCompleteCalled = true
 				},
 			}
