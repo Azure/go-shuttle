@@ -95,6 +95,17 @@ func TestManagedSettler_Handle(t *testing.T) {
 				require.False(t, hooks.onCompleteCalled)
 			},
 		},
+		{
+			name:            "deadletter when handler returns err and retry decision is false",
+			hooks:           &hooks{},
+			handlerResponse: fmt.Errorf("some error"),
+			msg:             &azservicebus.ReceivedMessage{DeliveryCount: 5},
+			expectation: func(t *testing.T, hooks *hooks, settler *fakeSettler) {
+				require.False(t, settler.completed)
+				require.False(t, settler.abandoned)
+				require.True(t, settler.deadlettered)
+			},
+		},
 	}
 	for _, tc := range testCases {
 		tc := tc
