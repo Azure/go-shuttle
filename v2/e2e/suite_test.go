@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-amqp-common-go/v3/conn"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	azadmin "github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/admin"
@@ -38,7 +37,7 @@ type SBSuite struct {
 	Namespace      string
 	ResourceGroup  string
 	TagID          string
-	//closer         io.Closer # TODO - implement closer functionality
+	// closer         io.Closer # TODO - implement closer functionality
 	sbAdminClient *azadmin.Client
 	sbClient      *azservicebus.Client
 }
@@ -102,7 +101,7 @@ func (s *SBSuite) SetupSuite() {
 	err := s.InitFromEnv()
 	s.Require().NoErrorf(err, "Missing env variable to configure suite")
 
-	parsed, err := conn.ParsedConnectionFromStr(s.ConnStr)
+	parsed, err := parsedConnectionFromStr(s.ConnStr)
 	s.Require().NoErrorf(err, "connection string could not be parsed")
 	s.Namespace = parsed.Namespace
 	// suite.Token = suite.servicePrincipalToken()
