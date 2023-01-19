@@ -1,11 +1,21 @@
 package shuttle
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
+
+func TestFunc_NewSender(t *testing.T) {
+	marshaller := &DefaultProtoMarshaller{}
+	sender := NewSender(nil, &SenderOptions{Marshaller: marshaller})
+
+	if sender.options.Marshaller != marshaller {
+		t.Errorf("failed to set marshaller, expected: %s, actual: %s", reflect.TypeOf(marshaller), reflect.TypeOf(sender.options.Marshaller))
+	}
+}
 
 func TestHandlers_SetMessageId(t *testing.T) {
 	randId := "testmessageid"

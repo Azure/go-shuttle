@@ -28,20 +28,20 @@ type Sender struct {
 }
 
 type SenderOptions struct {
-	marshaller Marshaller
+	Marshaller Marshaller
 }
 
 // NewSender takes in a Sender and a Marshaller to create a new object that can send messages to the ServiceBus queue
 func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 	if options == nil {
-		options = &SenderOptions{marshaller: &DefaultJSONMarshaller{}}
+		options = &SenderOptions{Marshaller: &DefaultJSONMarshaller{}}
 	}
 	return &Sender{sbSender: sender, options: options}
 }
 
 func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error {
 	// uses a marshaller to marshal the message into a service bus message
-	msg, err := d.options.Marshaller().Marshal(mb)
+	msg, err := d.options.Marshaller.Marshal(mb)
 	if err != nil {
 		return fmt.Errorf("failed to marshal original struct into ServiceBus message: %w", err)
 	}
@@ -60,10 +60,6 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 	}
 
 	return nil
-}
-
-func (s SenderOptions) Marshaller() Marshaller {
-	return s.marshaller
 }
 
 // SetMessageId sets the ServiceBus message's ID to a user-specified value
