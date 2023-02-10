@@ -95,6 +95,14 @@ func SetMessageDelay(delay time.Duration) func(msg *azservicebus.Message) error 
 	}
 }
 
+// SetMessageTTL sets the ServiceBus message's TimeToLive to a user-specified value
+func SetMessageTTL(ttl time.Duration) func(msg *azservicebus.Message) error {
+	return func(msg *azservicebus.Message) error {
+		msg.TimeToLive = &ttl
+		return nil
+	}
+}
+
 func getMessageType(mb MessageBody) string {
 	var msgType string
 	vo := reflect.ValueOf(mb)
