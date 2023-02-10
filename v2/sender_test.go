@@ -54,3 +54,15 @@ func TestHandlers_SetScheduleAt(t *testing.T) {
 		t.Errorf("for schedule at expected %s, got %s", currentTime, *blankMsg.ScheduledEnqueueTime)
 	}
 }
+
+func TestHandlers_SetMessageTTL(t *testing.T) {
+	blankMsg := &azservicebus.Message{}
+	ttl := time.Duration(10 * time.Second)
+	handler := SetMessageTTL(ttl)
+	if err := handler(blankMsg); err != nil {
+		t.Errorf("Unexpected error in set message TTL at test: %s", err)
+	}
+	if *blankMsg.TimeToLive != ttl {
+		t.Errorf("for message TTL at expected %s, got %s", ttl, *blankMsg.TimeToLive)
+	}
+}
