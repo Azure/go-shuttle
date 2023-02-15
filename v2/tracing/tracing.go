@@ -16,9 +16,10 @@ func NewTracingHandler(handler shuttle.HandlerFunc) shuttle.HandlerFunc {
 		defer span.End()
 
 		if message != nil {
-			span.AddAttributes(
-				tab.StringAttribute("message.id", message.MessageID),
-				tab.StringAttribute("message.correlationId", *message.CorrelationID))
+			span.AddAttributes(tab.StringAttribute("message.id", message.MessageID))
+			if message.CorrelationID != nil {
+				span.AddAttributes(tab.StringAttribute("message.correlationId", *message.CorrelationID))
+			}
 			if message.ScheduledEnqueueTime != nil {
 				span.AddAttributes(tab.StringAttribute("message.scheduledEnqueuedTime", message.ScheduledEnqueueTime.String()))
 			}
