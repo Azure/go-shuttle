@@ -11,7 +11,7 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
 	github.com/devigned/tab v0.1.1
 	github.com/devigned/tab/opentracing v0.1.3
-	github.com/gin-gonic/gin v1.7.1 // indirect
+	github.com/gin-gonic/gin v1.7.7 // indirect
 	github.com/joho/godotenv v1.3.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.11.0
