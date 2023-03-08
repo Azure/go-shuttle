@@ -105,8 +105,9 @@ func SetMessageTTL(ttl time.Duration) func(msg *azservicebus.Message) error {
 	}
 }
 
-// SetTraceCarrier set the trace carrier in the message's ApplicationProperties
-// it is for tracing propagation through the ServiceBus queue messages
+// SetTraceCarrier inject the spanContext inside the input context
+// into a carrier and set it in the message's ApplicationProperties
+// it is for tracing propagation through the ServiceBus messages
 func SetTraceCarrier(ctx context.Context) func(msg *azservicebus.Message) error {
 	return func(msg *azservicebus.Message) error {
 		traceCarrier := make(map[string]string)
