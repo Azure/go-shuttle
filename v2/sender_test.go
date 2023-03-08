@@ -1,11 +1,15 @@
 package shuttle
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"go.opentelemetry.io/otel/propagation"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestFunc_NewSender(t *testing.T) {
@@ -64,5 +68,46 @@ func TestHandlers_SetMessageTTL(t *testing.T) {
 	}
 	if *blankMsg.TimeToLive != ttl {
 		t.Errorf("for message TTL at expected %s, got %s", ttl, *blankMsg.TimeToLive)
+	}
+}
+
+func TestHandlers_SetTraceCarrier(t *testing.T) {
+	blankMsg := &azservicebus.Message{}
+	tp := tracesdk.NewTracerProvider(tracesdk.WithSampler(tracesdk.AlwaysSample()))
+
+	// fake a remote span
+	remoteCtx, remoteSpan := tp.Tracer("test-tracer").Start(context.Background(), "remote-span")
+	remoteSpan.End()
+
+	// inject the remote span into a trace carrier
+	traceCarrier := make(map[string]string)
+	propogator := propagation.TraceContext{}
+	propogator.Inject(remoteCtx, propagation.MapCarrier(traceCarrier))
+
+	// set the trace carrier on the message
+	handler := SetTraceCarrier(traceCarrier)
+	if err := handler(blankMsg); err != nil {
+		t.Errorf("Unexpected error in set trace carrier test: %s", err)
+	}
+
+	if blankMsg.ApplicationProperties == nil {
+		t.Errorf("for trace carrier expected application properties to be set")
+	}
+
+	if blankMsg.ApplicationProperties[traceCarrierField] == nil {
+		t.Errorf("for trace carrier expected %s field to be set", traceCarrierField)
+	}
+
+	// extract the span from trace carrier from the message
+	traceCarrier = blankMsg.ApplicationProperties[traceCarrierField].(map[string]string)
+	ctx := propogator.Extract(context.TODO(), propagation.MapCarrier(traceCarrier))
+	extractedSpan := trace.SpanFromContext(ctx)
+
+	if !extractedSpan.SpanContext().IsValid() || !extractedSpan.SpanContext().IsRemote() {
+		t.Errorf("expected extracted span to be valid and remote")
+	}
+
+	if reflect.DeepEqual(extractedSpan, remoteSpan) {
+		t.Errorf("expected extracted span to be the same with remote span")
 	}
 }

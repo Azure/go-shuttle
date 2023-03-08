@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	msgTypeField = "type"
+	msgTypeField      = "type"
+	traceCarrierField = "traceCarrier"
 )
 
 // MessageBody is a type to represent that an input message body can be of any type
@@ -99,6 +100,19 @@ func SetMessageDelay(delay time.Duration) func(msg *azservicebus.Message) error 
 func SetMessageTTL(ttl time.Duration) func(msg *azservicebus.Message) error {
 	return func(msg *azservicebus.Message) error {
 		msg.TimeToLive = &ttl
+		return nil
+	}
+}
+
+// SetTraceCarrier set the trace carrier in the message's ApplicationProperties
+// it is for tracing propagation through the ServiceBus queue messages
+func SetTraceCarrier(traceCarrier map[string]string) func(msg *azservicebus.Message) error {
+	return func(msg *azservicebus.Message) error {
+		if msg.ApplicationProperties == nil {
+			msg.ApplicationProperties = make(map[string]interface{})
+		}
+
+		msg.ApplicationProperties[traceCarrierField] = traceCarrier
 		return nil
 	}
 }
