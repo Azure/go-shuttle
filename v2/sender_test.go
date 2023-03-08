@@ -79,13 +79,8 @@ func TestHandlers_SetTraceCarrier(t *testing.T) {
 	remoteCtx, remoteSpan := tp.Tracer("test-tracer").Start(context.Background(), "remote-span")
 	remoteSpan.End()
 
-	// inject the remote span into a trace carrier
-	traceCarrier := make(map[string]string)
-	propogator := propagation.TraceContext{}
-	propogator.Inject(remoteCtx, propagation.MapCarrier(traceCarrier))
-
 	// set the trace carrier on the message
-	handler := SetTraceCarrier(traceCarrier)
+	handler := SetTraceCarrier(remoteCtx)
 	if err := handler(blankMsg); err != nil {
 		t.Errorf("Unexpected error in set trace carrier test: %s", err)
 	}
@@ -99,7 +94,8 @@ func TestHandlers_SetTraceCarrier(t *testing.T) {
 	}
 
 	// extract the span from trace carrier from the message
-	traceCarrier = blankMsg.ApplicationProperties[traceCarrierField].(map[string]string)
+	traceCarrier := blankMsg.ApplicationProperties[traceCarrierField].(map[string]string)
+	propogator := propagation.TraceContext{}
 	ctx := propogator.Extract(context.TODO(), propagation.MapCarrier(traceCarrier))
 	extractedSpan := trace.SpanFromContext(ctx)
 

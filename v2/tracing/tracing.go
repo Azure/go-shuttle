@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
-	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -17,14 +16,6 @@ const (
 	traceCarrierField = "traceCarrier"
 	serviceTracerName = "go-shuttle"
 )
-
-var tracer trace.Tracer
-
-func init() {
-	tp := tracesdk.NewTracerProvider(tracesdk.WithSampler(tracesdk.AlwaysSample()))
-	otel.SetTracerProvider(tp)
-	tracer = otel.Tracer(serviceTracerName)
-}
 
 // NewTracingHandler extracts the context from the message Application property if available, or from the existing
 // context if not, and starts a span
@@ -66,7 +57,7 @@ func applyTracingMiddleWare(ctx context.Context, message *azservicebus.ReceivedM
 		ctx, _ = getRemoteParentSpan(ctx, traceCarrier)
 	}
 
-	ctx, span = tracer.Start(ctx, "receiver.Handle")
+	ctx, span = otel.Tracer(serviceTracerName).Start(ctx, "receiver.Handle")
 	span.SetAttributes(attrs...)
 	return ctx, span
 }

@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/gomega"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	. "github.com/onsi/gomega"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func Test_TracingMiddleware(t *testing.T) {
@@ -17,7 +18,8 @@ func Test_TracingMiddleware(t *testing.T) {
 	scheduledEnqueueTime := time.Now().Add(time.Duration(10))
 
 	// fake a remote span
-	remoteCtx, remoteSpan := tracer.Start(context.Background(), "remote-span")
+	initUTTracerProvider()
+	remoteCtx, remoteSpan := otel.Tracer("test-tracer").Start(context.Background(), "remote-span")
 	remoteSpan.End()
 
 	// inject the remote span into a trace carrier
@@ -63,7 +65,8 @@ func Test_TracingMiddleware(t *testing.T) {
 }
 
 func Test_getRemoteParentSpan(t *testing.T) {
-	ctx, remoteSpan := tracer.Start(context.Background(), "remote-span")
+	initUTTracerProvider()
+	ctx, remoteSpan := otel.Tracer("test-tracer").Start(context.Background(), "remote-span")
 	remoteSpan.End()
 
 	carrier := make(map[string]string)
@@ -100,4 +103,9 @@ func Test_getRemoteParentSpan(t *testing.T) {
 			g.Expect(span.SpanContext().IsRemote()).To(Equal(tc.expectValidSpan))
 		})
 	}
+}
+
+func initUTTracerProvider() {
+	tp := tracesdk.NewTracerProvider(tracesdk.WithSampler(tracesdk.AlwaysSample()))
+	otel.SetTracerProvider(tp)
 }

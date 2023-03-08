@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const (
@@ -106,8 +107,12 @@ func SetMessageTTL(ttl time.Duration) func(msg *azservicebus.Message) error {
 
 // SetTraceCarrier set the trace carrier in the message's ApplicationProperties
 // it is for tracing propagation through the ServiceBus queue messages
-func SetTraceCarrier(traceCarrier map[string]string) func(msg *azservicebus.Message) error {
+func SetTraceCarrier(ctx context.Context) func(msg *azservicebus.Message) error {
 	return func(msg *azservicebus.Message) error {
+		traceCarrier := make(map[string]string)
+		propogator := propagation.TraceContext{}
+		propogator.Inject(ctx, propagation.MapCarrier(traceCarrier))
+
 		if msg.ApplicationProperties == nil {
 			msg.ApplicationProperties = make(map[string]interface{})
 		}
