@@ -1,15 +1,11 @@
 package shuttle
 
 import (
-	"context"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	"go.opentelemetry.io/otel/propagation"
-	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace"
 )
 
 func TestFunc_NewSender(t *testing.T) {
@@ -68,36 +64,5 @@ func TestHandlers_SetMessageTTL(t *testing.T) {
 	}
 	if *blankMsg.TimeToLive != ttl {
 		t.Errorf("for message TTL at expected %s, got %s", ttl, *blankMsg.TimeToLive)
-	}
-}
-
-func TestHandlers_SetMessageTrace(t *testing.T) {
-	blankMsg := &azservicebus.Message{}
-	tp := tracesdk.NewTracerProvider(tracesdk.WithSampler(tracesdk.AlwaysSample()))
-
-	// fake a remote span
-	remoteCtx, remoteSpan := tp.Tracer("test-tracer").Start(context.Background(), "remote-span")
-	remoteSpan.End()
-
-	// Inject the trace context into the message
-	handler := SetMessageTrace(remoteCtx)
-	if err := handler(blankMsg); err != nil {
-		t.Errorf("Unexpected error in set trace carrier test: %s", err)
-	}
-
-	if blankMsg.ApplicationProperties == nil {
-		t.Errorf("for trace carrier expected application properties to be set")
-	}
-
-	propogator := propagation.TraceContext{}
-	ctx := propogator.Extract(context.TODO(), carrierAdapter(blankMsg))
-	extractedSpan := trace.SpanFromContext(ctx)
-
-	if !extractedSpan.SpanContext().IsValid() || !extractedSpan.SpanContext().IsRemote() {
-		t.Errorf("expected extracted span to be valid and remote")
-	}
-
-	if reflect.DeepEqual(extractedSpan, remoteSpan) {
-		t.Errorf("expected extracted span to be the same with remote span")
 	}
 }

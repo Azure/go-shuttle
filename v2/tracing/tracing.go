@@ -61,16 +61,59 @@ func applyTracingMiddleWare(ctx context.Context, message *azservicebus.ReceivedM
 // the remote span is returned for UT purpose only
 func getRemoteParentSpan(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
 	propogator := propagation.TraceContext{}
-	ctx = propogator.Extract(ctx, carrierAdapter(message))
+	ctx = propogator.Extract(ctx, carrierAdapterForReceivedMsg(message))
 	return ctx, trace.SpanFromContext(ctx)
 }
 
-type messageWrapper struct {
+// the implementaion of TextMapCarrier interface for receiver side
+type receivedMessageWrapper struct {
 	message *azservicebus.ReceivedMessage
 }
 
-// carrierAdapter wraps a servicebus Message so that it implements the TextMapCarrier interface
-func carrierAdapter(message *azservicebus.ReceivedMessage) propagation.TextMapCarrier {
+// wraps a servicebus ReceivedMessage so that it implements the TextMapCarrier interface
+func carrierAdapterForReceivedMsg(message *azservicebus.ReceivedMessage) propagation.TextMapCarrier {
+	return &receivedMessageWrapper{message: message}
+}
+
+func (mw *receivedMessageWrapper) Set(key string, value string) {
+	if mw.message.ApplicationProperties == nil {
+		mw.message.ApplicationProperties = make(map[string]interface{})
+	}
+	mw.message.ApplicationProperties[key] = value
+}
+
+func (mw *receivedMessageWrapper) Get(key string) string {
+	if mw.message.ApplicationProperties == nil || mw.message.ApplicationProperties[key] == nil {
+		return ""
+	}
+
+	return mw.message.ApplicationProperties[key].(string)
+}
+
+func (mw *receivedMessageWrapper) Keys() []string {
+	keys := make([]string, 0, len(mw.message.ApplicationProperties))
+	for k := range mw.message.ApplicationProperties {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// this is a sender option to inject the trace context into the message
+func PropagateFromContext(ctx context.Context) func(msg *azservicebus.Message) error {
+	return func(message *azservicebus.Message) error {
+		propogator := propagation.TraceContext{}
+		propogator.Inject(ctx, carrierAdapterForMsg(message))
+		return nil
+	}
+}
+
+// the implementaion of TextMapCarrier interface for the sender side
+type messageWrapper struct {
+	message *azservicebus.Message
+}
+
+// wraps a servicebus Message so that it implements the TextMapCarrier interface
+func carrierAdapterForMsg(message *azservicebus.Message) propagation.TextMapCarrier {
 	return &messageWrapper{message: message}
 }
 
