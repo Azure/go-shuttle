@@ -57,9 +57,6 @@ func Test_TracingMiddleware(t *testing.T) {
 			if tc.carryRemoteSpan {
 				propogator := propagation.TraceContext{}
 				propogator.Inject(remoteCtx, carrierAdapter(tc.message))
-			}
-
-			if tc.carryRemoteSpan {
 				_, remoteSpan := getRemoteParentSpan(context.TODO(), tc.message)
 				g.Expect(remoteSpan.SpanContext().IsValid()).To(BeTrue())
 				g.Expect(remoteSpan.SpanContext().IsRemote()).To(BeTrue())
