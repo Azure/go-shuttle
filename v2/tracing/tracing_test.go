@@ -22,18 +22,15 @@ func Test_TracingMiddleware(t *testing.T) {
 	remoteCtx, remoteSpan := otel.Tracer("test-tracer").Start(context.Background(), "remote-span")
 	remoteSpan.End()
 
-	// inject the remote span into a trace carrier
-	carrier := make(map[string]string)
-	propogator := propagation.TraceContext{}
-	propogator.Inject(remoteCtx, propagation.MapCarrier(carrier))
-
 	testCases := []struct {
-		description string
-		message     *azservicebus.ReceivedMessage
+		description     string
+		message         *azservicebus.ReceivedMessage
+		carryRemoteSpan bool
 	}{
 		{
-			description: "nil message, should start a new span without parent",
-			message:     nil,
+			description:     "nil message, should start a new span without parent",
+			message:         nil,
+			carryRemoteSpan: false,
 		},
 		{
 			description: "should set span attributes from message",
@@ -43,64 +40,33 @@ func Test_TracingMiddleware(t *testing.T) {
 				ScheduledEnqueueTime: &scheduledEnqueueTime,
 				TimeToLive:           &timeToLive,
 			},
+			carryRemoteSpan: false,
 		},
 		{
 			description: "should create child span from remote parent",
 			message: &azservicebus.ReceivedMessage{
 				MessageID: "message-id",
-				ApplicationProperties: map[string]interface{}{
-					traceCarrierField: carrier,
-				},
 			},
+			carryRemoteSpan: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			g := NewGomegaWithT(t)
+			if tc.carryRemoteSpan {
+				propogator := propagation.TraceContext{}
+				propogator.Inject(remoteCtx, carrierAdapter(tc.message))
+			}
+
+			if tc.carryRemoteSpan {
+				_, remoteSpan := getRemoteParentSpan(context.TODO(), tc.message)
+				g.Expect(remoteSpan.SpanContext().IsValid()).To(BeTrue())
+				g.Expect(remoteSpan.SpanContext().IsRemote()).To(BeTrue())
+			}
+
 			_, span := applyTracingMiddleWare(context.TODO(), tc.message)
 			g.Expect(span.SpanContext().IsValid()).To(BeTrue())
-		})
-	}
-}
-
-func Test_getRemoteParentSpan(t *testing.T) {
-	initUTTracerProvider()
-	ctx, remoteSpan := otel.Tracer("test-tracer").Start(context.Background(), "remote-span")
-	remoteSpan.End()
-
-	carrier := make(map[string]string)
-	propogator := propagation.TraceContext{}
-	propogator.Inject(ctx, propagation.MapCarrier(carrier))
-
-	testCases := []struct {
-		description     string
-		traceCarrier    map[string]string
-		expectValidSpan bool // if the span is valid, it must be a remote span
-	}{
-		{
-			description:     "nil trace carrier",
-			traceCarrier:    nil,
-			expectValidSpan: false,
-		},
-		{
-			description:     "empty trace carrier",
-			traceCarrier:    make(map[string]string),
-			expectValidSpan: false,
-		},
-		{
-			description:     "has valid trace carrier",
-			traceCarrier:    carrier,
-			expectValidSpan: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.description, func(t *testing.T) {
-			g := NewGomegaWithT(t)
-			_, span := getRemoteParentSpan(context.TODO(), tc.traceCarrier)
-			g.Expect(span.SpanContext().IsValid()).To(Equal(tc.expectValidSpan))
-			g.Expect(span.SpanContext().IsRemote()).To(Equal(tc.expectValidSpan))
 		})
 	}
 }

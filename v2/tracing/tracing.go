@@ -30,7 +30,6 @@ func NewTracingHandler(handler shuttle.HandlerFunc) shuttle.HandlerFunc {
 func applyTracingMiddleWare(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
 	var span trace.Span
 	var attrs []attribute.KeyValue
-	var traceCarrier map[string]string
 
 	if message != nil {
 		attrs = append(attrs, attribute.String("message.id", message.MessageID))
@@ -47,14 +46,8 @@ func applyTracingMiddleWare(ctx context.Context, message *azservicebus.ReceivedM
 			attrs = append(attrs, attribute.String("message.ttl", message.TimeToLive.String()))
 		}
 
-		if message.ApplicationProperties != nil {
-			traceCarrier = message.ApplicationProperties[traceCarrierField].(map[string]string)
-		}
-	}
-
-	// extract the remote trace context from the traceCarrier if exists,
-	if traceCarrier != nil {
-		ctx, _ = getRemoteParentSpan(ctx, traceCarrier)
+		// extract the remote trace context from the message if exists,
+		ctx, _ = getRemoteParentSpan(ctx, message)
 	}
 
 	ctx, span = otel.Tracer(serviceTracerName).Start(ctx, "receiver.Handle")
@@ -66,10 +59,40 @@ func applyTracingMiddleWare(ctx context.Context, message *azservicebus.ReceivedM
 // and inject it into the passed in context. If the traceCarrier doesn't contain a
 // valid trace context, the passed in context will be returned as is.
 // the remote span is returned for UT purpose only
-func getRemoteParentSpan(ctx context.Context, traceMap map[string]string) (context.Context, trace.Span) {
-	if traceMap != nil {
-		propogator := propagation.TraceContext{}
-		ctx = propogator.Extract(ctx, propagation.MapCarrier(traceMap))
-	}
+func getRemoteParentSpan(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
+	propogator := propagation.TraceContext{}
+	ctx = propogator.Extract(ctx, carrierAdapter(message))
 	return ctx, trace.SpanFromContext(ctx)
+}
+
+type messageWrapper struct {
+	message *azservicebus.ReceivedMessage
+}
+
+// carrierAdapter wraps a servicebus Message so that it implements the TextMapCarrier interface
+func carrierAdapter(message *azservicebus.ReceivedMessage) propagation.TextMapCarrier {
+	return &messageWrapper{message: message}
+}
+
+func (mw *messageWrapper) Set(key string, value string) {
+	if mw.message.ApplicationProperties == nil {
+		mw.message.ApplicationProperties = make(map[string]interface{})
+	}
+	mw.message.ApplicationProperties[key] = value
+}
+
+func (mw *messageWrapper) Get(key string) string {
+	if mw.message.ApplicationProperties == nil || mw.message.ApplicationProperties[key] == nil {
+		return ""
+	}
+
+	return mw.message.ApplicationProperties[key].(string)
+}
+
+func (mw *messageWrapper) Keys() []string {
+	keys := make([]string, 0, len(mw.message.ApplicationProperties))
+	for k := range mw.message.ApplicationProperties {
+		keys = append(keys, k)
+	}
+	return keys
 }

@@ -71,7 +71,7 @@ func TestHandlers_SetMessageTTL(t *testing.T) {
 	}
 }
 
-func TestHandlers_SetTraceCarrier(t *testing.T) {
+func TestHandlers_SetMessageTrace(t *testing.T) {
 	blankMsg := &azservicebus.Message{}
 	tp := tracesdk.NewTracerProvider(tracesdk.WithSampler(tracesdk.AlwaysSample()))
 
@@ -79,8 +79,8 @@ func TestHandlers_SetTraceCarrier(t *testing.T) {
 	remoteCtx, remoteSpan := tp.Tracer("test-tracer").Start(context.Background(), "remote-span")
 	remoteSpan.End()
 
-	// set the trace carrier on the message
-	handler := SetTraceCarrier(remoteCtx)
+	// Inject the trace context into the message
+	handler := SetMessageTrace(remoteCtx)
 	if err := handler(blankMsg); err != nil {
 		t.Errorf("Unexpected error in set trace carrier test: %s", err)
 	}
@@ -89,14 +89,8 @@ func TestHandlers_SetTraceCarrier(t *testing.T) {
 		t.Errorf("for trace carrier expected application properties to be set")
 	}
 
-	if blankMsg.ApplicationProperties[traceCarrierField] == nil {
-		t.Errorf("for trace carrier expected %s field to be set", traceCarrierField)
-	}
-
-	// extract the span from trace carrier from the message
-	traceCarrier := blankMsg.ApplicationProperties[traceCarrierField].(map[string]string)
 	propogator := propagation.TraceContext{}
-	ctx := propogator.Extract(context.TODO(), propagation.MapCarrier(traceCarrier))
+	ctx := propogator.Extract(context.TODO(), carrierAdapter(blankMsg))
 	extractedSpan := trace.SpanFromContext(ctx)
 
 	if !extractedSpan.SpanContext().IsValid() || !extractedSpan.SpanContext().IsRemote() {

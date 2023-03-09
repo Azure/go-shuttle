@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	msgTypeField      = "type"
-	traceCarrierField = "traceCarrier"
+	msgTypeField = "type"
 )
 
 // MessageBody is a type to represent that an input message body can be of any type
@@ -105,20 +104,11 @@ func SetMessageTTL(ttl time.Duration) func(msg *azservicebus.Message) error {
 	}
 }
 
-// SetTraceCarrier inject the spanContext inside the input context
-// into a carrier and set it in the message's ApplicationProperties
-// it is for tracing propagation through the ServiceBus messages
-func SetTraceCarrier(ctx context.Context) func(msg *azservicebus.Message) error {
+// SetMessageTrace inject the spanContext inside the input context into a service bus message
+func SetMessageTrace(ctx context.Context) func(msg *azservicebus.Message) error {
 	return func(msg *azservicebus.Message) error {
-		traceCarrier := make(map[string]string)
 		propogator := propagation.TraceContext{}
-		propogator.Inject(ctx, propagation.MapCarrier(traceCarrier))
-
-		if msg.ApplicationProperties == nil {
-			msg.ApplicationProperties = make(map[string]interface{})
-		}
-
-		msg.ApplicationProperties[traceCarrierField] = traceCarrier
+		propogator.Inject(ctx, carrierAdapter(msg))
 		return nil
 	}
 }
@@ -133,4 +123,36 @@ func getMessageType(mb MessageBody) string {
 	}
 
 	return msgType
+}
+
+type messageWrapper struct {
+	message *azservicebus.Message
+}
+
+// carrierAdapter wraps a servicebus Message so that it implements the TextMapCarrier interface
+func carrierAdapter(message *azservicebus.Message) propagation.TextMapCarrier {
+	return &messageWrapper{message: message}
+}
+
+func (mw *messageWrapper) Set(key string, value string) {
+	if mw.message.ApplicationProperties == nil {
+		mw.message.ApplicationProperties = make(map[string]interface{})
+	}
+	mw.message.ApplicationProperties[key] = value
+}
+
+func (mw *messageWrapper) Get(key string) string {
+	if mw.message.ApplicationProperties == nil || mw.message.ApplicationProperties[key] == nil {
+		return ""
+	}
+
+	return mw.message.ApplicationProperties[key].(string)
+}
+
+func (mw *messageWrapper) Keys() []string {
+	keys := make([]string, 0, len(mw.message.ApplicationProperties))
+	for k := range mw.message.ApplicationProperties {
+		keys = append(keys, k)
+	}
+	return keys
 }
