@@ -10,7 +10,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"github.com/Azure/go-shuttle/v2/metrics"
-	"github.com/devigned/tab"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Receiver interface {
@@ -169,12 +170,13 @@ type peekLockRenewer struct {
 
 func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *azservicebus.ReceivedMessage) {
 	count := 0
+	span := trace.SpanFromContext(ctx)
 	for alive := true; alive; {
 		select {
 		case <-time.After(*plr.renewalInterval):
 			log(ctx, "renewing lock")
 			count++
-			tab.For(ctx).Debug("Renewing message lock", tab.Int64Attribute("count", int64(count)))
+
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
 			if err != nil {
 				log(ctx, "failed to renew lock: ", err)
@@ -182,19 +184,20 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 				// The context is canceled when the message handler returns from the processor.
 				// This can happen if we already entered the interval case when the message processing completes.
 				// The best we can do is log and retry on the next tick. The sdk already retries operations on recoverable network errors.
-				tab.For(ctx).Error(fmt.Errorf("failed to renew lock: %w", err))
+				span.RecordError(fmt.Errorf("failed to renew lock: %w", err))
 				// on error, we continue to the next loop iteration.
 				// if the context is Done, we will enter the ctx.Done() case and exit the renewal.
 				// if the error is anything else, we keep retrying the renewal
 				continue
 			}
-			tab.For(ctx).Debug("renewed lock success")
+			span.AddEvent("message lock renewed", trace.WithAttributes(attribute.Int("count", count)))
 			metrics.Processor.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
 			log(ctx, ctx, "context done: stopping periodic renewal")
-			tab.For(ctx).Info("stopping periodic renewal")
+			span.AddEvent("context done: stopping message lock renewal")
 			err := ctx.Err()
 			if errors.Is(err, context.DeadlineExceeded) {
+				span.RecordError(err)
 				metrics.Processor.IncMessageDeadlineReachedCount(message)
 			}
 			alive = false
