@@ -1,11 +1,9 @@
-package tracing
+package otel
 
 import (
 	"context"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	"github.com/Azure/go-shuttle/v2"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -13,21 +11,10 @@ import (
 )
 
 const (
-	traceCarrierField = "traceCarrier"
 	serviceTracerName = "go-shuttle"
 )
 
-// NewTracingHandler extracts the context from the message Application property if available, or from the existing
-// context if not, and starts a span
-func NewTracingHandler(handler shuttle.HandlerFunc) shuttle.HandlerFunc {
-	return func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
-		ctx, span := applyTracingMiddleWare(ctx, message)
-		defer span.End()
-		handler(ctx, settler, message)
-	}
-}
-
-func applyTracingMiddleWare(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
+func Extract(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
 	var span trace.Span
 	var attrs []attribute.KeyValue
 
@@ -61,7 +48,7 @@ func applyTracingMiddleWare(ctx context.Context, message *azservicebus.ReceivedM
 // the remote span is returned for UT purpose only
 func getRemoteParentSpan(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
 	propogator := propagation.TraceContext{}
-	ctx = propogator.Extract(ctx, carrierAdapterForReceivedMsg(message))
+	ctx = propogator.Extract(ctx, ReceivedMessageCarrierAdapter(message))
 	return ctx, trace.SpanFromContext(ctx)
 }
 
@@ -70,8 +57,8 @@ type receivedMessageWrapper struct {
 	message *azservicebus.ReceivedMessage
 }
 
-// wraps a servicebus ReceivedMessage so that it implements the TextMapCarrier interface
-func carrierAdapterForReceivedMsg(message *azservicebus.ReceivedMessage) propagation.TextMapCarrier {
+// ReceivedMessageCarrierAdapter wraps a servicebus ReceivedMessage so that it implements the TextMapCarrier interface
+func ReceivedMessageCarrierAdapter(message *azservicebus.ReceivedMessage) propagation.TextMapCarrier {
 	return &receivedMessageWrapper{message: message}
 }
 
@@ -98,13 +85,9 @@ func (mw *receivedMessageWrapper) Keys() []string {
 	return keys
 }
 
-// this is a sender option to inject the trace context into the message
-func PropagateFromContext(ctx context.Context) func(msg *azservicebus.Message) error {
-	return func(message *azservicebus.Message) error {
-		propogator := propagation.TraceContext{}
-		propogator.Inject(ctx, carrierAdapterForMsg(message))
-		return nil
-	}
+func Inject(ctx context.Context, msg *azservicebus.Message) {
+	propogator := propagation.TraceContext{}
+	propogator.Inject(ctx, MessageCarrierAdapter(msg))
 }
 
 // the implementaion of TextMapCarrier interface for the sender side
@@ -112,8 +95,8 @@ type messageWrapper struct {
 	message *azservicebus.Message
 }
 
-// wraps a servicebus Message so that it implements the TextMapCarrier interface
-func carrierAdapterForMsg(message *azservicebus.Message) propagation.TextMapCarrier {
+// MessageCarrierAdapter wraps a azservicebus.Message so that it implements the propagation.TextMapCarrier interface
+func MessageCarrierAdapter(message *azservicebus.Message) propagation.TextMapCarrier {
 	return &messageWrapper{message: message}
 }
 
