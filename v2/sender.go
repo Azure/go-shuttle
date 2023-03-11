@@ -28,7 +28,11 @@ type Sender struct {
 }
 
 type SenderOptions struct {
+	// Marshaller will be used to marshall the messageBody to the azservicebus.Message Body property
+	// defaults to DefaultJSONMarshaller
 	Marshaller Marshaller
+	// EnableTracingPropagation automatically applies WithTracePropagation option on all message sent through this sender
+	EnableTracingPropagation bool
 }
 
 // NewSender takes in a Sender and a Marshaller to create a new object that can send messages to the ServiceBus queue
@@ -48,6 +52,10 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 
 	msgType := getMessageType(mb)
 	msg.ApplicationProperties = map[string]interface{}{msgTypeField: msgType}
+
+	if d.options.EnableTracingPropagation {
+		options = append(options, WithTracePropagation(ctx))
+	}
 
 	for _, option := range options {
 		if err := option(msg); err != nil {
