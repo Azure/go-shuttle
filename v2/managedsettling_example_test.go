@@ -30,6 +30,12 @@ func ExampleNewManagedSettlingHandler() {
 				shuttle.NewManagedSettlingHandler(&shuttle.ManagedSettlingOptions{
 					RetryDecision:      &shuttle.MaxAttemptsRetryDecision{MaxAttempts: 2},
 					RetryDelayStrategy: &shuttle.ConstantDelayStrategy{Delay: 2 * time.Second},
+					OnAbandoned: func(ctx context.Context, message *azservicebus.ReceivedMessage, err error) {
+						fmt.Printf("message abandoned due to error: %s\n", err)
+					},
+					OnDeadLettered: func(ctx context.Context, message *azservicebus.ReceivedMessage, err error) {
+						fmt.Printf("message deadlettered due to error: %s\n", err)
+					},
 				}, myManagedSettlementHandler()))), &shuttle.ProcessorOptions{MaxConcurrency: 10})
 
 	ctx, cancel := context.WithCancel(context.Background())

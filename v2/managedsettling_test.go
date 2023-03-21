@@ -12,6 +12,7 @@ import (
 type fakeSettler struct {
 	abandoned    bool
 	completed    bool
+	conpleteErr  error
 	deadlettered bool
 	defered      bool
 	lockRenewed  bool
@@ -24,7 +25,7 @@ func (f *fakeSettler) AbandonMessage(ctx context.Context, message *azservicebus.
 
 func (f *fakeSettler) CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error {
 	f.completed = true
-	return nil
+	return f.conpleteErr
 }
 
 func (f *fakeSettler) DeadLetterMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeadLetterOptions) error {
@@ -43,13 +44,15 @@ func (f *fakeSettler) RenewMessageLock(ctx context.Context, message *azservicebu
 }
 
 type hooks struct {
-	onFailureCalled  bool
-	onCompleteCalled bool
+	onAbandonedCalled    bool
+	onCompleteCalled     bool
+	onDeadLetteredCalled bool
 }
 
 func TestManagedSettler_Handle(t *testing.T) {
 	testCases := []struct {
 		name            string
+		settler         fakeSettler
 		hooks           *hooks
 		handlerResponse error
 		msg             *azservicebus.ReceivedMessage
@@ -72,7 +75,7 @@ func TestManagedSettler_Handle(t *testing.T) {
 			msg:             &azservicebus.ReceivedMessage{},
 			expectation: func(t *testing.T, hooks *hooks, settler *fakeSettler) {
 				require.True(t, hooks.onCompleteCalled)
-				require.False(t, hooks.onFailureCalled)
+				require.False(t, hooks.onAbandonedCalled)
 			},
 		},
 		{
@@ -91,8 +94,20 @@ func TestManagedSettler_Handle(t *testing.T) {
 			handlerResponse: fmt.Errorf("some error"),
 			msg:             &azservicebus.ReceivedMessage{},
 			expectation: func(t *testing.T, hooks *hooks, settler *fakeSettler) {
-				require.True(t, hooks.onFailureCalled)
+				require.True(t, hooks.onAbandonedCalled)
 				require.False(t, hooks.onCompleteCalled)
+			},
+		},
+		{
+			name:            "complete returns error triggers abandon hook",
+			hooks:           &hooks{},
+			settler:         fakeSettler{conpleteErr: fmt.Errorf("failed to complete msg")},
+			handlerResponse: nil, // handler succeeds
+			msg:             &azservicebus.ReceivedMessage{},
+			expectation: func(t *testing.T, hooks *hooks, settler *fakeSettler) {
+				require.True(t, settler.completed)
+				require.False(t, hooks.onCompleteCalled)
+				require.True(t, hooks.onAbandonedCalled)
 			},
 		},
 		{
@@ -104,6 +119,7 @@ func TestManagedSettler_Handle(t *testing.T) {
 				require.False(t, settler.completed)
 				require.False(t, settler.abandoned)
 				require.True(t, settler.deadlettered)
+				require.True(t, hooks.onDeadLetteredCalled)
 			},
 		},
 	}
@@ -111,21 +127,24 @@ func TestManagedSettler_Handle(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(tt *testing.T) {
 			options := &ManagedSettlingOptions{
+				RetryDecision:      &MaxAttemptsRetryDecision{MaxAttempts: 5},
 				RetryDelayStrategy: &ConstantDelayStrategy{Delay: 0},
-				OnFailure: func(ctx context.Context, msg *azservicebus.ReceivedMessage, err error) {
-					tc.hooks.onFailureCalled = true
+				OnAbandoned: func(ctx context.Context, msg *azservicebus.ReceivedMessage, err error) {
+					tc.hooks.onAbandonedCalled = true
+				},
+				OnDeadLettered: func(ctx context.Context, msg *azservicebus.ReceivedMessage, err error) {
+					tc.hooks.onDeadLetteredCalled = true
 				},
 				OnCompleted: func(ctx context.Context, msg *azservicebus.ReceivedMessage) {
 					tc.hooks.onCompleteCalled = true
 				},
 			}
-			settler := &fakeSettler{}
 			h := NewManagedSettlingHandler(options,
 				func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
 					return tc.handlerResponse
 				})
-			h.Handle(context.TODO(), settler, tc.msg)
-			tc.expectation(tt, tc.hooks, settler)
+			h.Handle(context.TODO(), &tc.settler, tc.msg)
+			tc.expectation(tt, tc.hooks, &tc.settler)
 		})
 	}
 }
