@@ -31,4 +31,4 @@ jobs:
       - uses: shogo82148/actions-goveralls@v1
         with:
           path-to-profile: v2/profile.cov
-          base-path: v2
+          working-directory: v2
