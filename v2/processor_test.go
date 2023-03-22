@@ -255,7 +255,8 @@ func Test_RenewPeriodically(t *testing.T) {
 		time.Sleep(150 * time.Millisecond)
 	}))
 	msg := &azservicebus.ReceivedMessage{}
-	ctx, _ := context.WithTimeout(context.TODO(), 120*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.TODO(), 120*time.Millisecond)
+	defer cancel()
 	lr.Handle(ctx, &fakeSettler{}, msg)
 	g := NewWithT(t)
 	g.Eventually(
@@ -274,7 +275,8 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 		time.Sleep(150 * time.Millisecond)
 	}))
 	msg := &azservicebus.ReceivedMessage{}
-	ctx, _ := context.WithTimeout(context.TODO(), 120*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.TODO(), 120*time.Millisecond)
+	defer cancel()
 	lr.Handle(ctx, &fakeSettler{}, msg)
 
 	g := NewWithT(t)
