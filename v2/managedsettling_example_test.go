@@ -25,7 +25,7 @@ func ExampleNewManagedSettlingHandler() {
 	}
 	lockRenewalInterval := 10 * time.Second
 	p := shuttle.NewProcessor(receiver,
-		shuttle.NewPanicHandler(
+		shuttle.NewPanicHandler(onPanic,
 			shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval,
 				shuttle.NewManagedSettlingHandler(&shuttle.ManagedSettlingOptions{
 					RetryDecision:      &shuttle.MaxAttemptsRetryDecision{MaxAttempts: 2},
@@ -38,6 +38,10 @@ func ExampleNewManagedSettlingHandler() {
 		panic(err)
 	}
 	cancel()
+}
+
+func onPanic(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage, recovered any) {
+	// log it...
 }
 
 func myManagedSettlementHandler() shuttle.ManagedSettlingFunc {
