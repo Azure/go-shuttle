@@ -2,6 +2,7 @@ package shuttle
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -27,7 +28,8 @@ func (m *ManagedSettler) Handle(ctx context.Context, settler MessageSettler, mes
 	}
 	if err := settler.CompleteMessage(ctx, message, nil); err != nil {
 		log(ctx, err)
-		m.options.OnFailure(ctx, message, err)
+		m.options.OnAbandoned(ctx, message, err)
+		return
 		// if we fail to complete the message, we log the error and let the message lock expire.
 		// we cannot do more at this point.
 	}
@@ -75,8 +77,12 @@ type ManagedSettlingOptions struct {
 	// and the RetryDecision decides to retry the message.
 	// The handler will sleep for the time calculated by the delayStrategy before Abandoning the message.
 	RetryDelayStrategy RetryDelayStrategy
-	// OnFailure is a func that is invoked when the handler returns an error. It is invoked after the message is abandoned or deadlettered.
-	OnFailure func(context.Context, *azservicebus.ReceivedMessage, error)
+	// OnAbandoned is invoked when the handler returns an error. It is invoked after the message is abandoned or deadlettered.
+	OnAbandoned func(context.Context, *azservicebus.ReceivedMessage, error)
+	// OnDeadLettered is invoked after the ManagedSettling dead-letters a message.
+	// this occurs when the RetryDecision.CanRetry implementation returns false following an error returned by the handler
+	// It is invoked after the message is abandoned or deadlettered.
+	OnDeadLettered func(context.Context, *azservicebus.ReceivedMessage, error)
 	// OnCompleted is a func that is invoked when the handler does not return any error. it is invoked after the message is completed.
 	OnCompleted func(context.Context, *azservicebus.ReceivedMessage)
 }
@@ -96,15 +102,11 @@ func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSett
 	options := &ManagedSettlingOptions{
 		RetryDecision:      &MaxAttemptsRetryDecision{MaxAttempts: defaultRetryDecisionMaxAttempts},
 		RetryDelayStrategy: &ConstantDelayStrategy{Delay: defaultDelay},
-		OnCompleted: func(ctx context.Context, message *azservicebus.ReceivedMessage) {
-			if opts.OnCompleted != nil {
-				opts.OnCompleted(ctx, message)
-			}
+		OnCompleted: func(_ context.Context, _ *azservicebus.ReceivedMessage) {
 		},
-		OnFailure: func(ctx context.Context, message *azservicebus.ReceivedMessage, err error) {
-			if opts.OnFailure != nil {
-				opts.OnFailure(ctx, message, err)
-			}
+		OnAbandoned: func(_ context.Context, _ *azservicebus.ReceivedMessage, _ error) {
+		},
+		OnDeadLettered: func(_ context.Context, _ *azservicebus.ReceivedMessage, _ error) {
 		},
 	}
 	if opts != nil {
@@ -114,6 +116,15 @@ func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSett
 		if opts.RetryDelayStrategy != nil {
 			options.RetryDelayStrategy = opts.RetryDelayStrategy
 		}
+		if opts.OnCompleted != nil {
+			options.OnCompleted = opts.OnCompleted
+		}
+		if opts.OnAbandoned != nil {
+			options.OnAbandoned = opts.OnAbandoned
+		}
+		if opts.OnDeadLettered != nil {
+			options.OnDeadLettered = opts.OnDeadLettered
+		}
 	}
 	return &ManagedSettler{
 		next:    handler,
@@ -122,15 +133,18 @@ func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSett
 }
 
 func (m *ManagedSettler) handleError(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage, handleErr error) {
+	if handleErr == nil {
+		handleErr = fmt.Errorf("nil error: %w", handleErr)
+	}
 	if !m.options.RetryDecision.CanRetry(handleErr, message) {
 		log(ctx, "moving message to dead letter queue because processing failed to an error: %s", handleErr)
 		deadLetterSettlement.settle(ctx, settler, message, &azservicebus.DeadLetterOptions{
-			ErrorDescription:   to.Ptr("ManagedSettlingHandlerDeadLettering"),
-			Reason:             to.Ptr(handleErr.Error()),
+			Reason:             to.Ptr("ManagedSettlingHandlerDeadLettering"),
+			ErrorDescription:   to.Ptr(handleErr.Error()),
 			PropertiesToModify: nil,
 		})
 		// this could be a special hook to have more control on deadlettering, but keeping it simple for now
-		m.options.OnFailure(ctx, message, handleErr)
+		m.options.OnDeadLettered(ctx, message, handleErr)
 		return
 	}
 	// the delay is implemented as an in-memory sleep before calling abandon.
@@ -139,5 +153,5 @@ func (m *ManagedSettler) handleError(ctx context.Context, settler MessageSettler
 	log(ctx, "delay strategy return delay of %s", delay)
 	time.Sleep(delay)
 	abandonSettlement.settle(ctx, settler, message, nil)
-	m.options.OnFailure(ctx, message, handleErr)
+	m.options.OnAbandoned(ctx, message, handleErr)
 }
