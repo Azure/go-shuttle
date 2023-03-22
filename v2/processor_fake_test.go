@@ -47,10 +47,13 @@ func (f *fakeSettler) RenewMessageLock(ctx context.Context, message *azservicebu
 type fakeReceiver struct {
 	// outcomes to verify
 	ReceiveCalls []int // array of maxMessage value passed to receive calls in the lifetime of the fake receiver
+	PeekCalls    []int // array of maxMessageCount value passed to peek calls in the lifetime of the fake receiver
 
 	// configure fake
 	SetupReceiveError     error
 	SetupReceivedMessages chan *azservicebus.ReceivedMessage
+	SetupPeekError        error
+	SetupPeekMessages     chan *azservicebus.ReceivedMessage
 	*fakeSettler
 	SetupMaxReceiveCalls int
 }
@@ -74,4 +77,24 @@ func (f *fakeReceiver) ReceiveMessages(_ context.Context, maxMessages int, _ *az
 	}
 
 	return result, f.SetupReceiveError
+}
+
+func (f *fakeReceiver) PeekMessages(_ context.Context, maxMessageCount int, _ *azservicebus.PeekMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
+	f.PeekCalls = append(f.PeekCalls, maxMessageCount)
+	if maxMessageCount == 0 && len(f.SetupPeekMessages) > 0 {
+		return nil, nil
+	}
+	var result []*azservicebus.ReceivedMessage
+	for msg := range f.SetupPeekMessages {
+		result = append(result, msg)
+		if len(result) == maxMessageCount || len(f.SetupPeekMessages) == 0 {
+			break
+		}
+	}
+
+	if len(f.PeekCalls) >= len(f.SetupPeekMessages) {
+		return result, fmt.Errorf("max peek calls exceeded")
+	}
+
+	return result, f.SetupPeekError
 }
