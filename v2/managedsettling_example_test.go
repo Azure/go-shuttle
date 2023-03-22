@@ -40,10 +40,6 @@ func ExampleNewManagedSettlingHandler() {
 	cancel()
 }
 
-func onPanic(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage, recovered any) {
-	// log it...
-}
-
 func myManagedSettlementHandler() shuttle.ManagedSettlingFunc {
 	count := 0
 	return func(ctx context.Context, message *azservicebus.ReceivedMessage) error {

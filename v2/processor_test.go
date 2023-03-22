@@ -223,7 +223,7 @@ func TestPanicHandler_WithHandlingFunc(t *testing.T) {
 	}
 	p := shuttle.NewPanicHandler(options, handler)
 	g := NewWithT(t)
-	g.Expect(func() { p.Handle(nil, nil, nil) }).ToNot(Panic())
+	g.Expect(func() { p.Handle(context.TODO(), nil, nil) }).ToNot(Panic())
 	g.Expect(recovered).ToNot(BeNil())
 }
 
@@ -233,7 +233,7 @@ func TestNewPanicHandler_DefaultOptions(t *testing.T) {
 	})
 	p := shuttle.NewPanicHandler(nil, handler)
 	g := NewWithT(t)
-	g.Expect(func() { p.Handle(nil, nil, nil) }).ToNot(Panic())
+	g.Expect(func() { p.Handle(context.TODO(), nil, nil) }).ToNot(Panic())
 }
 
 type fakeSBLockRenewer struct {
