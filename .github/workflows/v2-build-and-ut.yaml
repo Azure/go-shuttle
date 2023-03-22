@@ -26,8 +26,8 @@ jobs:
       - name: Unit Tests
         run: |
           cd v2
-          go test -v -coverprofile=profile.cov ./...
+          go test -v -coverprofile=../.coverage/profile.cov ./...
 
       - uses: shogo82148/actions-goveralls@v1
         with:
-          path-to-profile: profile.cov
+          path-to-profile: .coverage/profile.cov
