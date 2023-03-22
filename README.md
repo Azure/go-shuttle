@@ -1,4 +1,7 @@
 # go-shuttle
+
+[![Coverage Status](https://coveralls.io/repos/github/Azure/go-shuttle/badge.svg)](https://coveralls.io/github/Azure/go-shuttle)
+
 go-shuttle serves as a wrapper around the [azure service-bus go SDK](https://github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus) to facilitate the implementation of a pub-sub pattern on Azure using service bus.
 
 > NOTE: This library is in early development and should be considered experimental. The api is still moving and can change. 
