@@ -23,7 +23,7 @@ require (
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+	golang.org/x/crypto v0.7.0
 	google.golang.org/protobuf v1.28.0
 	nhooyr.io/websocket v1.8.7 // indirect
 )
