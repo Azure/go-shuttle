@@ -41,7 +41,7 @@ func ExampleProcessor() {
 	}
 	lockRenewalInterval := 10 * time.Second
 	p := shuttle.NewProcessor(receiver,
-		shuttle.NewPanicHandler(onPanic,
+		shuttle.NewPanicHandler(nil,
 			shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval,
 				MyHandler(0*time.Second))), &shuttle.ProcessorOptions{MaxConcurrency: 10})
 
@@ -211,17 +211,29 @@ func enqueueCount(q chan *azservicebus.ReceivedMessage, messageCount int) {
 	}
 }
 
-func TestPanicHandler(t *testing.T) {
+func TestPanicHandler_WithHandlingFunc(t *testing.T) {
 	handler := shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
 		panic("panic!")
 	})
 	var recovered any
-	p := shuttle.NewPanicHandler(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage, rec any) {
-		recovered = rec
-	}, handler)
+	options := &shuttle.PanicHandlerOptions{
+		OnPanicRecovered: func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage, rec any) {
+			recovered = rec
+		},
+	}
+	p := shuttle.NewPanicHandler(options, handler)
 	g := NewWithT(t)
 	g.Expect(func() { p.Handle(nil, nil, nil) }).ToNot(Panic())
 	g.Expect(recovered).ToNot(BeNil())
+}
+
+func TestNewPanicHandler_DefaultOptions(t *testing.T) {
+	handler := shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
+		panic("panic!")
+	})
+	p := shuttle.NewPanicHandler(nil, handler)
+	g := NewWithT(t)
+	g.Expect(func() { p.Handle(nil, nil, nil) }).ToNot(Panic())
 }
 
 type fakeSBLockRenewer struct {

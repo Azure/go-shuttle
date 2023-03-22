@@ -134,13 +134,27 @@ func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedM
 	}()
 }
 
+type PanicHandlerOptions struct {
+	OnPanicRecovered func(
+		ctx context.Context,
+		settler MessageSettler,
+		message *azservicebus.ReceivedMessage,
+		recovered any)
+}
+
 // NewPanicHandler recovers panics from downstream handlers
-func NewPanicHandler(onRecover func(ctx context.Context, settler MessageSettler,
-	message *azservicebus.ReceivedMessage, recovered any), handler Handler) HandlerFunc {
+func NewPanicHandler(panicOptions *PanicHandlerOptions, handler Handler) HandlerFunc {
+	if panicOptions == nil {
+		panicOptions = &PanicHandlerOptions{
+			OnPanicRecovered: func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage, recovered any) {
+				log(ctx, recovered)
+			},
+		}
+	}
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				onRecover(ctx, settler, message, rec)
+				panicOptions.OnPanicRecovered(ctx, settler, message, rec)
 			}
 		}()
 		handler.Handle(ctx, settler, message)
