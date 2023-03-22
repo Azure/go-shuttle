@@ -6,16 +6,18 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
 )
 
 type fakeSettler struct {
-	abandoned    bool
-	completed    bool
-	conpleteErr  error
-	deadlettered bool
-	defered      bool
-	lockRenewed  bool
+	abandoned         bool
+	completed         bool
+	conpleteErr       error
+	deadlettered      bool
+	deadletterOptions *azservicebus.DeadLetterOptions
+	defered           bool
+	lockRenewed       bool
 }
 
 func (f *fakeSettler) AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error {
@@ -30,6 +32,7 @@ func (f *fakeSettler) CompleteMessage(ctx context.Context, message *azservicebus
 
 func (f *fakeSettler) DeadLetterMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeadLetterOptions) error {
 	f.deadlettered = true
+	f.deadletterOptions = options
 	return nil
 }
 
@@ -147,6 +150,14 @@ func TestManagedSettler_Handle(t *testing.T) {
 			tc.expectation(tt, tc.hooks, &tc.settler)
 		})
 	}
+}
+
+func TestNilErr_WrappedInDeadLetter(t *testing.T) {
+	h := NewManagedSettlingHandler(nil, nil)
+	settler := &fakeSettler{}
+	h.handleError(context.TODO(), settler, &azservicebus.ReceivedMessage{DeliveryCount: 6}, nil)
+	g := NewWithT(t)
+	g.Expect(*settler.deadletterOptions.ErrorDescription).To(HavePrefix("nil error:"))
 }
 
 func TestMaxAttemptsRetryDecision(t *testing.T) {

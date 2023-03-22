@@ -102,20 +102,11 @@ func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSett
 	options := &ManagedSettlingOptions{
 		RetryDecision:      &MaxAttemptsRetryDecision{MaxAttempts: defaultRetryDecisionMaxAttempts},
 		RetryDelayStrategy: &ConstantDelayStrategy{Delay: defaultDelay},
-		OnCompleted: func(ctx context.Context, message *azservicebus.ReceivedMessage) {
-			if opts.OnCompleted != nil {
-				opts.OnCompleted(ctx, message)
-			}
+		OnCompleted: func(_ context.Context, _ *azservicebus.ReceivedMessage) {
 		},
-		OnAbandoned: func(ctx context.Context, message *azservicebus.ReceivedMessage, err error) {
-			if opts.OnAbandoned != nil {
-				opts.OnAbandoned(ctx, message, err)
-			}
+		OnAbandoned: func(_ context.Context, _ *azservicebus.ReceivedMessage, _ error) {
 		},
-		OnDeadLettered: func(ctx context.Context, message *azservicebus.ReceivedMessage, err error) {
-			if opts.OnDeadLettered != nil {
-				opts.OnDeadLettered(ctx, message, err)
-			}
+		OnDeadLettered: func(_ context.Context, _ *azservicebus.ReceivedMessage, _ error) {
 		},
 	}
 	if opts != nil {
@@ -124,6 +115,15 @@ func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSett
 		}
 		if opts.RetryDelayStrategy != nil {
 			options.RetryDelayStrategy = opts.RetryDelayStrategy
+		}
+		if opts.OnCompleted != nil {
+			options.OnCompleted = opts.OnCompleted
+		}
+		if opts.OnAbandoned != nil {
+			options.OnAbandoned = opts.OnAbandoned
+		}
+		if opts.OnDeadLettered != nil {
+			options.OnDeadLettered = opts.OnDeadLettered
 		}
 	}
 	return &ManagedSettler{
