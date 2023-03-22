@@ -24,7 +24,7 @@ func ExampleNewSettlementHandler() {
 	}
 	lockRenewalInterval := 10 * time.Second
 	p := shuttle.NewProcessor(receiver,
-		shuttle.NewPanicHandler(
+		shuttle.NewPanicHandler(nil,
 			shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval,
 				shuttle.NewSettlementHandler(nil, mySettlingHandler()))), &shuttle.ProcessorOptions{MaxConcurrency: 10})
 
