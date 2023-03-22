@@ -29,7 +29,7 @@ func (s *SBSuite) TestPublishAndListen_ConcurrentLockRenewal() {
 		require.NoError(t, err)
 		lockRenewalInterval := 2 * time.Second
 		p := shuttle.NewProcessor(receiver,
-			shuttle.NewPanicHandler(
+			shuttle.NewPanicHandler(nil,
 				shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval,
 					shuttle.NewSettlementHandler(nil,
 						testHandler(t, success, sendCount)))), &shuttle.ProcessorOptions{MaxConcurrency: 25})
