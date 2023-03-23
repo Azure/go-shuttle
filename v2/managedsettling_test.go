@@ -13,7 +13,7 @@ import (
 type fakeSettler struct {
 	abandoned         bool
 	completed         bool
-	conpleteErr       error
+	completeErr       error
 	deadlettered      bool
 	deadletterOptions *azservicebus.DeadLetterOptions
 	defered           bool
@@ -27,7 +27,7 @@ func (f *fakeSettler) AbandonMessage(ctx context.Context, message *azservicebus.
 
 func (f *fakeSettler) CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error {
 	f.completed = true
-	return f.conpleteErr
+	return f.completeErr
 }
 
 func (f *fakeSettler) DeadLetterMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeadLetterOptions) error {
@@ -104,7 +104,7 @@ func TestManagedSettler_Handle(t *testing.T) {
 		{
 			name:            "complete returns error triggers abandon hook",
 			hooks:           &hooks{},
-			settler:         fakeSettler{conpleteErr: fmt.Errorf("failed to complete msg")},
+			settler:         fakeSettler{completeErr: fmt.Errorf("failed to complete msg")},
 			handlerResponse: nil, // handler succeeds
 			msg:             &azservicebus.ReceivedMessage{},
 			expectation: func(t *testing.T, hooks *hooks, settler *fakeSettler) {
