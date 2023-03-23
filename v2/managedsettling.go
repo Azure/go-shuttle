@@ -77,11 +77,11 @@ type ManagedSettlingOptions struct {
 	// and the RetryDecision decides to retry the message.
 	// The handler will sleep for the time calculated by the delayStrategy before Abandoning the message.
 	RetryDelayStrategy RetryDelayStrategy
-	// OnAbandoned is invoked when the handler returns an error. It is invoked after the message is abandoned or deadlettered.
+	// OnAbandoned is invoked when the handler returns an error. It is invoked after the message is abandoned.
 	OnAbandoned func(context.Context, *azservicebus.ReceivedMessage, error)
 	// OnDeadLettered is invoked after the ManagedSettling dead-letters a message.
 	// this occurs when the RetryDecision.CanRetry implementation returns false following an error returned by the handler
-	// It is invoked after the message is abandoned or deadlettered.
+	// It is invoked after the message is dead-lettered.
 	OnDeadLettered func(context.Context, *azservicebus.ReceivedMessage, error)
 	// OnCompleted is a func that is invoked when the handler does not return any error. it is invoked after the message is completed.
 	OnCompleted func(context.Context, *azservicebus.ReceivedMessage)
