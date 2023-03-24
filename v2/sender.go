@@ -19,6 +19,8 @@ type MessageBody any
 // AzServiceBusSender is satisfied by *azservicebus.Sender
 type AzServiceBusSender interface {
 	SendMessage(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
+	SendMessageBatch(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error
+	NewMessageBatch(ctx context.Context, options *azservicebus.MessageBatchOptions) (*azservicebus.MessageBatch, error)
 }
 
 // Sender contains an SBSender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
@@ -44,12 +46,26 @@ func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 }
 
 func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error {
+	msg, err := d.toSbMessage(ctx, mb, options)
+	if err != nil {
+		return err
+	}
+	if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
+		return fmt.Errorf("failed to send message: %w", err)
+	}
+
+	return nil
+}
+
+func (d *Sender) toSbMessage(
+	ctx context.Context,
+	mb MessageBody,
+	options []func(msg *azservicebus.Message) error) (*azservicebus.Message, error) {
 	// uses a marshaller to marshal the message into a service bus message
 	msg, err := d.options.Marshaller.Marshal(mb)
 	if err != nil {
-		return fmt.Errorf("failed to marshal original struct into ServiceBus message: %w", err)
+		return nil, fmt.Errorf("failed to marshal original struct into ServiceBus message: %w", err)
 	}
-
 	msgType := getMessageType(mb)
 	msg.ApplicationProperties = map[string]interface{}{msgTypeField: msgType}
 
@@ -59,15 +75,35 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 
 	for _, option := range options {
 		if err := option(msg); err != nil {
-			return fmt.Errorf("failed to run message options: %w", err)
+			return nil, fmt.Errorf("failed to run message options: %w", err)
 		}
 	}
+	return msg, nil
+}
 
-	if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
-		return fmt.Errorf("failed to send message: %w", err)
+func (d *Sender) SendMessageBatch(ctx context.Context, mbs []MessageBody, options ...func(msg *azservicebus.Message) error) error {
+	batch, err := d.sbSender.NewMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
+	if err != nil {
+		return err
+	}
+	for _, mb := range mbs {
+		msg, err := d.toSbMessage(ctx, mb, options)
+		if err != nil {
+			return err
+		}
+		if err := batch.AddMessage(msg, nil); err != nil {
+			return err
+		}
+	}
+	if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
+		return fmt.Errorf("failed to send message batch: %w", err)
 	}
 
 	return nil
+}
+
+func (d *Sender) AzSender() AzServiceBusSender {
+	return d.sbSender
 }
 
 // SetMessageId sets the ServiceBus message's ID to a user-specified value
