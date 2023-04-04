@@ -1,9 +1,16 @@
 package shuttle
 
 import (
+	"context"
+	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/trace"
 	"reflect"
 	"testing"
 	"time"
+
+	. "github.com/onsi/gomega"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
@@ -55,14 +62,115 @@ func TestHandlers_SetScheduleAt(t *testing.T) {
 	}
 }
 
+func TestHandlers_SetMessageDelay(t *testing.T) {
+	blankMsg := &azservicebus.Message{}
+	g := NewWithT(t)
+	option := SetMessageDelay(1 * time.Minute)
+	if err := option(blankMsg); err != nil {
+		t.Errorf("Unexpected error in set schedule at test: %s", err)
+	}
+	g.Expect(*blankMsg.ScheduledEnqueueTime).To(BeTemporally("~", time.Now().Add(1*time.Minute), time.Second))
+}
+
 func TestHandlers_SetMessageTTL(t *testing.T) {
 	blankMsg := &azservicebus.Message{}
-	ttl := time.Duration(10 * time.Second)
-	handler := SetMessageTTL(ttl)
-	if err := handler(blankMsg); err != nil {
+	ttl := 10 * time.Second
+	option := SetMessageTTL(ttl)
+	if err := option(blankMsg); err != nil {
 		t.Errorf("Unexpected error in set message TTL at test: %s", err)
 	}
 	if *blankMsg.TimeToLive != ttl {
 		t.Errorf("for message TTL at expected %s, got %s", ttl, *blankMsg.TimeToLive)
 	}
+}
+
+func TestSender_SenderTracePropagation(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{}
+	sender := NewSender(azSender, &SenderOptions{
+		EnableTracingPropagation: true,
+		Marshaller:               &DefaultJSONMarshaller{},
+	})
+
+	otel.SetTracerProvider(trace.NewTracerProvider(trace.WithSampler(trace.AlwaysSample())))
+	ctx, span := otel.Tracer("testTracer").Start(
+		context.Background(),
+		"receiver.Handle")
+
+	msg, err := sender.ToServiceBusMessage(ctx, "test")
+	span.End()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(msg.ApplicationProperties["traceparent"]).ToNot(BeNil())
+}
+
+func TestSender_SendMessage(t *testing.T) {
+	azSender := &fakeAzSender{}
+	sender := NewSender(azSender, nil)
+	err := sender.SendMessage(context.Background(), "test", SetMessageId(to.Ptr("messageID")))
+	g := NewWithT(t)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(azSender.SendMessageCalled).To(BeTrue())
+	g.Expect(string(azSender.SendMessageReceivedValue.Body)).To(Equal("\"test\""))
+	g.Expect(*azSender.SendMessageReceivedValue.MessageID).To(Equal("messageID"))
+
+	azSender.SendMessageErr = fmt.Errorf("msg send failure")
+	err = sender.SendMessage(context.Background(), "test")
+	g.Expect(err).To(And(HaveOccurred(), MatchError(azSender.SendMessageErr)))
+}
+
+func TestSender_SendMessageBatch(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{
+		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
+	}
+	sender := NewSender(azSender, nil)
+	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{msg})
+	g.Expect(err).To(HaveOccurred())
+	// No way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
+}
+
+func TestSender_AzSender(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{}
+	sender := NewSender(azSender, nil)
+	g.Expect(sender.AzSender()).To(Equal(azSender))
+}
+
+type fakeAzSender struct {
+	SendMessageReceivedValue      *azservicebus.Message
+	SendMessageReceivedCtx        context.Context
+	SendMessageCalled             bool
+	SendMessageErr                error
+	SendMessageBatchCalled        bool
+	SendMessageBatchErr           error
+	NewMessageBatchReturnValue    *azservicebus.MessageBatch
+	NewMessageBatchErr            error
+	SendMessageBatchReceivedValue *azservicebus.MessageBatch
+}
+
+func (f *fakeAzSender) SendMessage(
+	ctx context.Context,
+	message *azservicebus.Message,
+	options *azservicebus.SendMessageOptions) error {
+	f.SendMessageCalled = true
+	f.SendMessageReceivedValue = message
+	f.SendMessageReceivedCtx = ctx
+	return f.SendMessageErr
+}
+
+func (f *fakeAzSender) SendMessageBatch(
+	ctx context.Context,
+	batch *azservicebus.MessageBatch,
+	options *azservicebus.SendMessageBatchOptions) error {
+	f.SendMessageBatchCalled = true
+	f.SendMessageBatchReceivedValue = batch
+	return f.SendMessageBatchErr
+}
+
+func (f *fakeAzSender) NewMessageBatch(
+	ctx context.Context,
+	options *azservicebus.MessageBatchOptions) (*azservicebus.MessageBatch, error) {
+	return f.NewMessageBatchReturnValue, f.NewMessageBatchErr
 }

@@ -46,21 +46,20 @@ func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 }
 
 func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error {
-	msg, err := d.toSbMessage(ctx, mb, options)
+	msg, err := d.ToServiceBusMessage(ctx, mb, options...)
 	if err != nil {
 		return err
 	}
 	if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
 		return fmt.Errorf("failed to send message: %w", err)
 	}
-
 	return nil
 }
 
-func (d *Sender) toSbMessage(
+func (d *Sender) ToServiceBusMessage(
 	ctx context.Context,
 	mb MessageBody,
-	options []func(msg *azservicebus.Message) error) (*azservicebus.Message, error) {
+	options ...func(msg *azservicebus.Message) error) (*azservicebus.Message, error) {
 	// uses a marshaller to marshal the message into a service bus message
 	msg, err := d.options.Marshaller.Marshal(mb)
 	if err != nil {
@@ -81,16 +80,12 @@ func (d *Sender) toSbMessage(
 	return msg, nil
 }
 
-func (d *Sender) SendMessageBatch(ctx context.Context, mbs []MessageBody, options ...func(msg *azservicebus.Message) error) error {
+func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.Message) error {
 	batch, err := d.sbSender.NewMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
 	if err != nil {
 		return err
 	}
-	for _, mb := range mbs {
-		msg, err := d.toSbMessage(ctx, mb, options)
-		if err != nil {
-			return err
-		}
+	for _, msg := range messages {
 		if err := batch.AddMessage(msg, nil); err != nil {
 			return err
 		}
