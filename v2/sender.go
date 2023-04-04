@@ -19,6 +19,8 @@ type MessageBody any
 // AzServiceBusSender is satisfied by *azservicebus.Sender
 type AzServiceBusSender interface {
 	SendMessage(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
+	SendMessageBatch(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error
+	NewMessageBatch(ctx context.Context, options *azservicebus.MessageBatchOptions) (*azservicebus.MessageBatch, error)
 }
 
 // Sender contains an SBSender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
@@ -43,13 +45,33 @@ func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 	return &Sender{sbSender: sender, options: options}
 }
 
+// SendMessage sends a payload on the bus.
+// the MessageBody is marshalled and set as the message body.
 func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error {
+	msg, err := d.ToServiceBusMessage(ctx, mb, options...)
+	if err != nil {
+		return err
+	}
+	if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
+		return fmt.Errorf("failed to send message: %w", err)
+	}
+	return nil
+}
+
+// ToServiceBusMessage transform a MessageBody into an azservicebus.Message.
+// It marshals the body using the sender's configured marshaller,
+// and set the bytes as the message.Body.
+// the sender's configured options are applied to the azservicebus.Message before
+// returning it.
+func (d *Sender) ToServiceBusMessage(
+	ctx context.Context,
+	mb MessageBody,
+	options ...func(msg *azservicebus.Message) error) (*azservicebus.Message, error) {
 	// uses a marshaller to marshal the message into a service bus message
 	msg, err := d.options.Marshaller.Marshal(mb)
 	if err != nil {
-		return fmt.Errorf("failed to marshal original struct into ServiceBus message: %w", err)
+		return nil, fmt.Errorf("failed to marshal original struct into ServiceBus message: %w", err)
 	}
-
 	msgType := getMessageType(mb)
 	msg.ApplicationProperties = map[string]interface{}{msgTypeField: msgType}
 
@@ -59,15 +81,33 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 
 	for _, option := range options {
 		if err := option(msg); err != nil {
-			return fmt.Errorf("failed to run message options: %w", err)
+			return nil, fmt.Errorf("failed to run message options: %w", err)
 		}
 	}
+	return msg, nil
+}
 
-	if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
-		return fmt.Errorf("failed to send message: %w", err)
+// SendMessageBatch sends the array of azservicebus messages as a batch.
+func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.Message) error {
+	batch, err := d.sbSender.NewMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
+	if err != nil {
+		return err
+	}
+	for _, msg := range messages {
+		if err := batch.AddMessage(msg, nil); err != nil {
+			return err
+		}
+	}
+	if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
+		return fmt.Errorf("failed to send message batch: %w", err)
 	}
 
 	return nil
+}
+
+// AzSender returns the underlying azservicebus.Sender instance.
+func (d *Sender) AzSender() AzServiceBusSender {
+	return d.sbSender
 }
 
 // SetMessageId sets the ServiceBus message's ID to a user-specified value
