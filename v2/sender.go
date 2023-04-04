@@ -45,6 +45,8 @@ func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 	return &Sender{sbSender: sender, options: options}
 }
 
+// SendMessage sends a payload on the bus.
+// the MessageBody is marshalled and set as the message body.
 func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error {
 	msg, err := d.ToServiceBusMessage(ctx, mb, options...)
 	if err != nil {
@@ -56,6 +58,11 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 	return nil
 }
 
+// ToServiceBusMessage transform a MessageBody into an azservicebus.Message.
+// It marshals the body using the sender's configured marshaller,
+// and set the bytes as the message.Body.
+// the sender's configured options are applied to the azservicebus.Message before
+// returning it.
 func (d *Sender) ToServiceBusMessage(
 	ctx context.Context,
 	mb MessageBody,
@@ -80,6 +87,7 @@ func (d *Sender) ToServiceBusMessage(
 	return msg, nil
 }
 
+// SendMessageBatch sends the array of azservicebus messages as a batch.
 func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.Message) error {
 	batch, err := d.sbSender.NewMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
 	if err != nil {
@@ -97,6 +105,7 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 	return nil
 }
 
+// AzSender returns the underlying azservicebus.Sender instance.
 func (d *Sender) AzSender() AzServiceBusSender {
 	return d.sbSender
 }
