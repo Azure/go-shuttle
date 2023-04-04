@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"reflect"
 	"testing"
@@ -92,8 +91,8 @@ func TestSender_SenderTracePropagation(t *testing.T) {
 		Marshaller:               &DefaultJSONMarshaller{},
 	})
 
-	otel.SetTracerProvider(trace.NewTracerProvider(trace.WithSampler(trace.AlwaysSample())))
-	ctx, span := otel.Tracer("testTracer").Start(
+	tp := trace.NewTracerProvider(trace.WithSampler(trace.AlwaysSample()))
+	ctx, span := tp.Tracer("testTracer").Start(
 		context.Background(),
 		"receiver.Handle")
 
