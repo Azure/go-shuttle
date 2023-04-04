@@ -3,11 +3,12 @@ package shuttle
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"go.opentelemetry.io/otel/sdk/trace"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"go.opentelemetry.io/otel/sdk/trace"
 
 	. "github.com/onsi/gomega"
 

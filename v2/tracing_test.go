@@ -5,13 +5,15 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	"github.com/Azure/go-shuttle/v2"
-	"github.com/Azure/go-shuttle/v2/otel"
 	. "github.com/onsi/gomega"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Azure/go-shuttle/v2"
+	"github.com/Azure/go-shuttle/v2/otel"
 )
 
 func TestHandlers_SetMessageTrace(t *testing.T) {
