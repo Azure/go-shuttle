@@ -153,9 +153,8 @@ func TestManagedSettler_Handle(t *testing.T) {
 }
 
 func Test_NilErr_WrappedInDeadLetter(t *testing.T) {
-	h := NewManagedSettlingHandler(nil, nil)
 	settler := &fakeSettler{}
-	h.handleError(context.TODO(), settler, &azservicebus.ReceivedMessage{DeliveryCount: 6}, nil)
+	handleError(context.TODO(), defaultManagedSettlingOptions(), settler, &azservicebus.ReceivedMessage{DeliveryCount: 6}, nil)
 	g := NewWithT(t)
 	g.Expect(*settler.deadletterOptions.ErrorDescription).To(HavePrefix("nil error:"))
 }
@@ -173,13 +172,29 @@ func TestDefaultOptions_CallDefaultHooks(t *testing.T) {
 	g.Expect(settler.completed).To(BeTrue())
 
 	settler = &fakeSettler{}
-	h.handleError(context.TODO(), settler, &azservicebus.ReceivedMessage{DeliveryCount: 0}, fmt.Errorf("oops"))
+	defaultOptions := defaultManagedSettlingOptions()
+	handleError(context.TODO(), defaultOptions, settler, &azservicebus.ReceivedMessage{DeliveryCount: 0}, fmt.Errorf("oops"))
 	g.Expect(settler.abandoned).To(BeTrue())
 
 	settler = &fakeSettler{}
-	h.handleError(context.TODO(), settler, &azservicebus.ReceivedMessage{DeliveryCount: 6}, fmt.Errorf("oops"))
+	handleError(context.TODO(), defaultOptions, settler, &azservicebus.ReceivedMessage{DeliveryCount: 6}, fmt.Errorf("oops"))
 	g.Expect(settler.deadlettered).To(BeTrue())
 	g.Expect(*settler.deadletterOptions.ErrorDescription).To(Equal("oops"))
+}
+
+func TestOnErrorOverride(t *testing.T) {
+	g := NewWithT(t)
+	settler := &fakeSettler{}
+	opts := defaultManagedSettlingOptions()
+	var onErrorCalled bool
+	opts.OnError = func(ctx context.Context, opts *ManagedSettlingOptions, settler MessageSettler, message *azservicebus.ReceivedMessage, handleErr error) {
+		onErrorCalled = true
+	}
+	h := NewManagedSettlingHandler(opts, func(_ context.Context, _ *azservicebus.ReceivedMessage) error {
+		return fmt.Errorf("failed")
+	})
+	h.Handle(context.Background(), settler, &azservicebus.ReceivedMessage{})
+	g.Expect(onErrorCalled).To(BeTrue())
 }
 
 func TestMaxAttemptsRetryDecision(t *testing.T) {
