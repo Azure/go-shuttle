@@ -143,9 +143,9 @@ func TestManagedSettler_Handle(t *testing.T) {
 				},
 			}
 			h := NewManagedSettlingHandler(options,
-				func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
+				ManagedSettlingFunc(func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
 					return tc.handlerResponse
-				})
+				}))
 			h.Handle(context.TODO(), &tc.settler, tc.msg)
 			tc.expectation(tt, tc.hooks, &tc.settler)
 		})
@@ -162,9 +162,9 @@ func Test_NilErr_WrappedInDeadLetter(t *testing.T) {
 func TestDefaultOptions_CallDefaultHooks(t *testing.T) {
 	h := NewManagedSettlingHandler(&ManagedSettlingOptions{
 		RetryDelayStrategy: &ConstantDelayStrategy{Delay: 0},
-	}, func(_ context.Context, _ *azservicebus.ReceivedMessage) error {
+	}, ManagedSettlingFunc(func(_ context.Context, _ *azservicebus.ReceivedMessage) error {
 		return nil
-	})
+	}))
 
 	settler := &fakeSettler{}
 	h.Handle(context.TODO(), settler, &azservicebus.ReceivedMessage{})
@@ -190,9 +190,9 @@ func TestOnErrorOverride(t *testing.T) {
 	opts.OnError = func(ctx context.Context, opts *ManagedSettlingOptions, settler MessageSettler, message *azservicebus.ReceivedMessage, handleErr error) {
 		onErrorCalled = true
 	}
-	h := NewManagedSettlingHandler(opts, func(_ context.Context, _ *azservicebus.ReceivedMessage) error {
+	h := NewManagedSettlingHandler(opts, ManagedSettlingFunc(func(_ context.Context, _ *azservicebus.ReceivedMessage) error {
 		return fmt.Errorf("failed")
-	})
+	}))
 	h.Handle(context.Background(), settler, &azservicebus.ReceivedMessage{})
 	g.Expect(onErrorCalled).To(BeTrue())
 }
