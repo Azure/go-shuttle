@@ -35,6 +35,13 @@ func TestRegistry_Init(t *testing.T) {
 
 }
 
+func TestRegister(t *testing.T) {
+	g := NewWithT(t)
+	reg := &fakeRegistry{}
+	g.Expect(func() { Register(reg) }).ToNot(Panic())
+	g.Expect(reg.collectors).To(HaveLen(5))
+}
+
 func TestMetrics(t *testing.T) {
 	type testcase struct {
 		name string
