@@ -143,9 +143,9 @@ func TestManagedSettler_Handle(t *testing.T) {
 				},
 			}
 			h := NewManagedSettlingHandler(options,
-				func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
+				ManagedSettlingFunc(func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
 					return tc.handlerResponse
-				})
+				}))
 			h.Handle(context.TODO(), &tc.settler, tc.msg)
 			tc.expectation(tt, tc.hooks, &tc.settler)
 		})

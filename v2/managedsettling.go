@@ -9,19 +9,30 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
 
-// ManagedSettlingFunc is the signature of the message handler to implement when using the ManagedSettling middleware
+// ManagedSettlingFunc allows to convert a function with the signature
+// func(context.Context, *azservicebus.ReceivedMessage) error
+// to the ManagedSettlingHandler interface.
 type ManagedSettlingFunc func(ctx context.Context, message *azservicebus.ReceivedMessage) error
+
+func (f ManagedSettlingFunc) Handle(ctx context.Context, message *azservicebus.ReceivedMessage) error {
+	return f(ctx, message)
+}
+
+// ManagedSettlingHandler is the message Handler interface for the ManagedSettler.
+type ManagedSettlingHandler interface {
+	Handle(context.Context, *azservicebus.ReceivedMessage) error
+}
 
 var _ Handler = (*ManagedSettler)(nil)
 
 // ManagedSettler is a middleware that allows to reduce the message handler signature to ManagedSettlingFunc
 type ManagedSettler struct {
-	next    ManagedSettlingFunc
+	next    ManagedSettlingHandler
 	options *ManagedSettlingOptions
 }
 
 func (m *ManagedSettler) Handle(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
-	if err := m.next(ctx, message); err != nil {
+	if err := m.next.Handle(ctx, message); err != nil {
 		log(ctx, "error returned from the handler. Calling ManagedSettler error handler")
 		m.options.OnError(ctx, m.options, settler, message, err)
 		return
@@ -99,7 +110,7 @@ type ManagedSettlingOptions struct {
 // nil -> complete
 // the RetryDecision can be overridden and can inspect the error returned to decide to retry the message or not.
 // this allows to define error types that shouldn't be retried (and moved directly to the deadletter queue)
-func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSettlingFunc) *ManagedSettler {
+func NewManagedSettlingHandler(opts *ManagedSettlingOptions, handler ManagedSettlingHandler) *ManagedSettler {
 	options := defaultManagedSettlingOptions()
 	if opts != nil {
 		if opts.OnError != nil {

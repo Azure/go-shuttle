@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+
 	"github.com/Azure/go-shuttle/v2"
 )
 
@@ -46,14 +47,14 @@ func ExampleNewManagedSettlingHandler() {
 	cancel()
 }
 
-func myManagedSettlementHandler() shuttle.ManagedSettlingFunc {
+func myManagedSettlementHandler() shuttle.ManagedSettlingHandler {
 	count := 0
-	return func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
+	return shuttle.ManagedSettlingFunc(func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
 		count++
 		if count == 0 {
 			// this will abandon the message
 			return fmt.Errorf("this will abandon the message, and eventually move it to DLQ")
 		}
 		return nil // this will complete the message
-	}
+	})
 }
