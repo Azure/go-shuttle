@@ -23,6 +23,11 @@ var (
 	Processor Recorder = metricsRegistry
 )
 
+// Register registers the go shuttle metrics with the given prometheus registerer.
+func Register(reg prom.Registerer) {
+	metricsRegistry.Init(reg)
+}
+
 func newRegistry() *Registry {
 	return &Registry{
 		MessageReceivedCount: prom.NewCounterVec(prom.CounterOpts{
