@@ -12,7 +12,7 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.4
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.opentelemetry.io/otel v1.14.0
