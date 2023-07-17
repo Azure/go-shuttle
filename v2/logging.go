@@ -13,8 +13,8 @@ type Logger interface {
 	Error(s string)
 }
 
-// SetGetLoggerFunc sets the function to be used to acquire a logger when go-shuttle logs.
-func SetGetLoggerFunc(fn func(ctx context.Context) Logger) {
+// SetLoggerFunc sets the function to be used to acquire a logger when go-shuttle logs.
+func SetLoggerFunc(fn func(ctx context.Context) Logger) {
 	getLogger = fn
 }
 
