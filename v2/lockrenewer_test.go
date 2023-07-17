@@ -24,6 +24,27 @@ func (r *fakeSBLockRenewer) RenewMessageLock(ctx context.Context, message *azser
 	return r.Err
 }
 
+func Test_StopRenewingOnHandlerCompletion(t *testing.T) {
+	renewer := &fakeSBLockRenewer{}
+	settler := &fakeSettler{}
+	g := NewWithT(t)
+	interval := 100 * time.Millisecond
+	lr := shuttle.NewRenewLockHandler(renewer, &interval, shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler,
+		message *azservicebus.ReceivedMessage) {
+		err := settler.CompleteMessage(ctx, message, nil)
+		g.Expect(err).To(Not(HaveOccurred()))
+	}))
+	msg := &azservicebus.ReceivedMessage{}
+	ctx, cancel := context.WithTimeout(context.TODO(), 120*time.Millisecond)
+	defer cancel()
+	lr.Handle(ctx, settler, msg)
+	g.Expect(settler.CompleteCalled.Load()).To(Equal(int32(1)))
+	g.Consistently(
+		func(g Gomega) { g.Expect(renewer.RenewCount.Load()).To(Equal(int32(0))) },
+		130*time.Millisecond,
+		20*time.Millisecond).Should(Succeed())
+}
+
 func Test_RenewPeriodically(t *testing.T) {
 	renewer := &fakeSBLockRenewer{}
 	interval := 50 * time.Millisecond

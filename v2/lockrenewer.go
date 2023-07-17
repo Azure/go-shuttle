@@ -20,6 +20,7 @@ func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handl
 		next:            handler,
 		lockRenewer:     lockRenewer,
 		renewalInterval: interval,
+		stopped:         make(chan struct{}, 1), // buffered channel to ensure we are not blocking
 	}
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 		go plr.startPeriodicRenewal(ctx, message)
@@ -36,10 +37,21 @@ type peekLockRenewer struct {
 	lockRenewer     LockRenewer
 	renewalInterval *time.Duration
 	alive           atomic.Bool
+
+	// stopped channel allows to short circuit the renewal loop
+	// when we are already waiting on the select.
+	// the channel is needed in addition to the boolean
+	// to cover the case where we might have finished handling the message and called stop on the renewer
+	// before the renewal goroutine had a chance to start.
+	stopped chan struct{}
 }
 
 func (plr *peekLockRenewer) stop(ctx context.Context) {
 	plr.alive.Store(false)
+	// don't send the stop signal to the loop if there is already one in the channel
+	if len(plr.stopped) == 0 {
+		plr.stopped <- struct{}{}
+	}
 	log(ctx, "stopped periodic renewal")
 }
 
@@ -60,6 +72,9 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 	for plr.alive.Load() {
 		select {
 		case <-time.After(*plr.renewalInterval):
+			if !plr.alive.Load() {
+				return
+			}
 			log(ctx, "renewing lock")
 			count++
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
@@ -90,6 +105,11 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 				metrics.Processor.IncMessageDeadlineReachedCount(message)
 			}
 			plr.stop(ctx)
+		case <-plr.stopped:
+			if plr.alive.Load() {
+				log(ctx, "stop signal received: exiting periodic renewal")
+				plr.alive.Store(false)
+			}
 		}
 	}
 }
