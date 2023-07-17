@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
@@ -23,6 +24,7 @@ func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handl
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 		go plr.startPeriodicRenewal(ctx, message)
 		handler.Handle(ctx, settler, message)
+		plr.stop(ctx)
 	}
 }
 
@@ -33,17 +35,33 @@ type peekLockRenewer struct {
 	next            Handler
 	lockRenewer     LockRenewer
 	renewalInterval *time.Duration
+	alive           atomic.Bool
+}
+
+func (plr *peekLockRenewer) stop(ctx context.Context) {
+	plr.alive.Store(false)
+	log(ctx, "stopped periodic renewal")
+}
+
+func (plr *peekLockRenewer) isPermanent(err error) bool {
+	var sbErr *azservicebus.Error
+	if errors.As(err, &sbErr) {
+		// once the lock is lost, the renewal cannot succeed.
+		return sbErr.Code == azservicebus.CodeLockLost ||
+			sbErr.Code == azservicebus.CodeUnauthorizedAccess
+	}
+	return false
 }
 
 func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *azservicebus.ReceivedMessage) {
 	count := 0
 	span := trace.SpanFromContext(ctx)
-	for alive := true; alive; {
+	plr.alive.Store(true)
+	for plr.alive.Load() {
 		select {
 		case <-time.After(*plr.renewalInterval):
 			log(ctx, "renewing lock")
 			count++
-
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
 			if err != nil {
 				log(ctx, "failed to renew lock: ", err)
@@ -55,6 +73,10 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 				// on error, we continue to the next loop iteration.
 				// if the context is Done, we will enter the ctx.Done() case and exit the renewal.
 				// if the error is anything else, we keep retrying the renewal
+				if plr.isPermanent(err) {
+					log(ctx, "stopping periodic renewal for message: ", message.MessageID)
+					plr.stop(ctx)
+				}
 				continue
 			}
 			span.AddEvent("message lock renewed", trace.WithAttributes(attribute.Int("count", count)))
@@ -67,7 +89,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 				span.RecordError(err)
 				metrics.Processor.IncMessageDeadlineReachedCount(message)
 			}
-			alive = false
+			plr.stop(ctx)
 		}
 	}
 }

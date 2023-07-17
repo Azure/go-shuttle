@@ -3,6 +3,7 @@ package shuttle_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 
@@ -12,35 +13,35 @@ import (
 var _ v2.MessageSettler = &fakeSettler{}
 
 type fakeSettler struct {
-	AbandonCalled    int
-	CompleteCalled   int
-	DeadLetterCalled int
-	DeferCalled      int
-	RenewCalled      int
+	AbandonCalled    atomic.Int32
+	CompleteCalled   atomic.Int32
+	DeadLetterCalled atomic.Int32
+	DeferCalled      atomic.Int32
+	RenewCalled      atomic.Int32
 }
 
 func (f *fakeSettler) AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error {
-	f.AbandonCalled++
+	f.AbandonCalled.Add(1)
 	return nil
 }
 
 func (f *fakeSettler) CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error {
-	f.CompleteCalled++
+	f.CompleteCalled.Add(1)
 	return nil
 }
 
 func (f *fakeSettler) DeadLetterMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeadLetterOptions) error {
-	f.DeadLetterCalled++
+	f.DeadLetterCalled.Add(1)
 	return nil
 }
 
 func (f *fakeSettler) DeferMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeferMessageOptions) error {
-	f.DeferCalled++
+	f.DeferCalled.Add(1)
 	return nil
 }
 
 func (f *fakeSettler) RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error {
-	f.RenewCalled++
+	f.RenewCalled.Add(1)
 	return nil
 }
 

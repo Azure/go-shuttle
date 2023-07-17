@@ -85,14 +85,11 @@ func TestProcessorStart_ContextCanceledAfterStart(t *testing.T) {
 			ReceiveInterval: to.Ptr(1 * time.Second),
 		})
 	ctx, cancel := context.WithCancel(context.Background())
-	var err error
-	go func() { err = processor.Start(ctx) }()
+	errCh := make(chan error)
+	go func() { errCh <- processor.Start(ctx) }()
 	cancel()
 	g := NewWithT(t)
-	g.Eventually(func(g Gomega) {
-		g.Expect(err).ToNot(BeNil())
-	}).Should(Succeed())
-	g.Expect(err).To(Equal(context.Canceled))
+	g.Eventually(errCh).Should(Receive(Equal(context.Canceled)))
 }
 
 func TestProcessorStart_CanSetMaxConcurrency(t *testing.T) {

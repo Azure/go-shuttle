@@ -172,12 +172,11 @@ func TestDefaultOptions_CallDefaultHooks(t *testing.T) {
 	g.Expect(settler.completed).To(BeTrue())
 
 	settler = &fakeSettler{}
-	defaultOptions := defaultManagedSettlingOptions()
-	handleError(context.TODO(), defaultOptions, settler, &azservicebus.ReceivedMessage{DeliveryCount: 0}, fmt.Errorf("oops"))
+	handleError(context.TODO(), h.options, settler, &azservicebus.ReceivedMessage{DeliveryCount: 0}, fmt.Errorf("oops"))
 	g.Expect(settler.abandoned).To(BeTrue())
 
 	settler = &fakeSettler{}
-	handleError(context.TODO(), defaultOptions, settler, &azservicebus.ReceivedMessage{DeliveryCount: 6}, fmt.Errorf("oops"))
+	handleError(context.TODO(), h.options, settler, &azservicebus.ReceivedMessage{DeliveryCount: 6}, fmt.Errorf("oops"))
 	g.Expect(settler.deadlettered).To(BeTrue())
 	g.Expect(*settler.deadletterOptions.ErrorDescription).To(Equal("oops"))
 }
