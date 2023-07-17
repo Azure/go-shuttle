@@ -68,8 +68,7 @@ func (plr *peekLockRenewer) isPermanent(err error) bool {
 func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *azservicebus.ReceivedMessage) {
 	count := 0
 	span := trace.SpanFromContext(ctx)
-	plr.alive.Store(true)
-	for plr.alive.Load() {
+	for plr.alive.Store(true); plr.alive.Load(); {
 		select {
 		case <-time.After(*plr.renewalInterval):
 			if !plr.alive.Load() {
