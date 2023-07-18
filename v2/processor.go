@@ -80,6 +80,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 
 // Start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) Start(ctx context.Context) error {
+	log(ctx, "starting processor")
 	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
 	log(ctx, "received ", len(messages), " messages - initial")
 	metrics.Processor.IncMessageReceived(float64(len(messages)))
@@ -97,7 +98,7 @@ func (p *Processor) Start(ctx context.Context) error {
 				break
 			}
 			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
-			log(ctx, "received ", len(messages), " messages from loop")
+			log(ctx, "received ", len(messages), " messages from processor loop")
 			metrics.Processor.IncMessageReceived(float64(len(messages)))
 			if err != nil {
 				return err

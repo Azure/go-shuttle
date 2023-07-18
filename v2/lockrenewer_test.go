@@ -3,6 +3,7 @@ package shuttle_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,14 +14,35 @@ import (
 )
 
 type fakeSBLockRenewer struct {
-	RenewCount int
+	RenewCount atomic.Int32
 	Err        error
 }
 
 func (r *fakeSBLockRenewer) RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage,
 	options *azservicebus.RenewMessageLockOptions) error {
-	r.RenewCount++
+	r.RenewCount.Add(1)
 	return r.Err
+}
+
+func Test_StopRenewingOnHandlerCompletion(t *testing.T) {
+	renewer := &fakeSBLockRenewer{}
+	settler := &fakeSettler{}
+	g := NewWithT(t)
+	interval := 100 * time.Millisecond
+	lr := shuttle.NewRenewLockHandler(renewer, &interval, shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler,
+		message *azservicebus.ReceivedMessage) {
+		err := settler.CompleteMessage(ctx, message, nil)
+		g.Expect(err).To(Not(HaveOccurred()))
+	}))
+	msg := &azservicebus.ReceivedMessage{}
+	ctx, cancel := context.WithTimeout(context.TODO(), 120*time.Millisecond)
+	defer cancel()
+	lr.Handle(ctx, settler, msg)
+	g.Expect(settler.CompleteCalled.Load()).To(Equal(int32(1)))
+	g.Consistently(
+		func(g Gomega) { g.Expect(renewer.RenewCount.Load()).To(Equal(int32(0))) },
+		130*time.Millisecond,
+		20*time.Millisecond).Should(Succeed())
 }
 
 func Test_RenewPeriodically(t *testing.T) {
@@ -36,48 +58,73 @@ func Test_RenewPeriodically(t *testing.T) {
 	lr.Handle(ctx, &fakeSettler{}, msg)
 	g := NewWithT(t)
 	g.Eventually(
-		func(g Gomega) { g.Expect(renewer.RenewCount).To(Equal(2)) },
+		func(g Gomega) { g.Expect(renewer.RenewCount.Load()).To(Equal(int32(2))) },
 		130*time.Millisecond,
 		20*time.Millisecond).Should(Succeed())
 }
 
 func Test_RenewPeriodically_Error(t *testing.T) {
-	renewer := &fakeSBLockRenewer{
-		Err: fmt.Errorf("fail to renew"),
+	type testCase struct {
+		name    string
+		renewer *fakeSBLockRenewer
+		verify  func(g Gomega, tc *testCase)
 	}
-	interval := 50 * time.Millisecond
-	lr := shuttle.NewRenewLockHandler(renewer, &interval, shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler,
-		message *azservicebus.ReceivedMessage) {
-		time.Sleep(150 * time.Millisecond)
-	}))
-	msg := &azservicebus.ReceivedMessage{}
-	ctx, cancel := context.WithTimeout(context.TODO(), 120*time.Millisecond)
-	defer cancel()
-	lr.Handle(ctx, &fakeSettler{}, msg)
-
-	g := NewWithT(t)
-	// continue periodic renewal on Renew error
-	g.Eventually(
-		func(g Gomega) { g.Expect(renewer.RenewCount).To(Equal(2)) },
-		130*time.Millisecond,
-		20*time.Millisecond).Should(Succeed())
-}
-
-func Test_RenewPeriodically_ContextCanceled(t *testing.T) {
-	renewer := &fakeSBLockRenewer{
-		Err: fmt.Errorf("fail to renew"),
+	testCases := []testCase{
+		{
+			name:    "continue periodic renewal on unknown error",
+			renewer: &fakeSBLockRenewer{Err: fmt.Errorf("unknown error")},
+			verify: func(g Gomega, tc *testCase) {
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(2))) },
+					130*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+			},
+		},
+		{
+			name:    "stop periodic renewal on context canceled",
+			renewer: &fakeSBLockRenewer{Err: context.Canceled},
+			verify: func(g Gomega, tc *testCase) {
+				g.Consistently(
+					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(2))) },
+					130*time.Millisecond,
+					20*time.Millisecond)
+			},
+		},
+		{
+			name:    "stop periodic renewal on permanent error (lockLost)",
+			renewer: &fakeSBLockRenewer{Err: &azservicebus.Error{Code: azservicebus.CodeLockLost}},
+			verify: func(g Gomega, tc *testCase) {
+				g.Consistently(
+					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(2))) },
+					130*time.Millisecond,
+					20*time.Millisecond)
+			},
+		},
+		{
+			name:    "continue periodic renewal on transient error (timeout)",
+			renewer: &fakeSBLockRenewer{Err: &azservicebus.Error{Code: azservicebus.CodeTimeout}},
+			verify: func(g Gomega, tc *testCase) {
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(2))) },
+					130*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+			},
+		},
 	}
-	interval := 50 * time.Millisecond
-	lr := shuttle.NewRenewLockHandler(renewer, &interval, shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler,
-		message *azservicebus.ReceivedMessage) {
-		time.Sleep(150 * time.Millisecond)
-	}))
-	msg := &azservicebus.ReceivedMessage{}
-	ctx, cancel := context.WithCancel(context.TODO())
-	cancel()
-	lr.Handle(ctx, &fakeSettler{}, msg)
-
-	g := NewWithT(t)
-	// continue periodic renewal on Renew error
-	g.Consistently(func() bool { return renewer.RenewCount == 0 }, 130*time.Millisecond, 20*time.Millisecond)
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			interval := 50 * time.Millisecond
+			lr := shuttle.NewRenewLockHandler(tc.renewer, &interval, shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler,
+				message *azservicebus.ReceivedMessage) {
+				time.Sleep(150 * time.Millisecond)
+			}))
+			msg := &azservicebus.ReceivedMessage{}
+			ctx, cancel := context.WithTimeout(context.TODO(), 120*time.Millisecond)
+			defer cancel()
+			lr.Handle(ctx, &fakeSettler{}, msg)
+			tc.verify(NewWithT(t), &tc)
+		})
+	}
 }
