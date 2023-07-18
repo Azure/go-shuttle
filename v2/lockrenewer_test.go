@@ -72,6 +72,8 @@ func Test_NewLockRenewerHandler_defaultToNotCancelMessageContext(t *testing.T) {
 	sbRenewer := &fakeSBLockRenewer{
 		Err: &azservicebus.Error{Code: azservicebus.CodeLockLost},
 	}
+
+	//nolint:staticcheck // still need to cover the deprecated func
 	handler := shuttle.NewRenewLockHandler(sbRenewer, &interval,
 		shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
 			g.Consistently(func(g Gomega) {
