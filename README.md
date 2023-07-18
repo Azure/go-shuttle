@@ -55,7 +55,7 @@ This middleware will renew the lock on each message every 30 seconds until the m
 
 ```golang
 renewInterval := 30 * time.Second
-shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval, handler)
+shuttle.NewLockRenewalHandler(receiver, &shuttle.LockRenewalOptions{Interval: &renewInterval}, handler)
 ```
 
 see setup in [Processor example](v2/processor_test.go)
