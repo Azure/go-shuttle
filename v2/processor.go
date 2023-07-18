@@ -35,11 +35,6 @@ func (f HandlerFunc) Handle(ctx context.Context, settler MessageSettler, message
 	f(ctx, settler, message)
 }
 
-// LockRenewer abstracts the servicebus receiver client to only expose lock renewal
-type LockRenewer interface {
-	RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error
-}
-
 // Processor encapsulates the message pump and concurrency handling of servicebus.
 // it exposes a handler API to provides a middleware based message processing pipeline.
 type Processor struct {

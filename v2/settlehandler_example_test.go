@@ -6,6 +6,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+
 	"github.com/Azure/go-shuttle/v2"
 )
 
@@ -25,7 +26,7 @@ func ExampleNewSettlementHandler() {
 	lockRenewalInterval := 10 * time.Second
 	p := shuttle.NewProcessor(receiver,
 		shuttle.NewPanicHandler(nil,
-			shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval,
+			shuttle.NewLockRenewalHandler(receiver, &shuttle.LockRenewalOptions{Interval: &lockRenewalInterval},
 				shuttle.NewSettlementHandler(nil, mySettlingHandler()))), &shuttle.ProcessorOptions{MaxConcurrency: 10})
 
 	ctx, cancel := context.WithCancel(context.Background())
