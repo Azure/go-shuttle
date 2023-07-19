@@ -41,14 +41,14 @@ func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions,
 			cancelMessageContextOnStop = *options.CancelMessageContextOnStop
 		}
 	}
-	plr := &peekLockRenewer{
-		next:                   handler,
-		lockRenewer:            lockRenewer,
-		renewalInterval:        &interval,
-		cancelMessageCtxOnStop: cancelMessageContextOnStop,
-		stopped:                make(chan struct{}, 1), // buffered channel to ensure we are not blocking
-	}
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
+		plr := &peekLockRenewer{
+			next:                   handler,
+			lockRenewer:            lockRenewer,
+			renewalInterval:        &interval,
+			cancelMessageCtxOnStop: cancelMessageContextOnStop,
+			stopped:                make(chan struct{}, 1), // buffered channel to ensure we are not blocking
+		}
 		renewalCtx, cancel := context.WithCancel(ctx)
 		plr.cancelMessageCtx = cancel
 		go plr.startPeriodicRenewal(renewalCtx, message)
