@@ -165,7 +165,7 @@ func handleError(ctx context.Context,
 		handleErr = fmt.Errorf("nil error: %w", handleErr)
 	}
 	if !options.RetryDecision.CanRetry(handleErr, message) {
-		log(ctx, "moving message to dead letter queue because processing failed to an error: %s", handleErr)
+		log(ctx, fmt.Sprintf("moving message to dead letter queue because processing failed to an error: %s", handleErr))
 		deadLetterSettlement.settle(ctx, settler, message, &azservicebus.DeadLetterOptions{
 			Reason:             to.Ptr("ManagedSettlingHandlerDeadLettering"),
 			ErrorDescription:   to.Ptr(handleErr.Error()),
@@ -178,7 +178,7 @@ func handleError(ctx context.Context,
 	// the delay is implemented as an in-memory sleep before calling abandon.
 	// this will continue renewing the lock on the message while we wait for this delay to pass.
 	delay := options.RetryDelayStrategy.GetDelay(message.DeliveryCount)
-	log(ctx, "delay strategy return delay of %s", delay)
+	log(ctx, fmt.Sprintf("delay strategy return delay of %s", delay))
 	time.Sleep(delay)
 	abandonSettlement.settle(ctx, settler, message, nil)
 	options.OnAbandoned(ctx, message, handleErr)

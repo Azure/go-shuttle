@@ -2,6 +2,7 @@ package shuttle
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -77,11 +78,11 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 func (p *Processor) Start(ctx context.Context) error {
 	log(ctx, "starting processor")
 	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
-	log(ctx, "received ", len(messages), " messages - initial")
-	metrics.Processor.IncMessageReceived(float64(len(messages)))
 	if err != nil {
 		return err
 	}
+	log(ctx, fmt.Sprintf("received %d messages - initial", len(messages)))
+	metrics.Processor.IncMessageReceived(float64(len(messages)))
 	for _, msg := range messages {
 		p.process(ctx, msg)
 	}
@@ -93,11 +94,11 @@ func (p *Processor) Start(ctx context.Context) error {
 				break
 			}
 			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
-			log(ctx, "received ", len(messages), " messages from processor loop")
-			metrics.Processor.IncMessageReceived(float64(len(messages)))
 			if err != nil {
 				return err
 			}
+			log(ctx, fmt.Sprintf("received %d messages from processor loop", len(messages)))
+			metrics.Processor.IncMessageReceived(float64(len(messages)))
 			for _, msg := range messages {
 				p.process(ctx, msg)
 			}
