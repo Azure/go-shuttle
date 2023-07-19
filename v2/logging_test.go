@@ -16,11 +16,9 @@ func (t *testLogger) Info(s string) {
 }
 
 func (t *testLogger) Warn(s string) {
-	//TODO implement me
 }
 
 func (t *testLogger) Error(s string) {
-	//TODO implement me
 }
 
 func getTestLogger(ctx context.Context) Logger {
@@ -49,4 +47,8 @@ func TestSetLoggerFunc(t *testing.T) {
 	// getLogger returns nil
 	nilCtx := context.WithValue(context.Background(), "testlogger", nil)
 	g.Expect(func() { log(nilCtx, "test") }).ToNot(Panic())
+
+	//coverage on testlogger
+	logger.Warn("test")
+	logger.Error("test")
 }
