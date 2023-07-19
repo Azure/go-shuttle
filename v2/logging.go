@@ -36,6 +36,6 @@ func (l *printLogger) Error(s string) {
 
 func log(ctx context.Context, a ...any) {
 	if os.Getenv("GOSHUTTLE_LOG") == "ALL" {
-		getLogger(ctx).Info(fmt.Sprint(append(append([]any{}, time.Now().UTC(), " - "), a...)...))
+		getLogger(ctx).Info(fmt.Sprint(a...))
 	}
 }
