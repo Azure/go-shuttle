@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	"github.com/stretchr/testify/require"
-
 	"github.com/Azure/go-shuttle/v2"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPublishAndListenWithConnectionStringUsingDefault tests both the publisher and listener with default configurations
