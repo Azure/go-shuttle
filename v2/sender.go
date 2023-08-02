@@ -11,7 +11,7 @@ import (
 
 const (
 	msgTypeField       = "type"
-	DefaultSendTimeout = 10 * time.Second
+	defaultSendTimeout = 10 * time.Second
 )
 
 // MessageBody is a type to represent that an input message body can be of any type
@@ -36,7 +36,9 @@ type SenderOptions struct {
 	Marshaller Marshaller
 	// EnableTracingPropagation automatically applies WithTracePropagation option on all message sent through this sender
 	EnableTracingPropagation bool
-	// SendTimeout is the default timeout for sending a message
+	// SendTimeout is the timeout value used on the context that sends messages
+	// Defaults to 10 seconds if not set or 0
+	// Disabled when set to a negative value
 	SendTimeout time.Duration
 }
 
@@ -46,7 +48,7 @@ func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 		options = &SenderOptions{Marshaller: &DefaultJSONMarshaller{}}
 	}
 	if options.SendTimeout == 0 {
-		options.SendTimeout = DefaultSendTimeout
+		options.SendTimeout = defaultSendTimeout
 	}
 	return &Sender{sbSender: sender, options: options}
 }

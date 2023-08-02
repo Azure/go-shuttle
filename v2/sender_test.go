@@ -109,13 +109,13 @@ func TestSender_WithDefaultSendTimeout(t *testing.T) {
 		DoSendMessage: func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
 			dl, ok := ctx.Deadline()
 			g.Expect(ok).To(BeTrue())
-			g.Expect(dl).To(BeTemporally("~", time.Now().Add(DefaultSendTimeout), time.Second))
+			g.Expect(dl).To(BeTemporally("~", time.Now().Add(defaultSendTimeout), time.Second))
 			return nil
 		},
 		DoSendMessageBatch: func(ctx context.Context, messages *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
 			dl, ok := ctx.Deadline()
 			g.Expect(ok).To(BeTrue())
-			g.Expect(dl).To(BeTemporally("~", time.Now().Add(DefaultSendTimeout), time.Second))
+			g.Expect(dl).To(BeTemporally("~", time.Now().Add(defaultSendTimeout), time.Second))
 			return nil
 		},
 	}
@@ -142,6 +142,31 @@ func TestSender_WithSendTimeout(t *testing.T) {
 			dl, ok := ctx.Deadline()
 			g.Expect(ok).To(BeTrue())
 			g.Expect(dl).To(BeTemporally("~", time.Now().Add(sendTimeout), time.Second))
+			return nil
+		},
+	}
+	sender := NewSender(azSender, &SenderOptions{
+		Marshaller:  &DefaultJSONMarshaller{},
+		SendTimeout: sendTimeout,
+	})
+	err := sender.SendMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), nil)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestSender_DisabledSendTimeout(t *testing.T) {
+	g := NewWithT(t)
+	sendTimeout := -1 * time.Second
+	azSender := &fakeAzSender{
+		DoSendMessage: func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
+			_, ok := ctx.Deadline()
+			g.Expect(ok).To(BeFalse())
+			return nil
+		},
+		DoSendMessageBatch: func(ctx context.Context, messages *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
+			_, ok := ctx.Deadline()
+			g.Expect(ok).To(BeFalse())
 			return nil
 		},
 	}
