@@ -103,6 +103,58 @@ func TestSender_SenderTracePropagation(t *testing.T) {
 	g.Expect(msg.ApplicationProperties["traceparent"]).ToNot(BeNil())
 }
 
+func TestSender_WithDefaultSendTimeout(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{
+		DoSendMessage: func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
+			dl, ok := ctx.Deadline()
+			g.Expect(ok).To(BeTrue())
+			g.Expect(dl).To(BeTemporally("~", time.Now().Add(DefaultSendTimeout), time.Second))
+			return nil
+		},
+		DoSendMessageBatch: func(ctx context.Context, messages *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
+			dl, ok := ctx.Deadline()
+			g.Expect(ok).To(BeTrue())
+			g.Expect(dl).To(BeTemporally("~", time.Now().Add(DefaultSendTimeout), time.Second))
+			return nil
+		},
+	}
+	sender := NewSender(azSender, &SenderOptions{
+		Marshaller: &DefaultJSONMarshaller{},
+	})
+	err := sender.SendMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), nil)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestSender_WithSendTimeout(t *testing.T) {
+	g := NewWithT(t)
+	sendTimeout := 5 * time.Second
+	azSender := &fakeAzSender{
+		DoSendMessage: func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
+			dl, ok := ctx.Deadline()
+			g.Expect(ok).To(BeTrue())
+			g.Expect(dl).To(BeTemporally("~", time.Now().Add(sendTimeout), time.Second))
+			return nil
+		},
+		DoSendMessageBatch: func(ctx context.Context, messages *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
+			dl, ok := ctx.Deadline()
+			g.Expect(ok).To(BeTrue())
+			g.Expect(dl).To(BeTemporally("~", time.Now().Add(sendTimeout), time.Second))
+			return nil
+		},
+	}
+	sender := NewSender(azSender, &SenderOptions{
+		Marshaller:  &DefaultJSONMarshaller{},
+		SendTimeout: sendTimeout,
+	})
+	err := sender.SendMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), nil)
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
 func TestSender_SendMessage(t *testing.T) {
 	azSender := &fakeAzSender{}
 	sender := NewSender(azSender, nil)
@@ -139,6 +191,8 @@ func TestSender_AzSender(t *testing.T) {
 }
 
 type fakeAzSender struct {
+	DoSendMessage                 func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
+	DoSendMessageBatch            func(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error
 	SendMessageReceivedValue      *azservicebus.Message
 	SendMessageReceivedCtx        context.Context
 	SendMessageCalled             bool
@@ -157,6 +211,11 @@ func (f *fakeAzSender) SendMessage(
 	f.SendMessageCalled = true
 	f.SendMessageReceivedValue = message
 	f.SendMessageReceivedCtx = ctx
+	if f.DoSendMessage != nil {
+		if err := f.DoSendMessage(ctx, message, options); err != nil {
+			return err
+		}
+	}
 	return f.SendMessageErr
 }
 
@@ -166,6 +225,11 @@ func (f *fakeAzSender) SendMessageBatch(
 	options *azservicebus.SendMessageBatchOptions) error {
 	f.SendMessageBatchCalled = true
 	f.SendMessageBatchReceivedValue = batch
+	if f.DoSendMessageBatch != nil {
+		if err := f.DoSendMessageBatch(ctx, batch, options); err != nil {
+			return err
+		}
+	}
 	return f.SendMessageBatchErr
 }
 
