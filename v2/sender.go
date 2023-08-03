@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	msgTypeField = "type"
+	msgTypeField       = "type"
+	defaultSendTimeout = 10 * time.Second
 )
 
 // MessageBody is a type to represent that an input message body can be of any type
@@ -35,12 +36,19 @@ type SenderOptions struct {
 	Marshaller Marshaller
 	// EnableTracingPropagation automatically applies WithTracePropagation option on all message sent through this sender
 	EnableTracingPropagation bool
+	// SendTimeout is the timeout value used on the context that sends messages
+	// Defaults to 10 seconds if not set or 0
+	// Disabled when set to a negative value
+	SendTimeout time.Duration
 }
 
 // NewSender takes in a Sender and a Marshaller to create a new object that can send messages to the ServiceBus queue
 func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 	if options == nil {
 		options = &SenderOptions{Marshaller: &DefaultJSONMarshaller{}}
+	}
+	if options.SendTimeout == 0 {
+		options.SendTimeout = defaultSendTimeout
 	}
 	return &Sender{sbSender: sender, options: options}
 }
@@ -51,6 +59,11 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 	msg, err := d.ToServiceBusMessage(ctx, mb, options...)
 	if err != nil {
 		return err
+	}
+	if d.options.SendTimeout > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
+		defer cancel()
 	}
 	if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
 		return fmt.Errorf("failed to send message: %w", err)
@@ -97,6 +110,11 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 		if err := batch.AddMessage(msg, nil); err != nil {
 			return err
 		}
+	}
+	if d.options.SendTimeout > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
+		defer cancel()
 	}
 	if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
 		return fmt.Errorf("failed to send message batch: %w", err)
