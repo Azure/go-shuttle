@@ -69,7 +69,7 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 	errChan := make(chan error)
 
 	go func() {
-		if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil {
+		if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
 			errChan <- fmt.Errorf("failed to send message: %w", err)
 		}
 		errChan <- nil
