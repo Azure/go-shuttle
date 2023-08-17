@@ -7,12 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"go.opentelemetry.io/otel/sdk/trace"
 
-	. "github.com/onsi/gomega"
-
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	. "github.com/onsi/gomega"
 )
 
 func TestFunc_NewSender(t *testing.T) {
@@ -153,6 +152,30 @@ func TestSender_WithSendTimeout(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	err = sender.SendMessageBatch(context.Background(), nil)
 	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestSender_WithContextCanceled(t *testing.T) {
+	g := NewWithT(t)
+	sendTimeout := 1 * time.Second
+	azSender := &fakeAzSender{
+		DoSendMessage: func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
+			time.Sleep(2 * time.Second)
+			return nil
+		},
+		DoSendMessageBatch: func(ctx context.Context, messages *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
+			time.Sleep(2 * time.Second)
+			return nil
+		},
+	}
+	sender := NewSender(azSender, &SenderOptions{
+		Marshaller:  &DefaultJSONMarshaller{},
+		SendTimeout: sendTimeout,
+	})
+
+	err := sender.SendMessage(context.Background(), "test")
+	g.Expect(err).To(MatchError(context.DeadlineExceeded))
+	err = sender.SendMessageBatch(context.Background(), nil)
+	g.Expect(err).To(MatchError(context.DeadlineExceeded))
 }
 
 func TestSender_DisabledSendTimeout(t *testing.T) {

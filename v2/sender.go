@@ -65,10 +65,23 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
 		defer cancel()
 	}
-	if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
-		return fmt.Errorf("failed to send message: %w", err)
+
+	errChan := make(chan error)
+
+	go func() {
+		if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil {
+			errChan <- fmt.Errorf("failed to send message: %w", err)
+		}
+		errChan <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("failed to send message: %w", ctx.Err())
+	case err := <-errChan:
+		return err
 	}
-	return nil
+
 }
 
 // ToServiceBusMessage transform a MessageBody into an azservicebus.Message.
@@ -120,7 +133,22 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 		return fmt.Errorf("failed to send message batch: %w", err)
 	}
 
-	return nil
+	errChan := make(chan error)
+
+	go func() {
+		if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
+			errChan <- fmt.Errorf("failed to send message batch: %w", err)
+		}
+		errChan <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("failed to send message: %w", ctx.Err())
+	case err := <-errChan:
+		return err
+	}
+
 }
 
 // AzSender returns the underlying azservicebus.Sender instance.
