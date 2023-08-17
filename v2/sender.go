@@ -144,7 +144,7 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("failed to send message: %w", ctx.Err())
+		return fmt.Errorf("failed to send message batch: %w", ctx.Err())
 	case err := <-errChan:
 		return err
 	}
