@@ -9,10 +9,9 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/go-shuttle/v2/metrics/processor"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/Azure/go-shuttle/v2/metrics"
 )
 
 // LockRenewer abstracts the servicebus receiver client to only expose lock renewal
@@ -125,7 +124,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
 			if err != nil {
 				log(ctx, fmt.Sprintf("failed to renew lock: %s", err))
-				metrics.Processor.IncMessageLockRenewedFailure(message)
+				processor.Metric.IncMessageLockRenewedFailure(message)
 				// The context is canceled when the message handler returns from the processor.
 				// This can happen if we already entered the interval case when the message processing completes.
 				// The best we can do is log and retry on the next tick. The sdk already retries operations on recoverable network errors.
@@ -141,14 +140,14 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 				continue
 			}
 			span.AddEvent("message lock renewed", trace.WithAttributes(attribute.Int("count", count)))
-			metrics.Processor.IncMessageLockRenewedSuccess(message)
+			processor.Metric.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
 			log(ctx, "context done: stopping periodic renewal")
 			span.AddEvent("context done: stopping message lock renewal")
 			err := ctx.Err()
 			if errors.Is(err, context.DeadlineExceeded) {
 				span.RecordError(err)
-				metrics.Processor.IncMessageDeadlineReachedCount(message)
+				processor.Metric.IncMessageDeadlineReachedCount(message)
 			}
 			plr.stop(ctx)
 		case <-plr.stopped:
