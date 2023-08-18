@@ -1,18 +1,14 @@
 package sender
 
 import (
-	"fmt"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	prom "github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )
 
 const (
-	subsystem        = "goshuttle_handler"
-	messageTypeLabel = "messageType"
-	successLabel     = "success"
-	entityNameLabel  = "entityName"
+	subsystem       = "goshuttle_handler"
+	successLabel    = "success"
+	entityNameLabel = "entityName"
 )
 
 var (
@@ -27,14 +23,7 @@ func newRegistry() *Registry {
 			Name:      "message_sent_total",
 			Help:      "total number of messages sent by the sender",
 			Subsystem: subsystem,
-		}, []string{messageTypeLabel, successLabel, entityNameLabel}),
-	}
-}
-
-func getMessageTypeLabel(msg *azservicebus.Message) prom.Labels {
-	typeName := msg.ApplicationProperties["type"]
-	return map[string]string{
-		messageTypeLabel: fmt.Sprintf("%s", typeName),
+		}, []string{successLabel, entityNameLabel}),
 	}
 }
 
@@ -51,24 +40,26 @@ type Registry struct {
 // Recorder allows to initialize the metric registry and increase/decrease the registered metrics at runtime.
 type Recorder interface {
 	Init(registerer prom.Registerer)
-	IncSendMessageSuccessCount(msg *azservicebus.Message, entityName string)
-	IncSendMessageFailureCount(msg *azservicebus.Message, entityName string)
+	IncSendMessageSuccessCount(entityName string)
+	IncSendMessageFailureCount(entityName string)
 }
 
 // IncSendMessageSuccessCount increases the MessageSentCount metric with success == true
-func (m *Registry) IncSendMessageSuccessCount(msg *azservicebus.Message, entityName string) {
-	labels := getMessageTypeLabel(msg)
-	labels[successLabel] = "true"
-	labels[entityNameLabel] = entityName
-	m.MessageSentCount.With(labels).Inc()
+func (m *Registry) IncSendMessageSuccessCount(entityName string) {
+	m.MessageSentCount.With(
+		prom.Labels{
+			entityNameLabel: entityName,
+			successLabel:    "true",
+		}).Inc()
 }
 
 // IncSendMessageFailureCount increases the MessageSentCount metric with success == false
-func (m *Registry) IncSendMessageFailureCount(msg *azservicebus.Message, entityName string) {
-	labels := getMessageTypeLabel(msg)
-	labels[successLabel] = "false"
-	labels[entityNameLabel] = entityName
-	m.MessageSentCount.With(labels).Inc()
+func (m *Registry) IncSendMessageFailureCount(entityName string) {
+	m.MessageSentCount.With(
+		prom.Labels{
+			entityNameLabel: entityName,
+			successLabel:    "false",
+		}).Inc()
 }
 
 // Informer allows to inspect metrics value stored in the registry at runtime

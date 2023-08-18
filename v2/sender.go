@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/go-shuttle/v2/metrics/sender"
 )
 
 const (
@@ -26,8 +27,9 @@ type AzServiceBusSender interface {
 
 // Sender contains an SBSender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
 type Sender struct {
-	sbSender AzServiceBusSender
-	options  *SenderOptions
+	sbSender   AzServiceBusSender
+	entityName string // entityName is the name of the queue/topic
+	options    *SenderOptions
 }
 
 type SenderOptions struct {
@@ -43,14 +45,14 @@ type SenderOptions struct {
 }
 
 // NewSender takes in a Sender and a Marshaller to create a new object that can send messages to the ServiceBus queue
-func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
+func NewSender(sender AzServiceBusSender, entityName string, options *SenderOptions) *Sender {
 	if options == nil {
 		options = &SenderOptions{Marshaller: &DefaultJSONMarshaller{}}
 	}
 	if options.SendTimeout == 0 {
 		options.SendTimeout = defaultSendTimeout
 	}
-	return &Sender{sbSender: sender, options: options}
+	return &Sender{sbSender: sender, entityName: entityName, options: options}
 }
 
 // SendMessage sends a payload on the bus.
@@ -77,8 +79,14 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 
 	select {
 	case <-ctx.Done():
+		sender.Metric.IncSendMessageFailureCount(d.entityName)
 		return fmt.Errorf("failed to send message: %w", ctx.Err())
 	case err := <-errChan:
+		if err == nil {
+			sender.Metric.IncSendMessageSuccessCount(d.entityName)
+		} else {
+			sender.Metric.IncSendMessageFailureCount(d.entityName)
+		}
 		return err
 	}
 
@@ -128,9 +136,6 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
 		defer cancel()
-	}
-	if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
-		return fmt.Errorf("failed to send message batch: %w", err)
 	}
 
 	errChan := make(chan error)

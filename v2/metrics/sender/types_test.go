@@ -3,7 +3,6 @@ package sender
 import (
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -31,28 +30,21 @@ func TestRegistry_Init(t *testing.T) {
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
 	g.Expect(fRegistry.collectors).To(HaveLen(1))
-	Metric.IncSendMessageSuccessCount(&azservicebus.Message{}, "testTopicName")
+	Metric.IncSendMessageSuccessCount("testTopicName")
 }
 
 func TestMetrics(t *testing.T) {
 	type testcase struct {
 		name       string
-		msg        *azservicebus.Message
 		entityName string
 	}
 	for _, tc := range []testcase{
 		{
 			name:       "no type property",
-			msg:        &azservicebus.Message{},
 			entityName: "testTopicName",
 		},
 		{
-			name: "with type property",
-			msg: &azservicebus.Message{
-				ApplicationProperties: map[string]interface{}{
-					"type": "someType",
-				},
-			},
+			name:       "with type property",
 			entityName: "testTopicName",
 		},
 	} {
@@ -73,13 +65,13 @@ func TestMetrics(t *testing.T) {
 		g.Expect(count).To(Equal(float64(0)))
 
 		// count incremented
-		r.IncSendMessageFailureCount(tc.msg, tc.entityName)
+		r.IncSendMessageFailureCount(tc.entityName)
 		count, err = informer.GetSendMessageFailureCount()
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(1)))
 
 		// count failure only
-		r.IncSendMessageSuccessCount(tc.msg, tc.entityName)
+		r.IncSendMessageSuccessCount(tc.entityName)
 		count, err = informer.GetSendMessageFailureCount()
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(1)))

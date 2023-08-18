@@ -16,7 +16,7 @@ import (
 
 func TestFunc_NewSender(t *testing.T) {
 	marshaller := &DefaultProtoMarshaller{}
-	sender := NewSender(nil, &SenderOptions{Marshaller: marshaller})
+	sender := NewSender(nil, "testTopicName", &SenderOptions{Marshaller: marshaller})
 
 	if sender.options.Marshaller != marshaller {
 		t.Errorf("failed to set marshaller, expected: %s, actual: %s", reflect.TypeOf(marshaller), reflect.TypeOf(sender.options.Marshaller))
@@ -86,7 +86,7 @@ func TestHandlers_SetMessageTTL(t *testing.T) {
 func TestSender_SenderTracePropagation(t *testing.T) {
 	g := NewWithT(t)
 	azSender := &fakeAzSender{}
-	sender := NewSender(azSender, &SenderOptions{
+	sender := NewSender(azSender, "testTopicName", &SenderOptions{
 		EnableTracingPropagation: true,
 		Marshaller:               &DefaultJSONMarshaller{},
 	})
@@ -118,7 +118,7 @@ func TestSender_WithDefaultSendTimeout(t *testing.T) {
 			return nil
 		},
 	}
-	sender := NewSender(azSender, &SenderOptions{
+	sender := NewSender(azSender, "testTopicName", &SenderOptions{
 		Marshaller: &DefaultJSONMarshaller{},
 	})
 	err := sender.SendMessage(context.Background(), "test")
@@ -144,7 +144,7 @@ func TestSender_WithSendTimeout(t *testing.T) {
 			return nil
 		},
 	}
-	sender := NewSender(azSender, &SenderOptions{
+	sender := NewSender(azSender, "testTopicName", &SenderOptions{
 		Marshaller:  &DefaultJSONMarshaller{},
 		SendTimeout: sendTimeout,
 	})
@@ -167,7 +167,7 @@ func TestSender_WithContextCanceled(t *testing.T) {
 			return nil
 		},
 	}
-	sender := NewSender(azSender, &SenderOptions{
+	sender := NewSender(azSender, "testTopicName", &SenderOptions{
 		Marshaller:  &DefaultJSONMarshaller{},
 		SendTimeout: sendTimeout,
 	})
@@ -193,7 +193,7 @@ func TestSender_DisabledSendTimeout(t *testing.T) {
 			return nil
 		},
 	}
-	sender := NewSender(azSender, &SenderOptions{
+	sender := NewSender(azSender, "testTopicName", &SenderOptions{
 		Marshaller:  &DefaultJSONMarshaller{},
 		SendTimeout: sendTimeout,
 	})
@@ -205,7 +205,7 @@ func TestSender_DisabledSendTimeout(t *testing.T) {
 
 func TestSender_SendMessage(t *testing.T) {
 	azSender := &fakeAzSender{}
-	sender := NewSender(azSender, nil)
+	sender := NewSender(azSender, "testTopicName", nil)
 	err := sender.SendMessage(context.Background(), "test", SetMessageId(to.Ptr("messageID")))
 	g := NewWithT(t)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -223,7 +223,7 @@ func TestSender_SendMessageBatch(t *testing.T) {
 	azSender := &fakeAzSender{
 		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
 	}
-	sender := NewSender(azSender, nil)
+	sender := NewSender(azSender, "testTopicName", nil)
 	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
 	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{msg})
@@ -234,7 +234,7 @@ func TestSender_SendMessageBatch(t *testing.T) {
 func TestSender_AzSender(t *testing.T) {
 	g := NewWithT(t)
 	azSender := &fakeAzSender{}
-	sender := NewSender(azSender, nil)
+	sender := NewSender(azSender, "testTopicName", nil)
 	g.Expect(sender.AzSender()).To(Equal(azSender))
 }
 
