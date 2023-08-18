@@ -30,51 +30,35 @@ func TestRegistry_Init(t *testing.T) {
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
 	g.Expect(fRegistry.collectors).To(HaveLen(1))
-	Metric.IncSendMessageSuccessCount("testTopicName")
+	Metric.IncSendMessageSuccessCount()
 }
 
 func TestMetrics(t *testing.T) {
-	type testcase struct {
-		name       string
-		entityName string
-	}
-	for _, tc := range []testcase{
-		{
-			name:       "no type property",
-			entityName: "testTopicName",
-		},
-		{
-			name:       "with type property",
-			entityName: "testTopicName",
-		},
-	} {
-		g := NewWithT(t)
-		r := newRegistry()
-		registerer := prometheus.NewRegistry()
-		informer := &Informer{registry: r}
+	g := NewWithT(t)
+	r := newRegistry()
+	registerer := prometheus.NewRegistry()
+	informer := &Informer{registry: r}
 
-		// before init
-		count, err := informer.GetSendMessageFailureCount()
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(count).To(Equal(float64(0)))
+	// before init
+	count, err := informer.GetSendMessageFailureCount()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(count).To(Equal(float64(0)))
 
-		// after init, count 0
-		g.Expect(func() { r.Init(registerer) }).ToNot(Panic())
-		count, err = informer.GetSendMessageFailureCount()
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(count).To(Equal(float64(0)))
+	// after init, count 0
+	g.Expect(func() { r.Init(registerer) }).ToNot(Panic())
+	count, err = informer.GetSendMessageFailureCount()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(count).To(Equal(float64(0)))
 
-		// count incremented
-		r.IncSendMessageFailureCount(tc.entityName)
-		count, err = informer.GetSendMessageFailureCount()
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(count).To(Equal(float64(1)))
+	// count incremented
+	r.IncSendMessageFailureCount()
+	count, err = informer.GetSendMessageFailureCount()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(count).To(Equal(float64(1)))
 
-		// count failure only
-		r.IncSendMessageSuccessCount(tc.entityName)
-		count, err = informer.GetSendMessageFailureCount()
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(count).To(Equal(float64(1)))
-	}
-
+	// count failure only
+	r.IncSendMessageSuccessCount()
+	count, err = informer.GetSendMessageFailureCount()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(count).To(Equal(float64(1)))
 }

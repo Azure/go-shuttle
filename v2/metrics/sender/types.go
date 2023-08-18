@@ -6,9 +6,8 @@ import (
 )
 
 const (
-	subsystem       = "goshuttle_handler"
-	successLabel    = "success"
-	entityNameLabel = "entityName"
+	subsystem    = "goshuttle_handler"
+	successLabel = "success"
 )
 
 var (
@@ -23,7 +22,7 @@ func newRegistry() *Registry {
 			Name:      "message_sent_total",
 			Help:      "total number of messages sent by the sender",
 			Subsystem: subsystem,
-		}, []string{successLabel, entityNameLabel}),
+		}, []string{successLabel}),
 	}
 }
 
@@ -40,25 +39,23 @@ type Registry struct {
 // Recorder allows to initialize the metric registry and increase/decrease the registered metrics at runtime.
 type Recorder interface {
 	Init(registerer prom.Registerer)
-	IncSendMessageSuccessCount(entityName string)
-	IncSendMessageFailureCount(entityName string)
+	IncSendMessageSuccessCount()
+	IncSendMessageFailureCount()
 }
 
 // IncSendMessageSuccessCount increases the MessageSentCount metric with success == true
-func (m *Registry) IncSendMessageSuccessCount(entityName string) {
+func (m *Registry) IncSendMessageSuccessCount() {
 	m.MessageSentCount.With(
 		prom.Labels{
-			entityNameLabel: entityName,
-			successLabel:    "true",
+			successLabel: "true",
 		}).Inc()
 }
 
 // IncSendMessageFailureCount increases the MessageSentCount metric with success == false
-func (m *Registry) IncSendMessageFailureCount(entityName string) {
+func (m *Registry) IncSendMessageFailureCount() {
 	m.MessageSentCount.With(
 		prom.Labels{
-			entityNameLabel: entityName,
-			successLabel:    "false",
+			successLabel: "false",
 		}).Inc()
 }
 
