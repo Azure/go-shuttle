@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/go-shuttle/v2/metrics/sender"
 )
 
 const (
@@ -77,8 +78,14 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 
 	select {
 	case <-ctx.Done():
+		sender.Metric.IncSendMessageFailureCount()
 		return fmt.Errorf("failed to send message: %w", ctx.Err())
 	case err := <-errChan:
+		if err == nil {
+			sender.Metric.IncSendMessageSuccessCount()
+		} else {
+			sender.Metric.IncSendMessageFailureCount()
+		}
 		return err
 	}
 
@@ -129,9 +136,6 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
 		defer cancel()
 	}
-	if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
-		return fmt.Errorf("failed to send message batch: %w", err)
-	}
 
 	errChan := make(chan error)
 
@@ -144,8 +148,14 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 
 	select {
 	case <-ctx.Done():
+		sender.Metric.IncSendMessageFailureCount()
 		return fmt.Errorf("failed to send message batch: %w", ctx.Err())
 	case err := <-errChan:
+		if err == nil {
+			sender.Metric.IncSendMessageSuccessCount()
+		} else {
+			sender.Metric.IncSendMessageFailureCount()
+		}
 		return err
 	}
 
