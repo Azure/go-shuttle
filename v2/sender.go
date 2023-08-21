@@ -72,8 +72,9 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 	go func() {
 		if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
 			errChan <- fmt.Errorf("failed to send message: %w", err)
+		} else {
+			errChan <- nil
 		}
-		errChan <- nil
 	}()
 
 	select {
@@ -142,8 +143,9 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 	go func() {
 		if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
 			errChan <- fmt.Errorf("failed to send message batch: %w", err)
+		} else {
+			errChan <- nil
 		}
-		errChan <- nil
 	}()
 
 	select {
