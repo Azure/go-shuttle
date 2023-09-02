@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+
 	"github.com/Azure/go-shuttle/v2/metrics/sender"
 )
 
 const (
 	msgTypeField       = "type"
-	defaultSendTimeout = 10 * time.Second
+	defaultSendTimeout = 30 * time.Second
 )
 
 // MessageBody is a type to represent that an input message body can be of any type
@@ -38,7 +39,7 @@ type SenderOptions struct {
 	// EnableTracingPropagation automatically applies WithTracePropagation option on all message sent through this sender
 	EnableTracingPropagation bool
 	// SendTimeout is the timeout value used on the context that sends messages
-	// Defaults to 10 seconds if not set or 0
+	// Defaults to 30 seconds if not set or 0
 	// Disabled when set to a negative value
 	SendTimeout time.Duration
 }
