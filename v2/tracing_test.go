@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	gootel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -52,6 +53,7 @@ func Test_NewTracingHandler(t *testing.T) {
 		name                     string
 		hasTraceContextOnContext bool
 		hasTraceContextOnMessage bool
+		extractFn                func(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span)
 	}{
 		{
 			name:                     "no traceCtx - local traceContext added",
@@ -68,6 +70,15 @@ func Test_NewTracingHandler(t *testing.T) {
 			hasTraceContextOnContext: true,
 			hasTraceContextOnMessage: true,
 		},
+		{
+			name:                     "has traceCtx on context - custom extractFn",
+			hasTraceContextOnContext: true,
+			hasTraceContextOnMessage: false,
+			extractFn: func(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
+				ctx, span := gootel.Tracer("test-tracer").Start(ctx, "test-span")
+				return ctx, span
+			},
+		},
 	}
 	for _, tc := range testCases {
 		tc := tc
@@ -80,7 +91,7 @@ func Test_NewTracingHandler(t *testing.T) {
 			h := shuttle.NewTracingHandler(
 				shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
 					spanCtx = trace.SpanContextFromContext(ctx)
-				}))
+				}), tc.extractFn)
 
 			ctx := context.TODO()
 			if tc.hasTraceContextOnContext {
