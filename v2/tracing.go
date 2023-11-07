@@ -11,13 +11,12 @@ import (
 // NewTracingHandler is a shuttle middleware that extracts the context from the message Application property if available,
 // or from the existing context if not, and starts a span.
 func NewTracingHandler(next Handler,
-	extractFn func(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span),
-) HandlerFunc {
-	if extractFn == nil {
-		extractFn = otel.Extract
+	extractFuncs ...func(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span)) HandlerFunc {
+	if len(extractFuncs) == 0 {
+		extractFuncs = append(extractFuncs, otel.Extract)
 	}
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
-		ctx, span := extractFn(ctx, message)
+		ctx, span := extractFuncs[len(extractFuncs)-1](ctx, message)
 		defer span.End()
 		next.Handle(ctx, settler, message)
 	}

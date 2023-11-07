@@ -91,7 +91,15 @@ func Test_NewTracingHandler(t *testing.T) {
 			h := shuttle.NewTracingHandler(
 				shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
 					spanCtx = trace.SpanContextFromContext(ctx)
-				}), tc.extractFn)
+				}))
+			if tc.extractFn != nil {
+				h = shuttle.NewTracingHandler(
+					shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
+						ctx, span := tc.extractFn(ctx, message)
+						defer span.End()
+						spanCtx = trace.SpanContextFromContext(ctx)
+					}), tc.extractFn)
+			}
 
 			ctx := context.TODO()
 			if tc.hasTraceContextOnContext {
