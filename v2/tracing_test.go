@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	gootel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -53,7 +52,7 @@ func Test_NewTracingHandler(t *testing.T) {
 		name                     string
 		hasTraceContextOnContext bool
 		hasTraceContextOnMessage bool
-		extractFn                func(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span)
+		spanEnrichFunc           func(context.Context, trace.Span)
 	}{
 		{
 			name:                     "no traceCtx - local traceContext added",
@@ -71,12 +70,11 @@ func Test_NewTracingHandler(t *testing.T) {
 			hasTraceContextOnMessage: true,
 		},
 		{
-			name:                     "has traceCtx on context - custom extractFn",
+			name:                     "has traceCtx on message - extract from message- custom span name",
 			hasTraceContextOnContext: true,
-			hasTraceContextOnMessage: false,
-			extractFn: func(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
-				ctx, span := gootel.Tracer("test-tracer").Start(ctx, "test-span")
-				return ctx, span
+			hasTraceContextOnMessage: true,
+			spanEnrichFunc: func(c context.Context, t trace.Span) {
+				t.SetName("custom-span-name")
 			},
 		},
 	}
@@ -92,13 +90,12 @@ func Test_NewTracingHandler(t *testing.T) {
 				shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
 					spanCtx = trace.SpanContextFromContext(ctx)
 				}))
-			if tc.extractFn != nil {
+
+			if tc.spanEnrichFunc != nil {
 				h = shuttle.NewTracingHandler(
 					shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
-						ctx, span := tc.extractFn(ctx, message)
-						defer span.End()
 						spanCtx = trace.SpanContextFromContext(ctx)
-					}), tc.extractFn)
+					}), shuttle.WithSpanEnrichment(tc.spanEnrichFunc))
 			}
 
 			ctx := context.TODO()

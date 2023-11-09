@@ -8,17 +8,30 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type TracingHandlerOpts struct {
+	enrichSpan func(context.Context, trace.Span)
+}
+
 // NewTracingHandler is a shuttle middleware that extracts the context from the message Application property if available,
 // or from the existing context if not, and starts a span.
-func NewTracingHandler(next Handler,
-	extractFuncs ...func(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span)) HandlerFunc {
-	if len(extractFuncs) == 0 {
-		extractFuncs = append(extractFuncs, otel.Extract)
+func NewTracingHandler(next Handler, options ...func(t *TracingHandlerOpts)) HandlerFunc {
+	t := &TracingHandlerOpts{}
+	for _, opt := range options {
+		opt(t)
 	}
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
-		ctx, span := extractFuncs[len(extractFuncs)-1](ctx, message)
+		ctx, span := otel.Extract(ctx, message)
 		defer span.End()
+		if t.enrichSpan != nil {
+			t.enrichSpan(ctx, span)
+		}
 		next.Handle(ctx, settler, message)
+	}
+}
+
+func WithSpanEnrichment(enrichSpan func(context.Context, trace.Span)) func(t *TracingHandlerOpts) {
+	return func(t *TracingHandlerOpts) {
+		t.enrichSpan = enrichSpan
 	}
 }
 
