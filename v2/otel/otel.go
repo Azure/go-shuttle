@@ -4,20 +4,21 @@ import (
 	"context"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
-const (
-	serviceTracerName = "go-shuttle"
-)
+func Extract(ctx context.Context, message *azservicebus.ReceivedMessage) context.Context {
+	if message != nil {
+		// extract the remote trace context from the message if exists,
+		ctx, _ = getRemoteParentSpan(ctx, message)
+	}
+	return ctx
+}
 
-func Extract(ctx context.Context, message *azservicebus.ReceivedMessage) (context.Context, trace.Span) {
-	var span trace.Span
+func MessageAttributes(message *azservicebus.ReceivedMessage) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
-
 	if message != nil {
 		attrs = append(attrs, attribute.String("message.id", message.MessageID))
 
@@ -32,14 +33,8 @@ func Extract(ctx context.Context, message *azservicebus.ReceivedMessage) (contex
 		if message.TimeToLive != nil {
 			attrs = append(attrs, attribute.String("message.ttl", message.TimeToLive.String()))
 		}
-
-		// extract the remote trace context from the message if exists,
-		ctx, _ = getRemoteParentSpan(ctx, message)
 	}
-
-	ctx, span = otel.Tracer(serviceTracerName).Start(ctx, "receiver.Handle")
-	span.SetAttributes(attrs...)
-	return ctx, span
+	return attrs
 }
 
 // This method will extract the remote trace context from the traceCarrier if exists,
