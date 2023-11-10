@@ -18,7 +18,10 @@ const (
 type TracingHandlerOpts struct {
 	spanStartOptions []trace.SpanStartOption
 	traceProvider    trace.TracerProvider
-	spanNameFormat   func(defaultSpanName string, message *azservicebus.ReceivedMessage) string
+
+	// spanNameFormat allows formatting the name of the span started in NewTracingHandler based on the received message.
+	// If not set, span name will be defaultReceiverHandleSpanName.
+	spanNameFormat func(defaultSpanName string, message *azservicebus.ReceivedMessage) string
 }
 
 func (t *TracingHandlerOpts) tracer() trace.Tracer {
@@ -32,7 +35,7 @@ func (t *TracingHandlerOpts) tracer() trace.Tracer {
 // or from the existing context if not, and starts a span.
 func NewTracingHandler(next Handler, options ...func(t *TracingHandlerOpts)) HandlerFunc {
 	t := &TracingHandlerOpts{
-		spanNameFormat: func(defaultSpanName string, message *azservicebus.ReceivedMessage) string {
+		spanNameFormat: func(defaultSpanName string, _ *azservicebus.ReceivedMessage) string {
 			return defaultSpanName
 		},
 	}
@@ -51,18 +54,21 @@ func NewTracingHandler(next Handler, options ...func(t *TracingHandlerOpts)) Han
 	}
 }
 
+// WithTraceProvider allows setting a custom trace provider for the tracing handler in NewTracingHandler.
 func WithTraceProvider(tp trace.TracerProvider) func(t *TracingHandlerOpts) {
 	return func(t *TracingHandlerOpts) {
 		t.traceProvider = tp
 	}
 }
 
-func WithReceiverSpanNameFromatter(format func(defaultSpanName string, message *azservicebus.ReceivedMessage) string) func(t *TracingHandlerOpts) {
+// WithReceiverSpanNameFormatter allows formatting name of the span started by the tracing handler in NewTracingHandler.
+func WithReceiverSpanNameFormatter(format func(defaultSpanName string, message *azservicebus.ReceivedMessage) string) func(t *TracingHandlerOpts) {
 	return func(t *TracingHandlerOpts) {
 		t.spanNameFormat = format
 	}
 }
 
+// WithSpanStartOptions allows setting custom span start options for the tracing handler in NewTracingHandler.
 func WithSpanStartOptions(options []trace.SpanStartOption) func(t *TracingHandlerOpts) {
 	return func(t *TracingHandlerOpts) {
 		t.spanStartOptions = options

@@ -102,7 +102,7 @@ func Test_NewTracingHandler(t *testing.T) {
 			options := []func(*shuttle.TracingHandlerOpts){shuttle.WithTraceProvider(tp)}
 			if tc.customSpanName != "" {
 				options = append(options,
-					shuttle.WithReceiverSpanNameFromatter(func(_ string, _ *azservicebus.ReceivedMessage) string {
+					shuttle.WithReceiverSpanNameFormatter(func(_ string, _ *azservicebus.ReceivedMessage) string {
 						return tc.customSpanName
 					}),
 				)
