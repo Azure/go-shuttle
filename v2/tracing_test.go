@@ -98,7 +98,10 @@ func Test_NewTracingHandler(t *testing.T) {
 			var spanCtx trace.SpanContext
 			recorder := tracetest.NewSpanRecorder()
 			tp := tracesdk.NewTracerProvider(tracesdk.WithSampler(tracesdk.AlwaysSample()), tracesdk.WithSpanProcessor(recorder))
-			defer recorder.Shutdown(ctx)
+			defer func(recorder *tracetest.SpanRecorder, ctx context.Context) {
+				err := recorder.Shutdown(ctx)
+				g.Expect(err).ToNot(HaveOccurred())
+			}(recorder, ctx)
 			options := []func(*shuttle.TracingHandlerOpts){shuttle.WithTraceProvider(tp)}
 			if tc.customSpanName != "" {
 				options = append(options,
