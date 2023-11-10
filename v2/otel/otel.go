@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Extract extracts the remote trace context from the message if exists,
+// Extract extracts the remote trace context from the message if exists, and set it onto ctx
 func Extract(ctx context.Context, message *azservicebus.ReceivedMessage) context.Context {
 	if message != nil {
 		ctx, _ = getRemoteParentSpan(ctx, message)
