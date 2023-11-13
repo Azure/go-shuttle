@@ -8,12 +8,14 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/Azure/go-shuttle/v2"
-	"github.com/Azure/go-shuttle/v2/otel"
+	shuttleotel "github.com/Azure/go-shuttle/v2/otel"
 )
 
 func TestHandlers_SetMessageTrace(t *testing.T) {
@@ -35,7 +37,7 @@ func TestHandlers_SetMessageTrace(t *testing.T) {
 	}
 
 	propogator := propagation.TraceContext{}
-	ctx := propogator.Extract(context.TODO(), otel.MessageCarrierAdapter(blankMsg))
+	ctx := propogator.Extract(context.TODO(), shuttleotel.MessageCarrierAdapter(blankMsg))
 	extractedSpan := trace.SpanFromContext(ctx)
 
 	if !extractedSpan.SpanContext().IsValid() || !extractedSpan.SpanContext().IsRemote() {
@@ -52,6 +54,8 @@ func Test_NewTracingHandler(t *testing.T) {
 		name                     string
 		hasTraceContextOnContext bool
 		hasTraceContextOnMessage bool
+		spanStartOptions         []trace.SpanStartOption
+		customSpanName           string
 	}{
 		{
 			name:                     "no traceCtx - local traceContext added",
@@ -68,6 +72,20 @@ func Test_NewTracingHandler(t *testing.T) {
 			hasTraceContextOnContext: true,
 			hasTraceContextOnMessage: true,
 		},
+		{
+			name:                     "has traceCtx on message - extract from message- custom attribute",
+			hasTraceContextOnContext: true,
+			hasTraceContextOnMessage: true,
+			spanStartOptions: []trace.SpanStartOption{
+				trace.WithAttributes(attribute.String("custom-attribute", "value")),
+			},
+		},
+		{
+			name:                     "has traceCtx on message - extract from message- custom spanName",
+			hasTraceContextOnContext: true,
+			hasTraceContextOnMessage: true,
+			customSpanName:           "customSpanName",
+		},
 	}
 	for _, tc := range testCases {
 		tc := tc
@@ -76,13 +94,30 @@ func Test_NewTracingHandler(t *testing.T) {
 			settler := &fakeSettler{}
 			contextTraceID := trace.TraceID{1, 2, 3}
 			messageTraceID := trace.TraceID{2, 3, 4}
+			ctx := context.TODO()
 			var spanCtx trace.SpanContext
+			recorder := tracetest.NewSpanRecorder()
+			tp := tracesdk.NewTracerProvider(tracesdk.WithSampler(tracesdk.AlwaysSample()), tracesdk.WithSpanProcessor(recorder))
+			defer func(recorder *tracetest.SpanRecorder, ctx context.Context) {
+				err := recorder.Shutdown(ctx)
+				g.Expect(err).ToNot(HaveOccurred())
+			}(recorder, ctx)
+			options := []func(*shuttle.TracingHandlerOpts){shuttle.WithTraceProvider(tp)}
+			if tc.customSpanName != "" {
+				options = append(options,
+					shuttle.WithReceiverSpanNameFormatter(func(_ string, _ *azservicebus.ReceivedMessage) string {
+						return tc.customSpanName
+					}),
+				)
+			}
+			if tc.spanStartOptions != nil {
+				options = append(options, shuttle.WithSpanStartOptions(tc.spanStartOptions))
+			}
 			h := shuttle.NewTracingHandler(
 				shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
 					spanCtx = trace.SpanContextFromContext(ctx)
-				}))
+				}), options...)
 
-			ctx := context.TODO()
 			if tc.hasTraceContextOnContext {
 				ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
 					TraceID: contextTraceID,
@@ -97,16 +132,26 @@ func Test_NewTracingHandler(t *testing.T) {
 					SpanID:  trace.SpanID{1, 2, 3},
 				}))
 				propogator := propagation.TraceContext{}
-				propogator.Inject(msgContext, otel.ReceivedMessageCarrierAdapter(msg))
+				propogator.Inject(msgContext, shuttleotel.ReceivedMessageCarrierAdapter(msg))
 			}
 
 			h.Handle(ctx, settler, msg)
+
 			if tc.hasTraceContextOnMessage {
 				g.Expect(spanCtx.TraceID()).To(Equal(messageTraceID))
 			} else if tc.hasTraceContextOnContext {
 				g.Expect(spanCtx.TraceID()).To(Equal(contextTraceID))
 			}
-			g.Expect(spanCtx.IsRemote()).To(Equal(tc.hasTraceContextOnMessage))
+
+			if len(tc.spanStartOptions) > 0 {
+				spans := recorder.Ended()
+				g.Expect(spans[0].Attributes()).To(ContainElement(attribute.String("custom-attribute", "value")))
+			}
+
+			if tc.customSpanName != "" {
+				spans := recorder.Ended()
+				g.Expect(spans[0].Name()).To(Equal(tc.customSpanName))
+			}
 		})
 	}
 }

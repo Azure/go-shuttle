@@ -5,45 +5,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	. "github.com/onsi/gomega"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func Test_TracingMiddleware(t *testing.T) {
-	correlationId := "correlation-id"
-	timeToLive := time.Duration(10)
-	scheduledEnqueueTime := time.Now().Add(time.Duration(10))
-
-	// fake a remote span
-	initUTTracerProvider()
-	remoteCtx, remoteSpan := otel.Tracer("test-tracer").Start(context.Background(), "remote-span")
-	remoteSpan.End()
-
 	testCases := []struct {
 		description     string
 		message         *azservicebus.ReceivedMessage
 		carryRemoteSpan bool
 	}{
 		{
-			description:     "nil message, should start a new span without parent",
+			description:     "nil message, context should not contain remote tracecontext",
 			message:         nil,
 			carryRemoteSpan: false,
 		},
 		{
-			description: "should set span attributes from message",
-			message: &azservicebus.ReceivedMessage{
-				MessageID:            "message-id",
-				CorrelationID:        &correlationId,
-				ScheduledEnqueueTime: &scheduledEnqueueTime,
-				TimeToLive:           &timeToLive,
-			},
-			carryRemoteSpan: false,
-		},
-		{
-			description: "should create child span from remote parent",
+			description: "context should contain remote tracecontext",
 			message: &azservicebus.ReceivedMessage{
 				MessageID: "message-id",
 			},
@@ -55,15 +39,51 @@ func Test_TracingMiddleware(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 			if tc.carryRemoteSpan {
-				propogator := propagation.TraceContext{}
-				propogator.Inject(remoteCtx, ReceivedMessageCarrierAdapter(tc.message))
-				_, remoteSpan := getRemoteParentSpan(context.TODO(), tc.message)
-				g.Expect(remoteSpan.SpanContext().IsValid()).To(BeTrue())
-				g.Expect(remoteSpan.SpanContext().IsRemote()).To(BeTrue())
+				// fake a remote span
+				initUTTracerProvider()
+				testRemoteCtx, testRemoteSpan := otel.Tracer("test-tracer").Start(context.Background(), "remote-span")
+				testRemoteSpan.End()
+
+				p := propagation.TraceContext{}
+				p.Inject(testRemoteCtx, ReceivedMessageCarrierAdapter(tc.message))
 			}
 
-			_, span := Extract(context.TODO(), tc.message)
-			g.Expect(span.SpanContext().IsValid()).To(BeTrue())
+			ctx := Extract(context.TODO(), tc.message)
+
+			// this works because TraceContext.Extract() sets the extracted tracecontext as the remote SpanContext of returned Context
+			span := trace.SpanFromContext(ctx)
+
+			g.Expect(span.SpanContext().IsValid()).To(Equal(tc.carryRemoteSpan))
+		})
+	}
+}
+
+func Test_MessageAttributes(t *testing.T) {
+	testCases := []struct {
+		name    string
+		message *azservicebus.ReceivedMessage
+		attr    []attribute.KeyValue
+	}{
+		{
+			name: "nil message, context should not contain remote tracecontext",
+			message: &azservicebus.ReceivedMessage{
+				MessageID:     "message-id",
+				CorrelationID: to.Ptr("correlation-id"),
+				TimeToLive:    to.Ptr(time.Duration(10)),
+			},
+			attr: []attribute.KeyValue{
+				attribute.String("message.id", "message-id"),
+				attribute.String("message.correlationId", "correlation-id"),
+				attribute.String("message.ttl", "10ns"),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewGomegaWithT(t)
+
+			g.Expect(MessageAttributes(tc.message)).To(Equal(tc.attr))
 		})
 	}
 }
