@@ -18,7 +18,7 @@ const (
 
 var (
 	metricsRegistry = newRegistry()
-	// Processor exposes a Recorder interface to manipulate the Processor metrics.
+	// Metric exposes a Recorder interface to manipulate the Processor metrics.
 	Metric Recorder = metricsRegistry
 )
 
@@ -143,7 +143,7 @@ func NewInformer() *Informer {
 // GetMessageLockRenewedFailureCount retrieves the current value of the MessageLockRenewedFailureCount metric
 func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 	var total float64
-	collect(i.registry.MessageLockRenewedCount, func(m dto.Metric) {
+	collect(i.registry.MessageLockRenewedCount, func(m *dto.Metric) {
 		if !hasLabel(m, successLabel, "false") {
 			return
 		}
@@ -152,7 +152,7 @@ func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 	return total, nil
 }
 
-func hasLabel(m dto.Metric, key string, value string) bool {
+func hasLabel(m *dto.Metric, key string, value string) bool {
 	for _, pair := range m.Label {
 		if pair == nil {
 			continue
@@ -165,15 +165,15 @@ func hasLabel(m dto.Metric, key string, value string) bool {
 }
 
 // collect calls the function for each metric associated with the Collector
-func collect(col prom.Collector, do func(dto.Metric)) {
+func collect(col prom.Collector, do func(*dto.Metric)) {
 	c := make(chan prom.Metric)
 	go func(c chan prom.Metric) {
 		col.Collect(c)
 		close(c)
 	}(c)
 	for x := range c { // eg range across distinct label vector values
-		m := dto.Metric{}
-		_ = x.Write(&m)
+		m := &dto.Metric{}
+		_ = x.Write(m)
 		do(m)
 	}
 }
