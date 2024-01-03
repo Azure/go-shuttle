@@ -94,10 +94,10 @@ func (plr *peekLockRenewer) stop(ctx context.Context) {
 		plr.stopped <- struct{}{}
 	}
 	if plr.cancelMessageCtxOnStop {
-		log(ctx, "canceling message context")
+		getLogger(ctx).Info("canceling message context")
 		plr.cancelMessageCtx()
 	}
-	log(ctx, "stopped periodic renewal")
+	getLogger(ctx).Info("stopped periodic renewal")
 }
 
 func (plr *peekLockRenewer) isPermanent(err error) bool {
@@ -119,11 +119,11 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			if !plr.alive.Load() {
 				return
 			}
-			log(ctx, "renewing lock")
+			getLogger(ctx).Debug("renewing lock")
 			count++
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
 			if err != nil {
-				log(ctx, fmt.Sprintf("failed to renew lock: %s", err))
+				getLogger(ctx).Error(fmt.Sprintf("failed to renew lock: %s", err))
 				processor.Metric.IncMessageLockRenewedFailure(message)
 				// The context is canceled when the message handler returns from the processor.
 				// This can happen if we already entered the interval case when the message processing completes.
@@ -134,7 +134,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 				// if the error is identified as permanent, we stop the renewal.
 				// if the error is anything else, we keep trying the renewal.
 				if plr.isPermanent(err) {
-					log(ctx, fmt.Sprintf("stopping periodic renewal for message: %s", message.MessageID))
+					getLogger(ctx).Error(fmt.Sprintf("permanent lock renewal error: stopping periodic renewal for message: %s", message.MessageID))
 					plr.stop(ctx)
 				}
 				continue
@@ -142,7 +142,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			span.AddEvent("message lock renewed", trace.WithAttributes(attribute.Int("count", count)))
 			processor.Metric.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
-			log(ctx, "context done: stopping periodic renewal")
+			getLogger(ctx).Info("context done: stopping periodic renewal")
 			span.AddEvent("context done: stopping message lock renewal")
 			err := ctx.Err()
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -152,7 +152,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			plr.stop(ctx)
 		case <-plr.stopped:
 			if plr.alive.Load() {
-				log(ctx, "stop signal received: exiting periodic renewal")
+				getLogger(ctx).Info("renewal stopped: stopping periodic renewal")
 				plr.alive.Store(false)
 			}
 		}

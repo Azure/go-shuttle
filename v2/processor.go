@@ -75,12 +75,12 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 
 // Start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) Start(ctx context.Context) error {
-	log(ctx, "starting processor")
+	getLogger(ctx).Info("starting processor")
 	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
 	if err != nil {
 		return err
 	}
-	log(ctx, fmt.Sprintf("received %d messages - initial", len(messages)))
+	getLogger(ctx).Info(fmt.Sprintf("received %d messages - initial", len(messages)))
 	processor.Metric.IncMessageReceived(float64(len(messages)))
 	for _, msg := range messages {
 		p.process(ctx, msg)
@@ -96,17 +96,17 @@ func (p *Processor) Start(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			log(ctx, fmt.Sprintf("received %d messages from processor loop", len(messages)))
+			getLogger(ctx).Info(fmt.Sprintf("received %d messages from processor loop", len(messages)))
 			processor.Metric.IncMessageReceived(float64(len(messages)))
 			for _, msg := range messages {
 				p.process(ctx, msg)
 			}
 		case <-ctx.Done():
-			log(ctx, "context done, stop receiving")
+			getLogger(ctx).Info("context done, stop receiving")
 			break
 		}
 	}
-	log(ctx, "exiting processor")
+	getLogger(ctx).Info("exiting processor")
 	return ctx.Err()
 }
 
@@ -139,7 +139,7 @@ func NewPanicHandler(panicOptions *PanicHandlerOptions, handler Handler) Handler
 	if panicOptions == nil {
 		panicOptions = &PanicHandlerOptions{
 			OnPanicRecovered: func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage, recovered any) {
-				log(ctx, recovered)
+				getLogger(ctx).Error(ctx, recovered)
 			},
 		}
 	}
