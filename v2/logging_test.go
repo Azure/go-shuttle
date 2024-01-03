@@ -15,12 +15,7 @@ type testLogger struct {
 var testlogkey = struct{}{}
 
 func (t *testLogger) Info(args ...interface{}) {
-	if args == nil {
-		return
-	}
-	for _, a := range args {
-		t.entries = append(t.entries, a)
-	}
+	t.entries = append(t.entries, args...)
 }
 
 func (t *testLogger) Debug(args ...interface{}) {
@@ -68,4 +63,7 @@ func TestSetLoggerFunc(t *testing.T) {
 	//coverage on testlogger
 	logger.Warn("test")
 	logger.Error("test")
+	logger.Fatal("test")
+	logger.Panic("test")
+	logger.Debug("test")
 }
