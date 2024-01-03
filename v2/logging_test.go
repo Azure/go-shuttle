@@ -5,22 +5,32 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/sirupsen/logrus"
 )
 
 type testLogger struct {
-	entries []string
+	entries []interface{}
 }
 
 var testlogkey = struct{}{}
 
-func (t *testLogger) Info(s string) {
-	t.entries = append(t.entries, s)
+func (t *testLogger) Info(args ...interface{}) {
+	t.entries = append(t.entries, args...)
 }
 
-func (t *testLogger) Warn(s string) {
+func (t *testLogger) Debug(args ...interface{}) {
 }
 
-func (t *testLogger) Error(s string) {
+func (t *testLogger) Fatal(args ...interface{}) {
+}
+
+func (t *testLogger) Panic(args ...interface{}) {
+}
+
+func (t *testLogger) Warn(args ...interface{}) {
+}
+
+func (t *testLogger) Error(args ...interface{}) {
 }
 
 func getTestLogger(ctx context.Context) Logger {
@@ -35,22 +45,25 @@ func TestSetLoggerFunc(t *testing.T) {
 	SetLoggerFunc(func(ctx context.Context) Logger {
 		return getTestLogger(ctx)
 	})
-	defer SetLoggerFunc(func(_ context.Context) Logger { return &printLogger{} })
+	defer SetLoggerFunc(func(_ context.Context) Logger { return logrus.StandardLogger() })
 	logger := &testLogger{}
 	ctx := context.WithValue(context.Background(), testlogkey, logger)
-	log(ctx, "test")
+	getLogger(ctx).Info("test")
 	g := NewWithT(t)
 	g.Expect(getLogger(ctx)).To(Equal(logger))
 	g.Expect(logger.entries).To(HaveLen(1))
 	g.Expect(logger.entries[0]).To(Equal("test"))
 
-	g.Expect(func() { log(ctx, nil) }).ToNot(Panic())
+	g.Expect(func() { getLogger(ctx).Info(nil) }).ToNot(Panic())
 
 	// getLogger returns nil
 	nilCtx := context.WithValue(context.Background(), testlogkey, nil)
-	g.Expect(func() { log(nilCtx, "test") }).ToNot(Panic())
+	g.Expect(func() { getLogger(nilCtx).Info("test") }).ToNot(Panic())
 
 	//coverage on testlogger
 	logger.Warn("test")
 	logger.Error("test")
+	logger.Fatal("test")
+	logger.Panic("test")
+	logger.Debug("test")
 }

@@ -33,12 +33,12 @@ type ManagedSettler struct {
 
 func (m *ManagedSettler) Handle(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 	if err := m.next.Handle(ctx, message); err != nil {
-		log(ctx, "error returned from the handler. Calling ManagedSettler error handler")
+		getLogger(ctx).Error(fmt.Sprintf("error returned from the handler. Calling ManagedSettler error handler. Original error: %s", err))
 		m.options.OnError(ctx, m.options, settler, message, err)
 		return
 	}
 	if err := settler.CompleteMessage(ctx, message, nil); err != nil {
-		log(ctx, err)
+		getLogger(ctx).Error(fmt.Sprintf("error completing message: %s", err))
 		m.options.OnAbandoned(ctx, message, err)
 		return
 		// if we fail to complete the message, we log the error and let the message lock expire.
@@ -165,7 +165,7 @@ func handleError(ctx context.Context,
 		handleErr = fmt.Errorf("nil error: %w", handleErr)
 	}
 	if !options.RetryDecision.CanRetry(handleErr, message) {
-		log(ctx, fmt.Sprintf("moving message to dead letter queue because processing failed to an error: %s", handleErr))
+		getLogger(ctx).Error(fmt.Sprintf("moving message to dead letter queue because processing failed to an error: %s", handleErr))
 		deadLetterSettlement.settle(ctx, settler, message, &azservicebus.DeadLetterOptions{
 			Reason:             to.Ptr("ManagedSettlingHandlerDeadLettering"),
 			ErrorDescription:   to.Ptr(handleErr.Error()),
@@ -178,7 +178,7 @@ func handleError(ctx context.Context,
 	// the delay is implemented as an in-memory sleep before calling abandon.
 	// this will continue renewing the lock on the message while we wait for this delay to pass.
 	delay := options.RetryDelayStrategy.GetDelay(message.DeliveryCount)
-	log(ctx, fmt.Sprintf("delay strategy return delay of %s", delay))
+	getLogger(ctx).Info(fmt.Sprintf("delay strategy return delay of %s", delay))
 	time.Sleep(delay)
 	abandonSettlement.settle(ctx, settler, message, nil)
 	options.OnAbandoned(ctx, message, handleErr)
