@@ -231,6 +231,58 @@ func TestSender_SendMessageBatch(t *testing.T) {
 	// No way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
 }
 
+func TestSender_ScheduledMessages(t *testing.T) {
+	g := NewWithT(t)
+
+	azSender := &fakeAzSender{ScheduledMessagesSequenceNumbers: []int64{123}}
+	sender := NewSender(azSender, nil)
+	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+	seqNums, err := sender.ScheduleMessages(context.Background(), []*azservicebus.Message{msg}, time.Now())
+	g.Expect(azSender.ScheduledMessagesCalled).To(BeTrue())
+	g.Expect(azSender.ScheduledMessagesReceivedValue).ToNot(BeNil())
+	g.Expect(len(azSender.ScheduledMessagesReceivedValue)).To(Equal(1))
+	g.Expect(string(azSender.ScheduledMessagesReceivedValue[0].Body)).To(Equal("\"test\""))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(seqNums).ToNot(BeNil())
+	g.Expect(len(seqNums)).To(Equal(1))
+	g.Expect(seqNums[0]).To(And(Equal(int64(123))))
+
+	azSender = &fakeAzSender{ScheduledMessagesErr: fmt.Errorf("msg scheduling failure")}
+	sender = NewSender(azSender, nil)
+	msg, err = sender.ToServiceBusMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+	seqNums, err = sender.ScheduleMessages(context.Background(), []*azservicebus.Message{msg}, time.Now())
+	g.Expect(azSender.ScheduledMessagesCalled).To(BeTrue())
+	g.Expect(azSender.ScheduledMessagesReceivedValue).ToNot(BeNil())
+	g.Expect(len(azSender.ScheduledMessagesReceivedValue)).To(Equal(1))
+	g.Expect(string(azSender.ScheduledMessagesReceivedValue[0].Body)).To(Equal("\"test\""))
+	g.Expect(err).To(And(HaveOccurred(), MatchError(azSender.ScheduledMessagesErr)))
+	g.Expect(seqNums).To(BeNil())
+}
+
+func TestSender_CancelScheduledMessages(t *testing.T) {
+	g := NewWithT(t)
+
+	azSender := &fakeAzSender{}
+	sender := NewSender(azSender, nil)
+	err := sender.CancelScheduledMessages(context.Background(), []int64{123})
+	g.Expect(azSender.CancelScheduledMessagesCalled).To(BeTrue())
+	g.Expect(azSender.CancelScheduledMessagesReceivedValue).ToNot(BeNil())
+	g.Expect(len(azSender.CancelScheduledMessagesReceivedValue)).To(Equal(1))
+	g.Expect(azSender.CancelScheduledMessagesReceivedValue[0]).To(Equal(int64(123)))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	azSender = &fakeAzSender{CancelScheduledMessagesErr: fmt.Errorf("cancel scheduled msg failure")}
+	sender = NewSender(azSender, nil)
+	err = sender.CancelScheduledMessages(context.Background(), []int64{123})
+	g.Expect(azSender.CancelScheduledMessagesCalled).To(BeTrue())
+	g.Expect(azSender.CancelScheduledMessagesReceivedValue).ToNot(BeNil())
+	g.Expect(len(azSender.CancelScheduledMessagesReceivedValue)).To(Equal(1))
+	g.Expect(azSender.CancelScheduledMessagesReceivedValue[0]).To(Equal(int64(123)))
+	g.Expect(err).To(And(HaveOccurred(), MatchError(azSender.CancelScheduledMessagesErr)))
+}
+
 func TestSender_AzSender(t *testing.T) {
 	g := NewWithT(t)
 	azSender := &fakeAzSender{}
@@ -239,17 +291,24 @@ func TestSender_AzSender(t *testing.T) {
 }
 
 type fakeAzSender struct {
-	DoSendMessage                 func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
-	DoSendMessageBatch            func(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error
-	SendMessageReceivedValue      *azservicebus.Message
-	SendMessageReceivedCtx        context.Context
-	SendMessageCalled             bool
-	SendMessageErr                error
-	SendMessageBatchCalled        bool
-	SendMessageBatchErr           error
-	NewMessageBatchReturnValue    *azservicebus.MessageBatch
-	NewMessageBatchErr            error
-	SendMessageBatchReceivedValue *azservicebus.MessageBatch
+	DoSendMessage                        func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
+	DoSendMessageBatch                   func(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error
+	SendMessageReceivedValue             *azservicebus.Message
+	SendMessageReceivedCtx               context.Context
+	SendMessageCalled                    bool
+	SendMessageErr                       error
+	SendMessageBatchCalled               bool
+	SendMessageBatchErr                  error
+	NewMessageBatchReturnValue           *azservicebus.MessageBatch
+	NewMessageBatchErr                   error
+	SendMessageBatchReceivedValue        *azservicebus.MessageBatch
+	ScheduledMessagesReceivedValue       []*azservicebus.Message
+	ScheduledMessagesCalled              bool
+	ScheduledMessagesSequenceNumbers     []int64
+	ScheduledMessagesErr                 error
+	CancelScheduledMessagesReceivedValue []int64
+	CancelScheduledMessagesCalled        bool
+	CancelScheduledMessagesErr           error
 }
 
 func (f *fakeAzSender) SendMessage(
@@ -285,4 +344,25 @@ func (f *fakeAzSender) NewMessageBatch(
 	ctx context.Context,
 	options *azservicebus.MessageBatchOptions) (*azservicebus.MessageBatch, error) {
 	return f.NewMessageBatchReturnValue, f.NewMessageBatchErr
+}
+
+func (f *fakeAzSender) ScheduleMessages(
+	ctx context.Context,
+	messages []*azservicebus.Message,
+	scheduledEnqueueTime time.Time,
+	options *azservicebus.ScheduleMessagesOptions,
+) ([]int64, error) {
+	f.ScheduledMessagesCalled = true
+	f.ScheduledMessagesReceivedValue = messages
+	return f.ScheduledMessagesSequenceNumbers, f.ScheduledMessagesErr
+}
+
+func (f *fakeAzSender) CancelScheduledMessages(
+	ctx context.Context,
+	sequenceNumbers []int64,
+	options *azservicebus.CancelScheduledMessagesOptions,
+) error {
+	f.CancelScheduledMessagesCalled = true
+	f.CancelScheduledMessagesReceivedValue = sequenceNumbers
+	return f.CancelScheduledMessagesErr
 }

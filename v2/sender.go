@@ -24,6 +24,8 @@ type AzServiceBusSender interface {
 	SendMessage(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
 	SendMessageBatch(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error
 	NewMessageBatch(ctx context.Context, options *azservicebus.MessageBatchOptions) (*azservicebus.MessageBatch, error)
+	ScheduleMessages(ctx context.Context, messages []*azservicebus.Message, scheduledEnqueueTime time.Time, options *azservicebus.ScheduleMessagesOptions) ([]int64, error)
+	CancelScheduledMessages(ctx context.Context, sequenceNumbers []int64, options *azservicebus.CancelScheduledMessagesOptions) error
 }
 
 // Sender contains an SBSender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
@@ -153,6 +155,80 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 	case <-ctx.Done():
 		sender.Metric.IncSendMessageFailureCount()
 		return fmt.Errorf("failed to send message batch: %w", ctx.Err())
+	case err := <-errChan:
+		if err == nil {
+			sender.Metric.IncSendMessageSuccessCount()
+		} else {
+			sender.Metric.IncSendMessageFailureCount()
+		}
+		return err
+	}
+
+}
+
+func (d *Sender) ScheduleMessages(
+	ctx context.Context,
+	msgs []*azservicebus.Message,
+	scheduledEnqueueTime time.Time,
+) ([]int64, error) {
+	if d.options.SendTimeout > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
+		defer cancel()
+	}
+
+	type result struct {
+		sequenceNumbers []int64
+		err             error
+	}
+	resultChan := make(chan result)
+
+	go func() {
+		sequenceNumbers, err := d.sbSender.ScheduleMessages(ctx, msgs, scheduledEnqueueTime, nil) // scheduleMessagesOptions currently does nothing
+		if err != nil {
+			resultChan <- result{err: fmt.Errorf("failed to schedule messages: %w", err)}
+		} else {
+			resultChan <- result{sequenceNumbers: sequenceNumbers}
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		sender.Metric.IncSendMessageFailureCount()
+		return nil, fmt.Errorf("failed to schedule messages: %w", ctx.Err())
+	case res := <-resultChan:
+		if res.err == nil {
+			sender.Metric.IncSendMessageSuccessCount()
+		} else {
+			sender.Metric.IncSendMessageFailureCount()
+		}
+		return res.sequenceNumbers, res.err
+	}
+
+}
+
+func (d *Sender) CancelScheduledMessages(ctx context.Context, sequenceNumbers []int64) error {
+	// SendTimeout is used here as a time constraint to send the cancel schedule messages request
+	if d.options.SendTimeout > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
+		defer cancel()
+	}
+
+	errChan := make(chan error)
+
+	go func() {
+		if err := d.sbSender.CancelScheduledMessages(ctx, sequenceNumbers, nil); err != nil { // cancelScheduledMessagesOptions currently does nothing
+			errChan <- fmt.Errorf("failed to cancel scheduled messages: %w", err)
+		} else {
+			errChan <- nil
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		sender.Metric.IncSendMessageFailureCount()
+		return fmt.Errorf("failed to cancel scheduled messages: %w", ctx.Err())
 	case err := <-errChan:
 		if err == nil {
 			sender.Metric.IncSendMessageSuccessCount()
