@@ -9,3 +9,9 @@ updates:
     directory: "/v2" # Location of package manifests
     schedule:
       interval: "weekly"
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+      development-dependencies:
+        dependency-type: "development"
+    open-pull-requests-limit: 10
