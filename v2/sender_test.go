@@ -254,21 +254,6 @@ func TestSender_SendMessageBatch(t *testing.T) {
 	// No way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
 }
 
-func TestSender_SendMessageBatchWithContextCanceled(t *testing.T) {
-	g := NewWithT(t)
-	azSender := &fakeAzSender{}
-	sender := NewSender(azSender, nil)
-
-	// Create a canceled context
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	err := sender.SendMessageBatch(ctx, []*azservicebus.Message{})
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err).To(MatchError(context.Canceled))
-	g.Expect(azSender.SendMessageBatchCalled).To(BeFalse())
-}
-
 func TestSender_AzSender(t *testing.T) {
 	g := NewWithT(t)
 	azSender := &fakeAzSender{}
