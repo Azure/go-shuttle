@@ -58,6 +58,12 @@ func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 // SendMessage sends a payload on the bus.
 // the MessageBody is marshalled and set as the message body.
 func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...func(msg *azservicebus.Message) error) error {
+	// Check if there is a context error before doing anything since
+	// we rely on context failures to detect if the sender is dead.
+	if ctx.Err() != nil {
+		return fmt.Errorf("failed to send message: %w", ctx.Err())
+	}
+	
 	msg, err := d.ToServiceBusMessage(ctx, mb, options...)
 	if err != nil {
 		return err
@@ -124,6 +130,12 @@ func (d *Sender) ToServiceBusMessage(
 
 // SendMessageBatch sends the array of azservicebus messages as a batch.
 func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.Message) error {
+	// Check if there is a context error before doing anything since
+	// we rely on context failures to detect if the sender is dead.
+	if ctx.Err() != nil {
+		return fmt.Errorf("failed to send message: %w", ctx.Err())
+	}
+	
 	batch, err := d.sbSender.NewMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
 	if err != nil {
 		return err

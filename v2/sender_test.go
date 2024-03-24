@@ -178,6 +178,29 @@ func TestSender_WithContextCanceled(t *testing.T) {
 	g.Expect(err).To(MatchError(context.DeadlineExceeded))
 }
 
+func TestSender_SendWithCanceledContext(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{
+		DoSendMessage: func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
+			return nil
+		},
+		DoSendMessageBatch: func(ctx context.Context, messages *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
+			return nil
+		},
+	}
+	sender := NewSender(azSender, &SenderOptions{
+		Marshaller: &DefaultJSONMarshaller{},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := sender.SendMessage(ctx, "test")
+	g.Expect(err).To(MatchError(context.Canceled))
+	err = sender.SendMessageBatch(ctx, nil)
+	g.Expect(err).To(MatchError(context.Canceled))
+}
+
 func TestSender_DisabledSendTimeout(t *testing.T) {
 	g := NewWithT(t)
 	sendTimeout := -1 * time.Second
