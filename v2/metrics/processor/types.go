@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/go-shuttle/v2/metrics/common"
 	prom "github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )
@@ -14,6 +15,9 @@ const (
 	messageTypeLabel   = "messageType"
 	deliveryCountLabel = "deliveryCount"
 	successLabel       = "success"
+	namespaceLabel     = "namespace"
+	entityLabel        = "entity"
+	subscriptionLabel  = "subscription"
 )
 
 var (
@@ -49,6 +53,11 @@ func newRegistry() *Registry {
 			Help:      "number of messages being handled concurrently",
 			Subsystem: subsystem,
 		}, []string{messageTypeLabel}),
+		ConsecutiveConnectionCount: prom.NewGaugeVec(prom.GaugeOpts{
+			Name:      "receiver_consecutive_connection_count",
+			Help:      "number of consecutive connection successes or failures",
+			Subsystem: subsystem,
+		}, []string{namespaceLabel, entityLabel, subscriptionLabel, successLabel}),
 	}
 }
 
@@ -65,7 +74,8 @@ func (m *Registry) Init(reg prom.Registerer) {
 		m.MessageHandledCount,
 		m.MessageLockRenewedCount,
 		m.MessageDeadlineReachedCount,
-		m.ConcurrentMessageCount)
+		m.ConcurrentMessageCount,
+		m.ConsecutiveConnectionCount)
 }
 
 type Registry struct {
@@ -74,6 +84,7 @@ type Registry struct {
 	MessageLockRenewedCount     *prom.CounterVec
 	MessageDeadlineReachedCount *prom.CounterVec
 	ConcurrentMessageCount      *prom.GaugeVec
+	ConsecutiveConnectionCount  *prom.GaugeVec
 }
 
 // Recorder allows to initialize the metric registry and increase/decrease the registered metrics at runtime.
@@ -86,6 +97,8 @@ type Recorder interface {
 	IncMessageHandled(msg *azservicebus.ReceivedMessage)
 	IncMessageReceived(float64)
 	IncConcurrentMessageCount(msg *azservicebus.ReceivedMessage)
+	IncConsecutiveConnectionSuccessCount(namespace, entity, subscription string)
+	IncConsecutiveConnectionFailureCount(namespace, entity, subscription string)
 }
 
 // IncMessageLockRenewedSuccess increase the message lock renewal success counter
@@ -130,6 +143,34 @@ func (m *Registry) IncMessageReceived(count float64) {
 	m.MessageReceivedCount.With(map[string]string{}).Add(count)
 }
 
+// IncConsecutiveConnectionSuccessCount increases the connection success gauge and resets the failure gauge
+func (m *Registry) IncConsecutiveConnectionSuccessCount(namespace, entity, subscription string) {
+	labels := map[string]string{
+		namespaceLabel:    namespace,
+		entityLabel:       entity,
+		subscriptionLabel: subscription,
+		successLabel:      "true",
+	}
+	m.ConsecutiveConnectionCount.With(labels).Inc()
+	// reset the failure count
+	labels[successLabel] = "false"
+	m.ConsecutiveConnectionCount.With(labels).Set(0)
+}
+
+// IncConsecutiveConnectionFailureCount increases the connection failure gauge and resets the success gauge
+func (m *Registry) IncConsecutiveConnectionFailureCount(namespace, entity, subscription string) {
+	labels := map[string]string{
+		namespaceLabel:    namespace,
+		entityLabel:       entity,
+		subscriptionLabel: subscription,
+		successLabel:      "false",
+	}
+	m.ConsecutiveConnectionCount.With(labels).Inc()
+	// reset the success count
+	labels[successLabel] = "true"
+	m.ConsecutiveConnectionCount.With(labels).Set(0)
+}
+
 // Informer allows to inspect metrics value stored in the registry at runtime
 type Informer struct {
 	registry *Registry
@@ -143,8 +184,8 @@ func NewInformer() *Informer {
 // GetMessageLockRenewedFailureCount retrieves the current value of the MessageLockRenewedFailureCount metric
 func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 	var total float64
-	collect(i.registry.MessageLockRenewedCount, func(m *dto.Metric) {
-		if !hasLabel(m, successLabel, "false") {
+	common.Collect(i.registry.MessageLockRenewedCount, func(m *dto.Metric) {
+		if !common.HasLabel(m, successLabel, "false") {
 			return
 		}
 		total += m.GetCounter().GetValue()
@@ -152,28 +193,38 @@ func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 	return total, nil
 }
 
-func hasLabel(m *dto.Metric, key string, value string) bool {
-	for _, pair := range m.Label {
-		if pair == nil {
-			continue
+// GetConsecutiveConnectionSuccessCount retrieves the current value of the ConsecutiveConnectionSuccessCount metric
+func (i *Informer) GetConsecutiveConnectionSuccessCount(namespace, entity, subscription string) (float64, error) {
+	var total float64
+	common.Collect(i.registry.ConsecutiveConnectionCount, func(m *dto.Metric) {
+		labels := map[string]string{
+			namespaceLabel:    namespace,
+			entityLabel:       entity,
+			subscriptionLabel: subscription,
+			successLabel:      "true",
 		}
-		if pair.GetName() == key && pair.GetValue() == value {
-			return true
+		if !common.HasLabels(m, labels) {
+			return
 		}
-	}
-	return false
+		total += m.GetGauge().GetValue()
+	})
+	return total, nil
 }
 
-// collect calls the function for each metric associated with the Collector
-func collect(col prom.Collector, do func(*dto.Metric)) {
-	c := make(chan prom.Metric)
-	go func(c chan prom.Metric) {
-		col.Collect(c)
-		close(c)
-	}(c)
-	for x := range c { // eg range across distinct label vector values
-		m := &dto.Metric{}
-		_ = x.Write(m)
-		do(m)
-	}
+// GetConsecutiveConnectionFailureCount retrieves the current value of the ConsecutiveConnectionFailureCount metric
+func (i *Informer) GetConsecutiveConnectionFailureCount(namespace, entity, subscription string) (float64, error) {
+	var total float64
+	common.Collect(i.registry.ConsecutiveConnectionCount, func(m *dto.Metric) {
+		labels := map[string]string{
+			namespaceLabel:    namespace,
+			entityLabel:       entity,
+			subscriptionLabel: subscription,
+			successLabel:      "false",
+		}
+		if !common.HasLabels(m, labels) {
+			return
+		}
+		total += m.GetGauge().GetValue()
+	})
+	return total, nil
 }

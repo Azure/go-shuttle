@@ -29,11 +29,11 @@ func TestRegistry_Init(t *testing.T) {
 	fRegistry := &fakeRegistry{}
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
-	g.Expect(fRegistry.collectors).To(HaveLen(1))
+	g.Expect(fRegistry.collectors).To(HaveLen(2))
 	Metric.IncSendMessageSuccessCount()
 }
 
-func TestMetrics(t *testing.T) {
+func TestSendMetrics(t *testing.T) {
 	g := NewWithT(t)
 	r := newRegistry()
 	registerer := prometheus.NewRegistry()
@@ -61,4 +61,73 @@ func TestMetrics(t *testing.T) {
 	count, err = informer.GetSendMessageFailureCount()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(count).To(Equal(float64(1)))
+}
+
+func TestConnectionMetrics(t *testing.T) {
+	type testcase struct {
+		namespaceName    string
+		entityName       string
+		subscriptionName string
+	}
+	for _, tc := range []testcase{
+		{
+			namespaceName:    "namespace",
+			entityName:       "entity",
+			subscriptionName: "",
+		},
+		{
+			namespaceName:    "namespace",
+			entityName:       "entity",
+			subscriptionName: "subscription",
+		},
+	} {
+		g := NewWithT(t)
+		r := newRegistry()
+		registerer := prometheus.NewRegistry()
+		informer := &Informer{registry: r}
+
+		// before init
+		count, err := informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+
+		// after init, count 0
+		g.Expect(func() { r.Init(registerer) }).ToNot(Panic())
+		count, err = informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+
+		// success count incremented
+		r.IncConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName)
+		count, err = informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(1)))
+		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+
+		// success count incremented
+		r.IncConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName)
+		count, err = informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(2)))
+		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+
+		// failure count incremented
+		r.IncConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName)
+		count, err = informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
+		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(1)))
+	}
 }
