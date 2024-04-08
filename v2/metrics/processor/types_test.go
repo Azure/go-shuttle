@@ -32,7 +32,12 @@ func TestRegistry_Init(t *testing.T) {
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
 	g.Expect(fRegistry.collectors).To(HaveLen(5))
 	Metric.IncMessageReceived(10)
+}
 
+func TestNewInformerDefault(t *testing.T) {
+	i := NewInformer()
+	g := NewWithT(t)
+	g.Expect(i.registry).To(Equal(Metric))
 }
 
 func TestMetrics(t *testing.T) {
@@ -57,7 +62,7 @@ func TestMetrics(t *testing.T) {
 		g := NewWithT(t)
 		r := NewRegistry()
 		registerer := prometheus.NewRegistry()
-		informer := &Informer{registry: r}
+		informer := NewInformerFor(r)
 
 		// before init
 		count, err := informer.GetMessageLockRenewedFailureCount()
