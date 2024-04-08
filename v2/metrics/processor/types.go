@@ -17,12 +17,13 @@ const (
 )
 
 var (
-	metricsRegistry = newRegistry()
+	metricsRegistry = NewRegistry()
 	// Metric exposes a Recorder interface to manipulate the Processor metrics.
 	Metric Recorder = metricsRegistry
 )
 
-func newRegistry() *Registry {
+// NewRegistry creates a new Registry with initialized prometheus counter definitions
+func NewRegistry() *Registry {
 	return &Registry{
 		MessageReceivedCount: prom.NewCounterVec(prom.CounterOpts{
 			Name:      "message_received_total",
@@ -59,6 +60,7 @@ func getMessageTypeLabel(msg *azservicebus.ReceivedMessage) prom.Labels {
 	}
 }
 
+// Init registers the counters from the Registry on the prometheus.Registerer
 func (m *Registry) Init(reg prom.Registerer) {
 	reg.MustRegister(
 		m.MessageReceivedCount,
@@ -68,6 +70,7 @@ func (m *Registry) Init(reg prom.Registerer) {
 		m.ConcurrentMessageCount)
 }
 
+// Registry provides the prometheus metrics for the message processor
 type Registry struct {
 	MessageReceivedCount        *prom.CounterVec
 	MessageHandledCount         *prom.CounterVec
@@ -137,7 +140,12 @@ type Informer struct {
 
 // NewInformer creates an Informer for the current registry
 func NewInformer() *Informer {
-	return &Informer{registry: metricsRegistry}
+	return NewInformerFor(metricsRegistry)
+}
+
+// NewInformerFor creates an Informer for the current registry
+func NewInformerFor(r *Registry) *Informer {
+	return &Informer{registry: r}
 }
 
 // GetMessageLockRenewedFailureCount retrieves the current value of the MessageLockRenewedFailureCount metric
