@@ -11,8 +11,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/Azure/go-shuttle/v2"
+	"github.com/Azure/go-shuttle/v2/metrics/processor"
 )
 
 type fakeSBLockRenewer struct {
@@ -150,13 +152,13 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 		isRenewerCanceled bool
 		cancelCtxOnStop   *bool
 		gotMessageCtx     context.Context
-		verify            func(g Gomega, tc *testCase)
+		verify            func(g Gomega, tc *testCase, metrics *processor.Informer)
 	}
 	testCases := []testCase{
 		{
 			name:    "continue periodic renewal on unknown error",
 			renewer: &fakeSBLockRenewer{Err: fmt.Errorf("unknown error")},
-			verify: func(g Gomega, tc *testCase) {
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				g.Eventually(
 					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(2))) },
 					130*time.Millisecond,
@@ -165,9 +167,25 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 		},
 		{
 			name:              "stop periodic renewal on context canceled",
+			isRenewerCanceled: false,
+			renewer:           &fakeSBLockRenewer{Err: context.Canceled},
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
+				g.Consistently(
+					func(g Gomega) {
+						g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(1)),
+							"should not attempt to renew")
+						g.Expect(metrics.GetMessageLockRenewedFailureCount()).To(Equal(float64(0)),
+							"should not record failure metric")
+					},
+					130*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+			},
+		},
+		{
+			name:              "stop periodic renewal on context canceled",
 			isRenewerCanceled: true,
 			renewer:           &fakeSBLockRenewer{Err: context.Canceled},
-			verify: func(g Gomega, tc *testCase) {
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				g.Consistently(
 					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(0))) },
 					130*time.Millisecond,
@@ -177,7 +195,7 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 		{
 			name:    "stop periodic renewal on permanent error (lockLost)",
 			renewer: &fakeSBLockRenewer{Err: &azservicebus.Error{Code: azservicebus.CodeLockLost}},
-			verify: func(g Gomega, tc *testCase) {
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				g.Consistently(
 					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(1))) },
 					130*time.Millisecond,
@@ -187,7 +205,7 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 		{
 			name:    "cancel message context on stop by default",
 			renewer: &fakeSBLockRenewer{Err: &azservicebus.Error{Code: azservicebus.CodeLockLost}},
-			verify: func(g Gomega, tc *testCase) {
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				g.Consistently(
 					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(1))) },
 					130*time.Millisecond,
@@ -199,7 +217,7 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 			name:            "does not cancel message context on stop if disabled",
 			renewer:         &fakeSBLockRenewer{Err: &azservicebus.Error{Code: azservicebus.CodeLockLost}},
 			cancelCtxOnStop: to.Ptr(false),
-			verify: func(g Gomega, tc *testCase) {
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				g.Consistently(
 					func(g Gomega) {
 						g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(1)))
@@ -212,7 +230,7 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 		{
 			name:    "continue periodic renewal on transient error (timeout)",
 			renewer: &fakeSBLockRenewer{Err: &azservicebus.Error{Code: azservicebus.CodeTimeout}},
-			verify: func(g Gomega, tc *testCase) {
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				g.Eventually(
 					func(g Gomega) { g.Expect(tc.renewer.RenewCount.Load()).To(Equal(int32(2))) },
 					140*time.Millisecond,
@@ -225,7 +243,15 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			interval := 50 * time.Millisecond
-			lr := shuttle.NewLockRenewalHandler(tc.renewer, &shuttle.LockRenewalOptions{Interval: &interval, CancelMessageContextOnStop: tc.cancelCtxOnStop},
+			reg := processor.NewRegistry()
+			reg.Init(prometheus.NewRegistry())
+			informer := processor.NewInformerFor(reg)
+			lr := shuttle.NewLockRenewalHandler(tc.renewer,
+				&shuttle.LockRenewalOptions{
+					Interval:                   &interval,
+					CancelMessageContextOnStop: tc.cancelCtxOnStop,
+					MetricRecorder:             reg,
+				},
 				shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler,
 					message *azservicebus.ReceivedMessage) {
 					tc.gotMessageCtx = ctx
@@ -237,13 +263,13 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 					}
 				}))
 			msg := &azservicebus.ReceivedMessage{}
-			ctx, cancel := context.WithTimeout(context.TODO(), 200*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			if tc.isRenewerCanceled {
 				cancel()
 			}
 			defer cancel()
 			lr.Handle(ctx, &fakeSettler{}, msg)
-			tc.verify(NewWithT(t), &tc)
+			tc.verify(NewWithT(t), &tc, informer)
 		})
 	}
 }

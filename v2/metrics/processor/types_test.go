@@ -26,7 +26,7 @@ func (f *fakeRegistry) Unregister(c prometheus.Collector) bool {
 
 func TestRegistry_Init(t *testing.T) {
 	g := NewWithT(t)
-	r := newRegistry()
+	r := NewRegistry()
 	fRegistry := &fakeRegistry{}
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
@@ -55,7 +55,7 @@ func TestMetrics(t *testing.T) {
 		},
 	} {
 		g := NewWithT(t)
-		r := newRegistry()
+		r := NewRegistry()
 		registerer := prometheus.NewRegistry()
 		informer := &Informer{registry: r}
 
