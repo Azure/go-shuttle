@@ -9,9 +9,10 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-	"github.com/Azure/go-shuttle/v2/metrics/processor"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Azure/go-shuttle/v2/metrics/processor"
 )
 
 // LockRenewer abstracts the servicebus receiver client to only expose lock renewal
@@ -26,12 +27,16 @@ type LockRenewalOptions struct {
 	// CancelMessageContextOnStop will cancel the downstream message context when the renewal handler is stopped.
 	// Defaults to true.
 	CancelMessageContextOnStop *bool
+	// MetricRecorder allows to pass a custom metric recorder for the LockRenewer.
+	// Defaults to processor.Metric instance.
+	MetricRecorder processor.Recorder
 }
 
 // NewLockRenewalHandler returns a middleware handler that will renew the lock on the message at the specified interval.
 func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions, handler Handler) HandlerFunc {
 	interval := 10 * time.Second
 	cancelMessageContextOnStop := true
+	metricRecorder := processor.Metric
 	if options != nil {
 		if options.Interval != nil {
 			interval = *options.Interval
@@ -39,12 +44,16 @@ func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions,
 		if options.CancelMessageContextOnStop != nil {
 			cancelMessageContextOnStop = *options.CancelMessageContextOnStop
 		}
+		if options.MetricRecorder != nil {
+			metricRecorder = options.MetricRecorder
+		}
 	}
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 		plr := &peekLockRenewer{
 			next:                   handler,
 			lockRenewer:            lockRenewer,
 			renewalInterval:        &interval,
+			metrics:                metricRecorder,
 			cancelMessageCtxOnStop: cancelMessageContextOnStop,
 			stopped:                make(chan struct{}, 1), // buffered channel to ensure we are not blocking
 		}
@@ -74,6 +83,7 @@ type peekLockRenewer struct {
 	next                   Handler
 	lockRenewer            LockRenewer
 	renewalInterval        *time.Duration
+	metrics                processor.Recorder
 	alive                  atomic.Bool
 	cancelMessageCtxOnStop bool
 	cancelMessageCtx       func()
@@ -124,7 +134,13 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
 			if err != nil {
 				log(ctx, fmt.Sprintf("failed to renew lock: %s", err))
-				processor.Metric.IncMessageLockRenewedFailure(message)
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					// if the error is a context error
+					// we stop and let the next loop iteration handle the exit.
+					plr.stop(ctx)
+					continue
+				}
+				plr.metrics.IncMessageLockRenewedFailure(message)
 				// The context is canceled when the message handler returns from the processor.
 				// This can happen if we already entered the interval case when the message processing completes.
 				// The best we can do is log and retry on the next tick. The sdk already retries operations on recoverable network errors.
@@ -140,14 +156,14 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 				continue
 			}
 			span.AddEvent("message lock renewed", trace.WithAttributes(attribute.Int("count", count)))
-			processor.Metric.IncMessageLockRenewedSuccess(message)
+			plr.metrics.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
 			log(ctx, "context done: stopping periodic renewal")
 			span.AddEvent("context done: stopping message lock renewal")
 			err := ctx.Err()
 			if errors.Is(err, context.DeadlineExceeded) {
 				span.RecordError(err)
-				processor.Metric.IncMessageDeadlineReachedCount(message)
+				plr.metrics.IncMessageDeadlineReachedCount(message)
 			}
 			plr.stop(ctx)
 		case <-plr.stopped:

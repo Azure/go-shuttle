@@ -26,13 +26,18 @@ func (f *fakeRegistry) Unregister(c prometheus.Collector) bool {
 
 func TestRegistry_Init(t *testing.T) {
 	g := NewWithT(t)
-	r := newRegistry()
+	r := NewRegistry()
 	fRegistry := &fakeRegistry{}
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
 	g.Expect(fRegistry.collectors).To(HaveLen(6))
 	Metric.IncMessageReceived(10)
+}
 
+func TestNewInformerDefault(t *testing.T) {
+	i := NewInformer()
+	g := NewWithT(t)
+	g.Expect(i.registry).To(Equal(Metric))
 }
 
 func TestLockRenewalMetrics(t *testing.T) {
@@ -55,9 +60,9 @@ func TestLockRenewalMetrics(t *testing.T) {
 		},
 	} {
 		g := NewWithT(t)
-		r := newRegistry()
+		r := NewRegistry()
 		registerer := prometheus.NewRegistry()
-		informer := &Informer{registry: r}
+		informer := NewInformerFor(r)
 
 		// before init
 		count, err := informer.GetMessageLockRenewedFailureCount()
