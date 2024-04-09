@@ -108,7 +108,7 @@ func TestConnectionMetrics(t *testing.T) {
 		},
 	} {
 		g := NewWithT(t)
-		r := newRegistry()
+		r := NewRegistry()
 		registerer := prometheus.NewRegistry()
 		informer := &Informer{registry: r}
 
