@@ -84,7 +84,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 		if options.ReceiveInterval != nil {
 			opts.ReceiveInterval = options.ReceiveInterval
 		}
-		if options.MaxConcurrency > 0 {
+		if options.MaxConcurrency >= 0 {
 			opts.MaxConcurrency = options.MaxConcurrency
 		}
 		if options.StartMaxAttempt > 0 {
@@ -102,10 +102,17 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 	}
 }
 
+// Start starts the processor and blocks until an error occurs or the context is canceled.
+// It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
 func (p *Processor) Start(ctx context.Context) error {
+	var savedError error
 	for attempt := 1; attempt <= p.options.StartMaxAttempt; attempt++ {
 		if err := p.start(ctx); err != nil {
+			savedError = err
 			log(ctx, fmt.Sprintf("processor start attempt %d failed: %v", attempt, err))
+			if attempt == p.options.StartMaxAttempt {
+				break
+			}
 			select {
 			case <-time.After(p.options.StartRetryDelayStrategy.GetDelay(attempt)):
 				continue
@@ -115,10 +122,10 @@ func (p *Processor) Start(ctx context.Context) error {
 			}
 		}
 	}
-	return ctx.Err()
+	return savedError
 }
 
-// Start starts the processor and blocks until an error occurs or the context is canceled.
+// start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) start(ctx context.Context) error {
 	log(ctx, "starting processor")
 	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
