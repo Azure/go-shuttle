@@ -81,6 +81,7 @@ func TestProcessorStart_ContextCanceledAfterStart(t *testing.T) {
 	rcv := &fakeReceiver{
 		fakeSettler:           &fakeSettler{},
 		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  2,
 	}
 	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Millisecond),
 		&shuttle.ProcessorOptions{

@@ -84,7 +84,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 		if options.ReceiveInterval != nil {
 			opts.ReceiveInterval = options.ReceiveInterval
 		}
-		if options.MaxConcurrency >= 0 {
+		if options.MaxConcurrency > 0 {
 			opts.MaxConcurrency = options.MaxConcurrency
 		}
 		if options.StartMaxAttempt > 0 {
