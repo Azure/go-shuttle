@@ -107,11 +107,11 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 // Returns the last error encountered while starting the processor.
 func (p *Processor) Start(ctx context.Context) error {
 	var savedError error
-	for attempt := 1; attempt <= p.options.StartMaxAttempt; attempt++ {
+	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
 		if err := p.start(ctx); err != nil {
 			savedError = err
 			log(ctx, fmt.Sprintf("processor start attempt %d failed: %v", attempt, err))
-			if attempt == p.options.StartMaxAttempt {
+			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
 				break
 			}
 			select {
