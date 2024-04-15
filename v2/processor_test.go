@@ -236,7 +236,7 @@ func TestProcessorStart_CanSetStartMaxAttempt(t *testing.T) {
 	defer cancel()
 	err := processor.Start(ctx)
 	a.EqualError(err, "fake receive error")
-	a.Equal(3, len(rcv.ReceiveCalls), "there should be 5 connection retries")
+	a.Equal(3, len(rcv.ReceiveCalls), "there should be 3 connection retries")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
 	a.Equal(1, rcv.ReceiveCalls[1], "the processor should have used the default max concurrency of 1")
 	a.Equal(1, rcv.ReceiveCalls[2], "the processor should have used the default max concurrency of 1")
