@@ -2,6 +2,7 @@ package shuttle_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -39,9 +40,10 @@ func ExampleProcessor() {
 		panic(err)
 	}
 	lockRenewalInterval := 10 * time.Second
+	lockRenewalOptions := &shuttle.LockRenewalOptions{Interval: &lockRenewalInterval}
 	p := shuttle.NewProcessor(receiver,
 		shuttle.NewPanicHandler(nil,
-			shuttle.NewRenewLockHandler(receiver, &lockRenewalInterval,
+			shuttle.NewLockRenewalHandler(receiver, lockRenewalOptions,
 				MyHandler(0*time.Second))), &shuttle.ProcessorOptions{MaxConcurrency: 10})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -191,6 +193,80 @@ func TestProcessorStart_ReceiveDelta(t *testing.T) {
 	a.Equal(2, len(rcv.ReceiveCalls), "should be called 3 times")
 	a.Equal(10, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 10 initially")
 	a.Equal(5, rcv.ReceiveCalls[1], "the processor should request 5 (delta)")
+}
+
+func TestProcessorStart_DefaultsToStartMaxAttempt1(t *testing.T) {
+	a := require.New(t)
+	messages := make(chan *azservicebus.ReceivedMessage, 1)
+	close(messages)
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  2,
+		SetupReceiveError:     fmt.Errorf("fake receive error"),
+	}
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := processor.Start(ctx)
+	a.EqualError(err, "fake receive error")
+	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
+	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
+}
+
+func TestProcessorStart_CanSetStartMaxAttempt(t *testing.T) {
+	// with a max start attempt of 3 and a 20ms fixed retry strategy,
+	// we should have 3 retries before exiting with an error.
+	a := require.New(t)
+	messages := make(chan *azservicebus.ReceivedMessage, 1)
+	close(messages)
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  5,
+		SetupReceiveError:     fmt.Errorf("fake receive error"),
+	}
+
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
+		MaxConcurrency:          1,
+		StartMaxAttempt:         3,
+		StartRetryDelayStrategy: &shuttle.FixedStartDelayStrategy{Delay: 20 * time.Millisecond},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := processor.Start(ctx)
+	a.EqualError(err, "fake receive error")
+	a.Equal(3, len(rcv.ReceiveCalls), "there should be 5 connection retries")
+	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
+	a.Equal(1, rcv.ReceiveCalls[1], "the processor should have used the default max concurrency of 1")
+	a.Equal(1, rcv.ReceiveCalls[2], "the processor should have used the default max concurrency of 1")
+}
+
+func TestProcessorStart_ContextCanceledDuringStartRetry(t *testing.T) {
+	// with a max start attempt of 5 and a 20ms fixed retry strategy,
+	// we should have 2 retries before the context is canceled after 30ms.
+	a := require.New(t)
+	messages := make(chan *azservicebus.ReceivedMessage, 1)
+	close(messages)
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  10,
+		SetupReceiveError:     fmt.Errorf("fake receive error"),
+	}
+
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
+		MaxConcurrency:          1,
+		StartMaxAttempt:         5,
+		StartRetryDelayStrategy: &shuttle.FixedStartDelayStrategy{Delay: 20 * time.Millisecond},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	err := processor.Start(ctx)
+	a.EqualError(err, "fake receive error")
+	a.Equal(2, len(rcv.ReceiveCalls), "there should be 2 connection retries")
+	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
+	a.Equal(1, rcv.ReceiveCalls[1], "the processor should have retried the receive call once")
 }
 
 func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {

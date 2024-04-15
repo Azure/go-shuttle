@@ -64,12 +64,12 @@ type StartRetryDelayStrategy interface {
 	GetDelay(attempt int) time.Duration
 }
 
-// FixedDelayStrategy is a fixed delay strategy for connection retry.
-type FixedDelayStrategy struct {
+// FixedStartDelayStrategy is a fixed delay strategy for connection retry.
+type FixedStartDelayStrategy struct {
 	Delay time.Duration
 }
 
-func (f *FixedDelayStrategy) GetDelay(_ int) time.Duration {
+func (f *FixedStartDelayStrategy) GetDelay(_ int) time.Duration {
 	return f.Delay
 }
 
@@ -78,7 +78,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 		MaxConcurrency:          1,
 		ReceiveInterval:         to.Ptr(1 * time.Second),
 		StartMaxAttempt:         1,
-		StartRetryDelayStrategy: &FixedDelayStrategy{Delay: 5 * time.Second},
+		StartRetryDelayStrategy: &FixedStartDelayStrategy{Delay: 5 * time.Second},
 	}
 	if options != nil {
 		if options.ReceiveInterval != nil {
@@ -104,6 +104,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 
 // Start starts the processor and blocks until an error occurs or the context is canceled.
 // It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
+// Returns the last error encountered while starting the processor.
 func (p *Processor) Start(ctx context.Context) error {
 	var savedError error
 	for attempt := 1; attempt <= p.options.StartMaxAttempt; attempt++ {
@@ -118,7 +119,7 @@ func (p *Processor) Start(ctx context.Context) error {
 				continue
 			case <-ctx.Done():
 				log(ctx, "context done, stop retrying")
-				break
+				return savedError
 			}
 		}
 	}
