@@ -100,7 +100,7 @@ func (p *Processor) AddReceiver(receivers ...Receiver) {
 func (p *Processor) Start(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	errChan := make(chan error, len(p.receivers))
-	for i, _ := range p.receivers {
+	for i := range p.receivers {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
