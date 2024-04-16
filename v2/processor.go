@@ -2,6 +2,7 @@ package shuttle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,21 +57,7 @@ type ProcessorOptions struct {
 	// StartMaxAttempt is the maximum number of attempts to start the processor.
 	StartMaxAttempt int
 	// StartRetryDelay is the delay between each start attempt.
-	StartRetryDelayStrategy StartRetryDelayStrategy
-}
-
-// StartRetryDelayStrategy can be implemented to provide custom delay strategies on connection retry.
-type StartRetryDelayStrategy interface {
-	GetDelay(attempt int) time.Duration
-}
-
-// FixedStartDelayStrategy is a fixed delay strategy for connection retry.
-type FixedStartDelayStrategy struct {
-	Delay time.Duration
-}
-
-func (f *FixedStartDelayStrategy) GetDelay(_ int) time.Duration {
-	return f.Delay
+	StartRetryDelayStrategy RetryDelayStrategy
 }
 
 func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
@@ -78,7 +65,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 		MaxConcurrency:          1,
 		ReceiveInterval:         to.Ptr(1 * time.Second),
 		StartMaxAttempt:         1,
-		StartRetryDelayStrategy: &FixedStartDelayStrategy{Delay: 5 * time.Second},
+		StartRetryDelayStrategy: &ConstantDelayStrategy{Delay: 5 * time.Second},
 	}
 	if options != nil {
 		if options.ReceiveInterval != nil {
@@ -109,13 +96,13 @@ func (p *Processor) Start(ctx context.Context) error {
 	var savedError error
 	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
 		if err := p.start(ctx); err != nil {
-			savedError = err
+			savedError = errors.Join(savedError, err)
 			log(ctx, fmt.Sprintf("processor start attempt %d failed: %v", attempt, err))
 			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
 				break
 			}
 			select {
-			case <-time.After(p.options.StartRetryDelayStrategy.GetDelay(attempt)):
+			case <-time.After(p.options.StartRetryDelayStrategy.GetDelay(uint32(attempt))):
 				continue
 			case <-ctx.Done():
 				log(ctx, "context done, stop retrying")

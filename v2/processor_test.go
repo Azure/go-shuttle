@@ -92,7 +92,7 @@ func TestProcessorStart_ContextCanceledAfterStart(t *testing.T) {
 	go func() { errCh <- processor.Start(ctx) }()
 	cancel()
 	g := NewWithT(t)
-	g.Eventually(errCh).Should(Receive(Equal(context.Canceled)))
+	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
 }
 
 func TestProcessorStart_CanSetMaxConcurrency(t *testing.T) {
@@ -221,22 +221,24 @@ func TestProcessorStart_CanSetStartMaxAttempt(t *testing.T) {
 	a := require.New(t)
 	messages := make(chan *azservicebus.ReceivedMessage, 1)
 	close(messages)
+	receiveError := fmt.Errorf("fake receive error")
 	rcv := &fakeReceiver{
 		fakeSettler:           &fakeSettler{},
 		SetupReceivedMessages: messages,
 		SetupMaxReceiveCalls:  5,
-		SetupReceiveError:     fmt.Errorf("fake receive error"),
+		SetupReceiveError:     receiveError,
 	}
 
 	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
 		MaxConcurrency:          1,
 		StartMaxAttempt:         3,
-		StartRetryDelayStrategy: &shuttle.FixedStartDelayStrategy{Delay: 20 * time.Millisecond},
+		StartRetryDelayStrategy: &shuttle.ConstantDelayStrategy{Delay: 20 * time.Millisecond},
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	err := processor.Start(ctx)
-	a.EqualError(err, "fake receive error")
+	// matchError
+	a.ErrorIs(err, receiveError)
 	a.Equal(3, len(rcv.ReceiveCalls), "there should be 3 connection retries")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
 	a.Equal(1, rcv.ReceiveCalls[1], "the processor should have used the default max concurrency of 1")
@@ -249,22 +251,23 @@ func TestProcessorStart_ContextCanceledDuringStartRetry(t *testing.T) {
 	a := require.New(t)
 	messages := make(chan *azservicebus.ReceivedMessage, 1)
 	close(messages)
+	receiveError := fmt.Errorf("fake receive error")
 	rcv := &fakeReceiver{
 		fakeSettler:           &fakeSettler{},
 		SetupReceivedMessages: messages,
 		SetupMaxReceiveCalls:  10,
-		SetupReceiveError:     fmt.Errorf("fake receive error"),
+		SetupReceiveError:     receiveError,
 	}
 
 	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
 		MaxConcurrency:          1,
 		StartMaxAttempt:         5,
-		StartRetryDelayStrategy: &shuttle.FixedStartDelayStrategy{Delay: 20 * time.Millisecond},
+		StartRetryDelayStrategy: &shuttle.ConstantDelayStrategy{Delay: 20 * time.Millisecond},
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	err := processor.Start(ctx)
-	a.EqualError(err, "fake receive error")
+	a.ErrorIs(err, receiveError)
 	a.Equal(2, len(rcv.ReceiveCalls), "there should be 2 connection retries")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
 	a.Equal(1, rcv.ReceiveCalls[1], "the processor should have retried the receive call once")
