@@ -67,7 +67,7 @@ func TestProcessorStart_DefaultsToMaxConcurrency1(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	err := processor.Start(ctx)
-	a.EqualError(err, "max receive calls exceeded")
+	a.ErrorContains(err, "max receive calls exceeded")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
 }
@@ -109,7 +109,7 @@ func TestProcessorStart_CanSetMaxConcurrency(t *testing.T) {
 	// pre-cancel the context
 	cancel()
 	err := processor.Start(ctx)
-	a.EqualError(err, "max receive calls exceeded")
+	a.ErrorContains(err, "max receive calls exceeded")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(10, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 10")
 }
@@ -210,7 +210,7 @@ func TestProcessorStart_DefaultsToStartMaxAttempt1(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	err := processor.Start(ctx)
-	a.EqualError(err, "fake receive error")
+	a.ErrorContains(err, "fake receive error")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
 }
@@ -271,6 +271,41 @@ func TestProcessorStart_ContextCanceledDuringStartRetry(t *testing.T) {
 	a.Equal(2, len(rcv.ReceiveCalls), "there should be 2 connection retries")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
 	a.Equal(1, rcv.ReceiveCalls[1], "the processor should have retried the receive call once")
+}
+
+func TestProcessorStart_TwoReceivers(t *testing.T) {
+	// with an message processing that takes 10ms and an interval polling every 20 ms,
+	// we should call receive exactly 3 times to consume all the messages.
+	a := require.New(t)
+	rcv1 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupMaxReceiveCalls:  3,
+		SetupReceivedMessages: messagesChannel(7),
+	}
+	close(rcv1.SetupReceivedMessages)
+
+	rcv2 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupMaxReceiveCalls:  3,
+		SetupReceivedMessages: messagesChannel(7),
+	}
+	close(rcv2.SetupReceivedMessages)
+
+	processor := shuttle.NewProcessor(rcv1, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
+		MaxConcurrency:  3,
+		ReceiveInterval: to.Ptr(20 * time.Millisecond),
+	})
+	processor.AddReceiver(rcv2)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err := processor.Start(ctx)
+	a.Error(err, "expect to exit with error because we consumed all configured messages")
+	for _, rcv := range []*fakeReceiver{rcv1, rcv2} {
+		a.Equal(3, len(rcv.ReceiveCalls), "there should be 2 entry in the ReceiveCalls array")
+		a.Equal(3, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 3")
+		a.Equal(3, rcv.ReceiveCalls[1], "the processor should have used max concurrency of 3")
+		a.Equal(3, rcv.ReceiveCalls[2], "the processor should have used max concurrency of 3")
+	}
 }
 
 func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {
