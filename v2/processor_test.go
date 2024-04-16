@@ -301,10 +301,113 @@ func TestProcessorStart_TwoReceivers(t *testing.T) {
 	err := processor.Start(ctx)
 	a.Error(err, "expect to exit with error because we consumed all configured messages")
 	for _, rcv := range []*fakeReceiver{rcv1, rcv2} {
-		a.Equal(3, len(rcv.ReceiveCalls), "there should be 2 entry in the ReceiveCalls array")
+		a.Equal(3, len(rcv.ReceiveCalls), "there should be 3 entry in the ReceiveCalls array")
 		a.Equal(3, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 3")
-		a.Equal(3, rcv.ReceiveCalls[1], "the processor should have used max concurrency of 3")
-		a.Equal(3, rcv.ReceiveCalls[2], "the processor should have used max concurrency of 3")
+	}
+}
+
+func TestProcessorStart_TwoReceiversOneErrorOneSuccess(t *testing.T) {
+	// with an message processing that takes 10ms and an interval polling every 20 ms,
+	// we should call receive exactly 3 times to consume all the messages.
+	a := require.New(t)
+	rcv1 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupMaxReceiveCalls:  3,
+		SetupReceivedMessages: messagesChannel(7),
+	}
+	close(rcv1.SetupReceivedMessages)
+
+	rcv2 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupMaxReceiveCalls:  3,
+		SetupReceivedMessages: messagesChannel(7),
+		SetupReceiveError:     fmt.Errorf("fake receive error"),
+	}
+	close(rcv2.SetupReceivedMessages)
+
+	processor := shuttle.NewProcessor(rcv1, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
+		MaxConcurrency:  3,
+		ReceiveInterval: to.Ptr(20 * time.Millisecond),
+	})
+	processor.AddReceiver(rcv2)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err := processor.Start(ctx)
+	a.Error(err, "expect to exit with error because we consumed all configured messages and one receiver failed to receive messages")
+	a.ErrorContains(err, "processor 1 failed to receive messages: fake receive error")
+	a.Equal(3, len(rcv1.ReceiveCalls), "there should be 3 entry in the ReceiveCalls array")
+	a.Equal(3, rcv1.ReceiveCalls[0], "the processor should have used max concurrency of 3")
+	a.Equal(1, len(rcv2.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
+	a.Equal(3, rcv2.ReceiveCalls[0], "the processor should have used max concurrency of 3")
+}
+
+func TestProcessorStart_TwoReceiversWithStartRetry(t *testing.T) {
+	// with an message processing that takes 10ms and an interval polling every 20 ms,
+	// we should call receive exactly 3 times to consume all the messages.
+	a := require.New(t)
+	rcv1 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupMaxReceiveCalls:  3,
+		SetupReceivedMessages: messagesChannel(7),
+	}
+	close(rcv1.SetupReceivedMessages)
+
+	rcv2 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupMaxReceiveCalls:  3,
+		SetupReceivedMessages: messagesChannel(7),
+		SetupReceiveError:     fmt.Errorf("fake receive error"),
+	}
+	close(rcv2.SetupReceivedMessages)
+
+	processor := shuttle.NewProcessor(rcv1, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
+		MaxConcurrency:          3,
+		ReceiveInterval:         to.Ptr(20 * time.Millisecond),
+		StartMaxAttempt:         2,
+		StartRetryDelayStrategy: &shuttle.ConstantDelayStrategy{Delay: 10 * time.Millisecond},
+	})
+	processor.AddReceiver(rcv2)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err := processor.Start(ctx)
+	a.Error(err, "expect to exit with error because we consumed all configured messages and one receiver failed to receive messages")
+	a.ErrorContains(err, "processor 1 failed to receive messages: fake receive error")
+	a.Equal(4, len(rcv1.ReceiveCalls), "there should be 4 entry in the ReceiveCalls array (3 receives and 1 retry)")
+	a.Equal(3, rcv1.ReceiveCalls[0], "the processor should have used max concurrency of 3")
+	a.Equal(2, len(rcv2.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array (1 retry)")
+	a.Equal(3, rcv2.ReceiveCalls[0], "the processor should have used max concurrency of 3")
+}
+
+func TestProcessorStart_MultiReceivers(t *testing.T) {
+	a := require.New(t)
+	receivers := make([]shuttle.Receiver, 0)
+	fakeReceivers := make([]*fakeReceiver, 0)
+	expectedReceiveCalls := []int{1, 1, 1, 2, 2}
+	for i := 0; i < 5; i++ {
+		receiver := &fakeReceiver{
+			fakeSettler:           &fakeSettler{},
+			SetupMaxReceiveCalls:  expectedReceiveCalls[i],
+			SetupReceivedMessages: messagesChannel(i),
+		}
+		receivers = append(receivers, receiver)
+		fakeReceivers = append(fakeReceivers, receiver)
+		close(receiver.SetupReceivedMessages)
+	}
+
+	processor := shuttle.NewProcessor(receivers[0], MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
+		MaxConcurrency:  3,
+		ReceiveInterval: to.Ptr(20 * time.Millisecond),
+	})
+	processor.AddReceiver(receivers[1:]...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err := processor.Start(ctx)
+	a.Error(err, "expect to exit with error because we consumed all configured messages")
+
+	for i, fakeReceiver := range fakeReceivers {
+		a.Equal(len(fakeReceiver.ReceiveCalls), expectedReceiveCalls[i], "receiver %d should have received %d messages", i, expectedReceiveCalls[i])
+		a.Equal(fakeReceiver.ReceiveCalls[0], 3, "receiver %d should have used max concurrency of 3", i)
 	}
 }
 
