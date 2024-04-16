@@ -91,7 +91,8 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 
 // Start starts the processor and blocks until an error occurs or the context is canceled.
 // It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
-// Returns the last error encountered while starting the processor.
+// Returns a combined list of errors during the start attempts or ctx.Err() if the context
+// is cancelled during the retries.
 func (p *Processor) Start(ctx context.Context) error {
 	var savedError error
 	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
@@ -106,7 +107,7 @@ func (p *Processor) Start(ctx context.Context) error {
 				continue
 			case <-ctx.Done():
 				log(ctx, "context done, stop retrying")
-				return savedError
+				return ctx.Err()
 			}
 		}
 	}

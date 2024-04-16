@@ -267,7 +267,7 @@ func TestProcessorStart_ContextCanceledDuringStartRetry(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	err := processor.Start(ctx)
-	a.ErrorIs(err, receiveError)
+	a.ErrorIs(err, context.DeadlineExceeded)
 	a.Equal(2, len(rcv.ReceiveCalls), "there should be 2 connection retries")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
 	a.Equal(1, rcv.ReceiveCalls[1], "the processor should have retried the receive call once")
