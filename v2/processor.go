@@ -12,6 +12,32 @@ import (
 	"github.com/Azure/go-shuttle/v2/metrics/processor"
 )
 
+type Receiver interface {
+	ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
+	MessageSettler
+}
+
+// MessageSettler is passed to the handlers. it exposes the message settling functionality from the receiver needed within the handler.
+type MessageSettler interface {
+	AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error
+	CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error
+	DeadLetterMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeadLetterOptions) error
+	DeferMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeferMessageOptions) error
+	RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error
+}
+
+type ReceiverImpl struct { // shuttle.Receiver is already an exported interface
+	name       string
+	sbReceiver Receiver
+}
+
+func NewReceiverImpl(name string, sbReceiver Receiver) *ReceiverImpl {
+	return &ReceiverImpl{
+		name:       name,
+		sbReceiver: sbReceiver,
+	}
+}
+
 type Handler interface {
 	Handle(context.Context, MessageSettler, *azservicebus.ReceivedMessage)
 }
@@ -47,8 +73,8 @@ type ProcessorOptions struct {
 	StartRetryDelayStrategy RetryDelayStrategy
 }
 
-func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
-	opts := ProcessorOptions{
+func applyProcessorOptions(options *ProcessorOptions) *ProcessorOptions {
+	opts := &ProcessorOptions{
 		MaxConcurrency:          1,
 		ReceiveInterval:         to.Ptr(1 * time.Second),
 		StartMaxAttempt:         1,
@@ -68,35 +94,21 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 			opts.StartRetryDelayStrategy = options.StartRetryDelayStrategy
 		}
 	}
+	return opts
+}
+
+func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
+	opts := applyProcessorOptions(options)
 	return &Processor{
 		receivers:         map[string]Receiver{"receiver": receiver},
 		handle:            handler,
-		options:           opts,
+		options:           *opts,
 		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
 	}
 }
 
 func NewMultiProcessor(receiversImpl []*ReceiverImpl, handler HandlerFunc, options *ProcessorOptions) *Processor {
-	opts := ProcessorOptions{
-		MaxConcurrency:          1,
-		ReceiveInterval:         to.Ptr(1 * time.Second),
-		StartMaxAttempt:         1,
-		StartRetryDelayStrategy: &ConstantDelayStrategy{Delay: 5 * time.Second},
-	}
-	if options != nil {
-		if options.ReceiveInterval != nil {
-			opts.ReceiveInterval = options.ReceiveInterval
-		}
-		if options.MaxConcurrency > 0 {
-			opts.MaxConcurrency = options.MaxConcurrency
-		}
-		if options.StartMaxAttempt > 0 {
-			opts.StartMaxAttempt = options.StartMaxAttempt
-		}
-		if options.StartRetryDelayStrategy != nil {
-			opts.StartRetryDelayStrategy = options.StartRetryDelayStrategy
-		}
-	}
+	opts := applyProcessorOptions(options)
 	var receivers = make(map[string]Receiver)
 	for _, receiver := range receiversImpl {
 		receivers[receiver.name] = receiver.sbReceiver
@@ -104,7 +116,7 @@ func NewMultiProcessor(receiversImpl []*ReceiverImpl, handler HandlerFunc, optio
 	return &Processor{
 		receivers:         receivers,
 		handle:            handler,
-		options:           opts,
+		options:           *opts,
 		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
 	}
 }
@@ -134,20 +146,20 @@ func (p *Processor) Start(ctx context.Context) error {
 	return errors.Join(allErrs...)
 }
 
-// startOne starts the processor with the receiverName and blocks until an error occurs or the context is canceled.
+// startOne starts a processor with the receiverName and blocks until an error occurs or the context is canceled.
 // It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
 // Returns a combined list of errors during the start attempts or ctx.Err() if the context
 // is cancelled during the retries.
 func (p *Processor) startOne(ctx context.Context, receiverName string) error {
 	_, ok := p.receivers[receiverName]
 	if !ok {
-		return fmt.Errorf("receiver %s not found", receiverName)
+		return fmt.Errorf("processor %s not found", receiverName)
 	}
 	var savedError error
 	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
 		if err := p.start(ctx, receiverName); err != nil {
 			savedError = errors.Join(savedError, err)
-			log(ctx, fmt.Sprintf("processor for receiver %s start attempt %d failed: %v", receiverName, attempt, err))
+			log(ctx, fmt.Sprintf("processor %s start attempt %d failed: %v", receiverName, attempt, err))
 			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
 				break
 			}
