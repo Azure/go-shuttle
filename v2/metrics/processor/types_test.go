@@ -24,6 +24,10 @@ func (f *fakeRegistry) Unregister(c prometheus.Collector) bool {
 	panic("implement me")
 }
 
+func getReceiverName() string {
+	return "testReceiverName"
+}
+
 func TestRegistry_Init(t *testing.T) {
 	g := NewWithT(t)
 	r := NewRegistry()
@@ -31,7 +35,7 @@ func TestRegistry_Init(t *testing.T) {
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
 	g.Expect(fRegistry.collectors).To(HaveLen(5))
-	Metric.IncMessageReceived(10)
+	Metric.IncMessageReceived(getReceiverName(), 10)
 }
 
 func TestNewInformerDefault(t *testing.T) {

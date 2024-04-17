@@ -291,11 +291,15 @@ func TestProcessorStart_TwoReceivers(t *testing.T) {
 	}
 	close(rcv2.SetupReceivedMessages)
 
-	processor := shuttle.NewProcessor(rcv1, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
+	rcvs := []*shuttle.ReceiverImpl{
+		shuttle.NewReceiverImpl("testReceiver1", rcv1),
+		shuttle.NewReceiverImpl("testReceiver2", rcv2),
+	}
+
+	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
 		MaxConcurrency:  3,
 		ReceiveInterval: to.Ptr(20 * time.Millisecond),
 	})
-	processor.AddReceiver(rcv2)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	err := processor.Start(ctx)
@@ -325,16 +329,20 @@ func TestProcessorStart_TwoReceiversOneErrorOneSuccess(t *testing.T) {
 	}
 	close(rcv2.SetupReceivedMessages)
 
-	processor := shuttle.NewProcessor(rcv1, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
+	rcvs := []*shuttle.ReceiverImpl{
+		shuttle.NewReceiverImpl("testReceiver1", rcv1),
+		shuttle.NewReceiverImpl("testReceiver2", rcv2),
+	}
+
+	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
 		MaxConcurrency:  3,
 		ReceiveInterval: to.Ptr(20 * time.Millisecond),
 	})
-	processor.AddReceiver(rcv2)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	err := processor.Start(ctx)
 	a.Error(err, "expect to exit with error because we consumed all configured messages and one receiver failed to receive messages")
-	a.ErrorContains(err, "processor 1 failed to receive messages: fake receive error")
+	a.ErrorContains(err, "processor testReceiver2 failed to receive messages: fake receive error")
 	a.Equal(3, len(rcv1.ReceiveCalls), "there should be 3 entry in the ReceiveCalls array")
 	a.Equal(3, rcv1.ReceiveCalls[0], "the processor should have used max concurrency of 3")
 	a.Equal(1, len(rcv2.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
@@ -360,18 +368,22 @@ func TestProcessorStart_TwoReceiversWithStartRetry(t *testing.T) {
 	}
 	close(rcv2.SetupReceivedMessages)
 
-	processor := shuttle.NewProcessor(rcv1, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
+	rcvs := []*shuttle.ReceiverImpl{
+		shuttle.NewReceiverImpl("testReceiver1", rcv1),
+		shuttle.NewReceiverImpl("testReceiver2", rcv2),
+	}
+
+	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
 		MaxConcurrency:          3,
 		ReceiveInterval:         to.Ptr(20 * time.Millisecond),
 		StartMaxAttempt:         2,
 		StartRetryDelayStrategy: &shuttle.ConstantDelayStrategy{Delay: 10 * time.Millisecond},
 	})
-	processor.AddReceiver(rcv2)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	err := processor.Start(ctx)
 	a.Error(err, "expect to exit with error because we consumed all configured messages and one receiver failed to receive messages")
-	a.ErrorContains(err, "processor 1 failed to receive messages: fake receive error")
+	a.ErrorContains(err, "processor testReceiver2 failed to receive messages: fake receive error")
 	a.Equal(4, len(rcv1.ReceiveCalls), "there should be 4 entry in the ReceiveCalls array (3 receives and 1 retry)")
 	a.Equal(3, rcv1.ReceiveCalls[0], "the processor should have used max concurrency of 3")
 	a.Equal(2, len(rcv2.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array (1 retry)")
@@ -380,25 +392,24 @@ func TestProcessorStart_TwoReceiversWithStartRetry(t *testing.T) {
 
 func TestProcessorStart_MultiReceivers(t *testing.T) {
 	a := require.New(t)
-	receivers := make([]shuttle.Receiver, 0)
+	rcvs := make([]*shuttle.ReceiverImpl, 0)
 	fakeReceivers := make([]*fakeReceiver, 0)
 	expectedReceiveCalls := []int{1, 1, 1, 2, 2}
 	for i := 0; i < 5; i++ {
-		receiver := &fakeReceiver{
+		fakeReceiver := &fakeReceiver{
 			fakeSettler:           &fakeSettler{},
 			SetupMaxReceiveCalls:  expectedReceiveCalls[i],
 			SetupReceivedMessages: messagesChannel(i),
 		}
-		receivers = append(receivers, receiver)
-		fakeReceivers = append(fakeReceivers, receiver)
-		close(receiver.SetupReceivedMessages)
+		rcvs = append(rcvs, shuttle.NewReceiverImpl(fmt.Sprintf("testReceiver%d", i), fakeReceiver))
+		fakeReceivers = append(fakeReceivers, fakeReceiver)
+		close(fakeReceiver.SetupReceivedMessages)
 	}
 
-	processor := shuttle.NewProcessor(receivers[0], MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
+	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
 		MaxConcurrency:  3,
 		ReceiveInterval: to.Ptr(20 * time.Millisecond),
 	})
-	processor.AddReceiver(receivers[1:]...)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()

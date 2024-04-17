@@ -12,20 +12,6 @@ import (
 	"github.com/Azure/go-shuttle/v2/metrics/processor"
 )
 
-type Receiver interface {
-	ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
-	MessageSettler
-}
-
-// MessageSettler is passed to the handlers. it exposes the message settling functionality from the receiver needed within the handler.
-type MessageSettler interface {
-	AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error
-	CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error
-	DeadLetterMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeadLetterOptions) error
-	DeferMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeferMessageOptions) error
-	RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error
-}
-
 type Handler interface {
 	Handle(context.Context, MessageSettler, *azservicebus.ReceivedMessage)
 }
@@ -40,7 +26,7 @@ func (f HandlerFunc) Handle(ctx context.Context, settler MessageSettler, message
 // Processor encapsulates the message pump and concurrency handling of servicebus.
 // it exposes a handler API to provides a middleware based message processing pipeline.
 type Processor struct {
-	receivers         []Receiver
+	receivers         map[string]Receiver
 	options           ProcessorOptions
 	handle            Handler
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor, shared across all receivers
@@ -83,15 +69,44 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 		}
 	}
 	return &Processor{
-		receivers:         []Receiver{receiver},
+		receivers:         map[string]Receiver{"receiver": receiver},
 		handle:            handler,
 		options:           opts,
 		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
 	}
 }
 
-func (p *Processor) AddReceiver(receivers ...Receiver) {
-	p.receivers = append(p.receivers, receivers...)
+func NewMultiProcessor(receiversImpl []*ReceiverImpl, handler HandlerFunc, options *ProcessorOptions) *Processor {
+	opts := ProcessorOptions{
+		MaxConcurrency:          1,
+		ReceiveInterval:         to.Ptr(1 * time.Second),
+		StartMaxAttempt:         1,
+		StartRetryDelayStrategy: &ConstantDelayStrategy{Delay: 5 * time.Second},
+	}
+	if options != nil {
+		if options.ReceiveInterval != nil {
+			opts.ReceiveInterval = options.ReceiveInterval
+		}
+		if options.MaxConcurrency > 0 {
+			opts.MaxConcurrency = options.MaxConcurrency
+		}
+		if options.StartMaxAttempt > 0 {
+			opts.StartMaxAttempt = options.StartMaxAttempt
+		}
+		if options.StartRetryDelayStrategy != nil {
+			opts.StartRetryDelayStrategy = options.StartRetryDelayStrategy
+		}
+	}
+	var receivers = make(map[string]Receiver)
+	for _, receiver := range receiversImpl {
+		receivers[receiver.name] = receiver.sbReceiver
+	}
+	return &Processor{
+		receivers:         receivers,
+		handle:            handler,
+		options:           opts,
+		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
+	}
 }
 
 // Start starts processing on all the receivers of the processor and blocks until all processors are stopped or the context is canceled.
@@ -100,15 +115,15 @@ func (p *Processor) AddReceiver(receivers ...Receiver) {
 func (p *Processor) Start(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	errChan := make(chan error, len(p.receivers))
-	for i := range p.receivers {
+	for name := range p.receivers {
 		wg.Add(1)
-		go func(index int) {
+		go func(receiverName string) {
 			defer wg.Done()
-			err := p.StartAtIndex(ctx, index)
+			err := p.startOne(ctx, receiverName)
 			if err != nil {
 				errChan <- err
 			}
-		}(i)
+		}(name)
 	}
 	wg.Wait()
 	close(errChan)
@@ -119,19 +134,20 @@ func (p *Processor) Start(ctx context.Context) error {
 	return errors.Join(allErrs...)
 }
 
-// StartAtIndex starts the processor with receiver index and blocks until an error occurs or the context is canceled.
+// startOne starts the processor with the receiverName and blocks until an error occurs or the context is canceled.
 // It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
 // Returns a combined list of errors during the start attempts or ctx.Err() if the context
 // is cancelled during the retries.
-func (p *Processor) StartAtIndex(ctx context.Context, index int) error {
-	if index < 0 || index >= len(p.receivers) {
-		return fmt.Errorf("index out of range: %d", index)
+func (p *Processor) startOne(ctx context.Context, receiverName string) error {
+	_, ok := p.receivers[receiverName]
+	if !ok {
+		return fmt.Errorf("receiver %s not found", receiverName)
 	}
 	var savedError error
 	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
-		if err := p.start(ctx, index); err != nil {
+		if err := p.start(ctx, receiverName); err != nil {
 			savedError = errors.Join(savedError, err)
-			log(ctx, fmt.Sprintf("processor %d start attempt %d failed: %v", index, attempt, err))
+			log(ctx, fmt.Sprintf("processor for receiver %s start attempt %d failed: %v", receiverName, attempt, err))
 			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
 				break
 			}
@@ -148,17 +164,17 @@ func (p *Processor) StartAtIndex(ctx context.Context, index int) error {
 }
 
 // start starts the processor and blocks until an error occurs or the context is canceled.
-func (p *Processor) start(ctx context.Context, index int) error {
-	receiver := p.receivers[index]
-	log(ctx, fmt.Sprintf("starting processor %d", index))
+func (p *Processor) start(ctx context.Context, receiverName string) error {
+	receiver := p.receivers[receiverName]
+	log(ctx, fmt.Sprintf("starting processor %s", receiverName))
 	messages, err := receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
 	if err != nil {
-		return fmt.Errorf("processor %d failed to receive messages: %w", index, err)
+		return fmt.Errorf("processor %s failed to receive messages: %w", receiverName, err)
 	}
-	log(ctx, fmt.Sprintf("processor %d received %d messages - initial", index, len(messages)))
-	processor.Metric.IncMessageReceived(float64(len(messages)))
+	log(ctx, fmt.Sprintf("processor %s received %d messages - initial", receiverName, len(messages)))
+	processor.Metric.IncMessageReceived(receiverName, float64(len(messages)))
 	for _, msg := range messages {
-		p.process(ctx, receiver, msg)
+		p.process(ctx, receiverName, msg)
 	}
 	for ctx.Err() == nil {
 		select {
@@ -169,23 +185,24 @@ func (p *Processor) start(ctx context.Context, index int) error {
 			}
 			messages, err := receiver.ReceiveMessages(ctx, maxMessages, nil)
 			if err != nil {
-				return fmt.Errorf("processor %d failed to receive messages: %w", index, err)
+				return fmt.Errorf("processor %s failed to receive messages: %w", receiverName, err)
 			}
-			log(ctx, fmt.Sprintf("processor %d received %d messages from processor loop", index, len(messages)))
-			processor.Metric.IncMessageReceived(float64(len(messages)))
+			log(ctx, fmt.Sprintf("processor %s received %d messages from processor loop", receiverName, len(messages)))
+			processor.Metric.IncMessageReceived(receiverName, float64(len(messages)))
 			for _, msg := range messages {
-				p.process(ctx, receiver, msg)
+				p.process(ctx, receiverName, msg)
 			}
 		case <-ctx.Done():
-			log(ctx, fmt.Sprintf("context done, stop receiving from processor %d", index))
+			log(ctx, fmt.Sprintf("context done, stop receiving from processor %s", receiverName))
 			break
 		}
 	}
-	log(ctx, fmt.Sprintf("exiting processor %d", index))
-	return fmt.Errorf("processor %d stopped: %w", index, ctx.Err())
+	log(ctx, fmt.Sprintf("exiting processor %s", receiverName))
+	return fmt.Errorf("processor %s stopped: %w", receiverName, ctx.Err())
 }
 
-func (p *Processor) process(ctx context.Context, receiver Receiver, message *azservicebus.ReceivedMessage) {
+func (p *Processor) process(ctx context.Context, receiverName string, message *azservicebus.ReceivedMessage) {
+	receiver := p.receivers[receiverName]
 	p.concurrencyTokens <- struct{}{}
 	go func() {
 		msgContext, cancel := context.WithCancel(ctx)
@@ -193,7 +210,7 @@ func (p *Processor) process(ctx context.Context, receiver Receiver, message *azs
 		defer cancel()
 		defer func() {
 			<-p.concurrencyTokens
-			processor.Metric.IncMessageHandled(message)
+			processor.Metric.IncMessageHandled(receiverName, message)
 			processor.Metric.DecConcurrentMessageCount(message)
 		}()
 		processor.Metric.IncConcurrentMessageCount(message)
