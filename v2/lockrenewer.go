@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -63,17 +62,6 @@ func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions,
 		handler.Handle(renewalCtx, settler, message)
 		plr.stop(renewalCtx)
 	}
-}
-
-// Deprecated: use NewLockRenewalHandler
-// NewRenewLockHandler starts a renewlock goroutine for each message received.
-func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handler Handler) HandlerFunc {
-	return NewLockRenewalHandler(lockRenewer,
-		&LockRenewalOptions{
-			Interval: interval,
-			// default to false on the old handler signature to keep the same behavior
-			CancelMessageContextOnStop: to.Ptr(false)},
-		handler)
 }
 
 // peekLockRenewer starts a background goroutine that renews the message lock at the given interval until Stop() is called
