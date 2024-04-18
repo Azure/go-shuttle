@@ -291,9 +291,9 @@ func TestProcessorStart_TwoReceivers(t *testing.T) {
 	}
 	close(rcv2.SetupReceivedMessages)
 
-	rcvs := []*shuttle.ReceiverImpl{
-		shuttle.NewReceiverImpl("testReceiver1", rcv1),
-		shuttle.NewReceiverImpl("testReceiver2", rcv2),
+	rcvs := []*shuttle.ReceiverEx{
+		shuttle.NewReceiverEx("testReceiver1", rcv1),
+		shuttle.NewReceiverEx("testReceiver2", rcv2),
 	}
 
 	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
@@ -329,9 +329,9 @@ func TestProcessorStart_TwoReceiversOneErrorOneSuccess(t *testing.T) {
 	}
 	close(rcv2.SetupReceivedMessages)
 
-	rcvs := []*shuttle.ReceiverImpl{
-		shuttle.NewReceiverImpl("testReceiver1", rcv1),
-		shuttle.NewReceiverImpl("testReceiver2", rcv2),
+	rcvs := []*shuttle.ReceiverEx{
+		shuttle.NewReceiverEx("testReceiver1", rcv1),
+		shuttle.NewReceiverEx("testReceiver2", rcv2),
 	}
 
 	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
@@ -368,9 +368,9 @@ func TestProcessorStart_TwoReceiversWithStartRetry(t *testing.T) {
 	}
 	close(rcv2.SetupReceivedMessages)
 
-	rcvs := []*shuttle.ReceiverImpl{
-		shuttle.NewReceiverImpl("testReceiver1", rcv1),
-		shuttle.NewReceiverImpl("testReceiver2", rcv2),
+	rcvs := []*shuttle.ReceiverEx{
+		shuttle.NewReceiverEx("testReceiver1", rcv1),
+		shuttle.NewReceiverEx("testReceiver2", rcv2),
 	}
 
 	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(10*time.Millisecond), &shuttle.ProcessorOptions{
@@ -392,7 +392,7 @@ func TestProcessorStart_TwoReceiversWithStartRetry(t *testing.T) {
 
 func TestProcessorStart_MultiReceivers(t *testing.T) {
 	a := require.New(t)
-	rcvs := make([]*shuttle.ReceiverImpl, 0)
+	rcvs := make([]*shuttle.ReceiverEx, 0)
 	fakeReceivers := make([]*fakeReceiver, 0)
 	expectedReceiveCalls := []int{1, 1, 1, 2, 2}
 	for i := 0; i < 5; i++ {
@@ -401,7 +401,7 @@ func TestProcessorStart_MultiReceivers(t *testing.T) {
 			SetupMaxReceiveCalls:  expectedReceiveCalls[i],
 			SetupReceivedMessages: messagesChannel(i),
 		}
-		rcvs = append(rcvs, shuttle.NewReceiverImpl(fmt.Sprintf("testReceiver%d", i), fakeReceiver))
+		rcvs = append(rcvs, shuttle.NewReceiverEx(fmt.Sprintf("testReceiver%d", i), fakeReceiver))
 		fakeReceivers = append(fakeReceivers, fakeReceiver)
 		close(fakeReceiver.SetupReceivedMessages)
 	}

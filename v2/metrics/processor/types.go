@@ -50,7 +50,7 @@ func NewRegistry() *Registry {
 			Name:      "concurrent_message_count",
 			Help:      "number of messages being handled concurrently",
 			Subsystem: subsystem,
-		}, []string{messageTypeLabel}),
+		}, []string{receiverNameLabel, messageTypeLabel}),
 	}
 }
 
@@ -86,10 +86,10 @@ type Recorder interface {
 	IncMessageDeadlineReachedCount(msg *azservicebus.ReceivedMessage)
 	IncMessageLockRenewedFailure(msg *azservicebus.ReceivedMessage)
 	IncMessageLockRenewedSuccess(msg *azservicebus.ReceivedMessage)
-	DecConcurrentMessageCount(msg *azservicebus.ReceivedMessage)
 	IncMessageHandled(receiverName string, msg *azservicebus.ReceivedMessage)
 	IncMessageReceived(receiverName string, count float64)
-	IncConcurrentMessageCount(msg *azservicebus.ReceivedMessage)
+	IncConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage)
+	DecConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage)
 }
 
 // IncMessageLockRenewedSuccess increase the message lock renewal success counter
@@ -115,13 +115,17 @@ func (m *Registry) IncMessageHandled(receiverName string, msg *azservicebus.Rece
 }
 
 // IncConcurrentMessageCount increases the concurrent message counter
-func (m *Registry) IncConcurrentMessageCount(msg *azservicebus.ReceivedMessage) {
-	m.ConcurrentMessageCount.With(getMessageTypeLabel(msg)).Inc()
+func (m *Registry) IncConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage) {
+	labels := getMessageTypeLabel(msg)
+	labels[receiverNameLabel] = receiverName
+	m.ConcurrentMessageCount.With(labels).Inc()
 }
 
 // DecConcurrentMessageCount decreases the concurrent message counter
-func (m *Registry) DecConcurrentMessageCount(msg *azservicebus.ReceivedMessage) {
-	m.ConcurrentMessageCount.With(getMessageTypeLabel(msg)).Dec()
+func (m *Registry) DecConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage) {
+	labels := getMessageTypeLabel(msg)
+	labels[receiverNameLabel] = receiverName
+	m.ConcurrentMessageCount.With(labels).Dec()
 }
 
 // IncMessageDeadlineReachedCount increases the message deadline reached counter

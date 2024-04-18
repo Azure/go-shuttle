@@ -26,13 +26,13 @@ type MessageSettler interface {
 	RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error
 }
 
-type ReceiverImpl struct { // shuttle.Receiver is already an exported interface
+type ReceiverEx struct { // shuttle.Receiver is already an exported interface
 	name       string
 	sbReceiver Receiver
 }
 
-func NewReceiverImpl(name string, sbReceiver Receiver) *ReceiverImpl {
-	return &ReceiverImpl{
+func NewReceiverEx(name string, sbReceiver Receiver) *ReceiverEx {
+	return &ReceiverEx{
 		name:       name,
 		sbReceiver: sbReceiver,
 	}
@@ -52,7 +52,7 @@ func (f HandlerFunc) Handle(ctx context.Context, settler MessageSettler, message
 // Processor encapsulates the message pump and concurrency handling of servicebus.
 // it exposes a handler API to provides a middleware based message processing pipeline.
 type Processor struct {
-	receivers         map[string]*ReceiverImpl
+	receivers         map[string]*ReceiverEx
 	options           ProcessorOptions
 	handle            Handler
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor, shared across all receivers
@@ -99,19 +99,19 @@ func applyProcessorOptions(options *ProcessorOptions) *ProcessorOptions {
 
 func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := applyProcessorOptions(options)
-	receiverImpl := NewReceiverImpl("receiver", receiver)
+	receiverEx := NewReceiverEx("receiver", receiver)
 	return &Processor{
-		receivers:         map[string]*ReceiverImpl{receiverImpl.name: receiverImpl},
+		receivers:         map[string]*ReceiverEx{receiverEx.name: receiverEx},
 		handle:            handler,
 		options:           *opts,
 		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
 	}
 }
 
-func NewMultiProcessor(receiversImpl []*ReceiverImpl, handler HandlerFunc, options *ProcessorOptions) *Processor {
+func NewMultiProcessor(receiversEx []*ReceiverEx, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := applyProcessorOptions(options)
-	var receivers = make(map[string]*ReceiverImpl)
-	for _, receiver := range receiversImpl {
+	var receivers = make(map[string]*ReceiverEx)
+	for _, receiver := range receiversEx {
 		receivers[receiver.name] = receiver
 	}
 	return &Processor{
@@ -178,7 +178,8 @@ func (p *Processor) startOne(ctx context.Context, receiverName string) error {
 
 // start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) start(ctx context.Context, receiverName string) error {
-	receiver := p.receivers[receiverName].sbReceiver
+	receiverEx := p.receivers[receiverName]
+	receiver := receiverEx.sbReceiver
 	log(ctx, fmt.Sprintf("starting processor %s", receiverName))
 	messages, err := receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
 	if err != nil {
@@ -187,7 +188,7 @@ func (p *Processor) start(ctx context.Context, receiverName string) error {
 	log(ctx, fmt.Sprintf("processor %s received %d messages - initial", receiverName, len(messages)))
 	processor.Metric.IncMessageReceived(receiverName, float64(len(messages)))
 	for _, msg := range messages {
-		p.process(ctx, receiverName, msg)
+		p.process(ctx, receiverEx, msg)
 	}
 	for ctx.Err() == nil {
 		select {
@@ -203,7 +204,7 @@ func (p *Processor) start(ctx context.Context, receiverName string) error {
 			log(ctx, fmt.Sprintf("processor %s received %d messages from processor loop", receiverName, len(messages)))
 			processor.Metric.IncMessageReceived(receiverName, float64(len(messages)))
 			for _, msg := range messages {
-				p.process(ctx, receiverName, msg)
+				p.process(ctx, receiverEx, msg)
 			}
 		case <-ctx.Done():
 			log(ctx, fmt.Sprintf("context done, stop receiving from processor %s", receiverName))
@@ -214,8 +215,8 @@ func (p *Processor) start(ctx context.Context, receiverName string) error {
 	return fmt.Errorf("processor %s stopped: %w", receiverName, ctx.Err())
 }
 
-func (p *Processor) process(ctx context.Context, receiverName string, message *azservicebus.ReceivedMessage) {
-	receiver := p.receivers[receiverName].sbReceiver
+func (p *Processor) process(ctx context.Context, receiverEx *ReceiverEx, message *azservicebus.ReceivedMessage) {
+	receiverName := receiverEx.name
 	p.concurrencyTokens <- struct{}{}
 	go func() {
 		msgContext, cancel := context.WithCancel(ctx)
@@ -224,10 +225,10 @@ func (p *Processor) process(ctx context.Context, receiverName string, message *a
 		defer func() {
 			<-p.concurrencyTokens
 			processor.Metric.IncMessageHandled(receiverName, message)
-			processor.Metric.DecConcurrentMessageCount(message)
+			processor.Metric.DecConcurrentMessageCount(receiverName, message)
 		}()
-		processor.Metric.IncConcurrentMessageCount(message)
-		p.handle.Handle(msgContext, receiver, message)
+		processor.Metric.IncConcurrentMessageCount(receiverName, message)
+		p.handle.Handle(msgContext, receiverEx.sbReceiver, message)
 	}()
 }
 
