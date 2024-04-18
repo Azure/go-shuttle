@@ -152,13 +152,13 @@ func (p *Processor) Start(ctx context.Context) error {
 // Returns a combined list of errors during the start attempts or ctx.Err() if the context
 // is cancelled during the retries.
 func (p *Processor) startOne(ctx context.Context, receiverName string) error {
-	_, ok := p.receivers[receiverName]
+	receiverEx, ok := p.receivers[receiverName]
 	if !ok {
 		return fmt.Errorf("processor %s not found", receiverName)
 	}
 	var savedError error
 	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
-		if err := p.start(ctx, receiverName); err != nil {
+		if err := p.start(ctx, receiverEx); err != nil {
 			savedError = errors.Join(savedError, err)
 			log(ctx, fmt.Sprintf("processor %s start attempt %d failed: %v", receiverName, attempt, err))
 			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
@@ -177,8 +177,8 @@ func (p *Processor) startOne(ctx context.Context, receiverName string) error {
 }
 
 // start starts the processor and blocks until an error occurs or the context is canceled.
-func (p *Processor) start(ctx context.Context, receiverName string) error {
-	receiverEx := p.receivers[receiverName]
+func (p *Processor) start(ctx context.Context, receiverEx *ReceiverEx) error {
+	receiverName := receiverEx.name
 	receiver := receiverEx.sbReceiver
 	log(ctx, fmt.Sprintf("starting processor %s", receiverName))
 	messages, err := receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
