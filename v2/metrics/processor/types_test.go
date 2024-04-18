@@ -32,7 +32,6 @@ func TestRegistry_Init(t *testing.T) {
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
 	g.Expect(fRegistry.collectors).To(HaveLen(5))
 	Metric.IncMessageReceived("testReceiverName", 10)
-	g.Expect(r.MessageReceivedCount.)
 }
 
 func TestNewInformerDefault(t *testing.T) {
