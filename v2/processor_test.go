@@ -43,8 +43,58 @@ func ExampleProcessor() {
 	lockRenewalOptions := &shuttle.LockRenewalOptions{Interval: &lockRenewalInterval}
 	p := shuttle.NewProcessor(receiver,
 		shuttle.NewPanicHandler(nil,
-			shuttle.NewLockRenewalHandler(receiver, lockRenewalOptions,
-				MyHandler(0*time.Second))), &shuttle.ProcessorOptions{MaxConcurrency: 10})
+			shuttle.NewRenewLockHandler(lockRenewalOptions,
+				MyHandler(0*time.Second))),
+		&shuttle.ProcessorOptions{
+			MaxConcurrency:  10,
+			StartMaxAttempt: 5,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err = p.Start(ctx)
+	if err != nil {
+		panic(err)
+	}
+	cancel()
+}
+
+func ExampleMultiProcessor() {
+	tokenCredential, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		panic(err)
+	}
+	client, err := azservicebus.NewClient("myservicebus-1.servicebus.windows.net", tokenCredential, nil)
+	if err != nil {
+		panic(err)
+	}
+	receiver1, err := client.NewReceiverForSubscription("topic-a", "sub-a", nil)
+	if err != nil {
+		panic(err)
+	}
+	client, err = azservicebus.NewClient("myservicebus-2.servicebus.windows.net", tokenCredential, nil)
+	if err != nil {
+		panic(err)
+	}
+	receiver2, err := client.NewReceiverForSubscription("topic-a", "sub-a", nil)
+	if err != nil {
+		panic(err)
+	}
+	receivers := []*shuttle.ReceiverEx{
+		shuttle.NewReceiverEx("receiver1", receiver1),
+		shuttle.NewReceiverEx("receiver2", receiver2),
+	}
+	lockRenewalInterval := 10 * time.Second
+	lockRenewalOptions := &shuttle.LockRenewalOptions{Interval: &lockRenewalInterval}
+	p := shuttle.NewMultiProcessor(receivers,
+		shuttle.NewPanicHandler(nil,
+			shuttle.NewRenewLockHandler(lockRenewalOptions,
+				MyHandler(0*time.Second))),
+		&shuttle.ProcessorOptions{
+			MaxConcurrency:  10,
+			StartMaxAttempt: 5,
+		},
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	err = p.Start(ctx)

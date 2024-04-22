@@ -97,6 +97,7 @@ func applyProcessorOptions(options *ProcessorOptions) *ProcessorOptions {
 	return opts
 }
 
+// NewProcessor creates a new processor with the provided receiver and handler.
 func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := applyProcessorOptions(options)
 	receiverEx := NewReceiverEx("receiver", receiver)
@@ -108,6 +109,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 	}
 }
 
+// NewMultiProcessor creates a new processor with a list of receivers and a handler.
 func NewMultiProcessor(receiversEx []*ReceiverEx, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := applyProcessorOptions(options)
 	var receivers = make(map[string]*ReceiverEx)
