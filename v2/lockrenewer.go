@@ -31,9 +31,8 @@ type LockRenewalOptions struct {
 	MetricRecorder processor.Recorder
 }
 
-// NewRenewLockHandler
-// NewLockRenewalHandlerV2 returns a middleware handler that will renew the lock on the message at the specified interval.
-func NewLockRenewalHandlerV2(options *LockRenewalOptions, handler Handler) HandlerFunc {
+// NewRenewLockHandler returns a middleware handler that will renew the lock on the message at the specified interval.
+func NewRenewLockHandler(options *LockRenewalOptions, handler Handler) HandlerFunc {
 	interval := 10 * time.Second
 	cancelMessageContextOnStop := true
 	metricRecorder := processor.Metric
@@ -65,7 +64,7 @@ func NewLockRenewalHandlerV2(options *LockRenewalOptions, handler Handler) Handl
 	}
 }
 
-// Deprecated: use NewLockRenewalHandlerV2
+// Deprecated: use NewRenewLockHandler
 // NewLockRenewalHandler returns a middleware handler that will renew the lock on the message at the specified interval.
 func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions, handler Handler) HandlerFunc {
 	interval := 10 * time.Second
