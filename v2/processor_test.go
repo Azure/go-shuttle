@@ -450,8 +450,8 @@ func TestProcessorStart_SinglePanic(t *testing.T) {
 	ctx := context.Background()
 	// expect Start() function to not panic
 	g := NewWithT(t)
-	g.Expect(func() { processor.Start(ctx) }).To(Not(Panic()))
-	err := processor.Start(ctx)
+	var err error
+	g.Expect(func() { err = processor.Start(ctx) }).To(Not(Panic()))
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor testReceiver1: receive panic!"))
 	g.Expect(err.Error()).To(ContainSubstring("processor testReceiver2 failed to receive messages: max receive calls exceeded"))
@@ -482,8 +482,8 @@ func TestProcessorStart_TwoPanics(t *testing.T) {
 	ctx := context.Background()
 	// expect Start() function to not panic
 	g := NewWithT(t)
-	g.Expect(func() { processor.Start(ctx) }).To(Not(Panic()))
-	err := processor.Start(ctx)
+	var err error
+	g.Expect(func() { err = processor.Start(ctx) }).To(Not(Panic()))
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor testReceiver1: receive panic!"))
 	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor testReceiver2: receive panic!"))
