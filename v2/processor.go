@@ -131,7 +131,12 @@ func (p *Processor) Start(ctx context.Context) error {
 	for name := range p.receivers {
 		wg.Add(1)
 		go func(receiverName string) {
-			defer wg.Done()
+			defer func() {
+				if rec := recover(); rec != nil {
+					errChan <- fmt.Errorf("panic recovered from processor %s: %v", receiverName, rec)
+				}
+				wg.Done()
+			}()
 			err := p.startOne(ctx, receiverName)
 			if err != nil {
 				errChan <- err

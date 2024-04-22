@@ -304,7 +304,8 @@ func TestProcessorStart_TwoReceivers(t *testing.T) {
 	defer cancel()
 	err := processor.Start(ctx)
 	a.Error(err, "expect to exit with error because we consumed all configured messages")
-	for _, rcv := range []*fakeReceiver{rcv1, rcv2} {
+	for i, rcv := range []*fakeReceiver{rcv1, rcv2} {
+		a.ErrorContains(err, fmt.Sprintf("processor testReceiver%d failed to receive messages: max receive calls exceeded", i+1))
 		a.Equal(3, len(rcv.ReceiveCalls), "there should be 3 entry in the ReceiveCalls array")
 		a.Equal(3, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 3")
 	}
@@ -342,6 +343,7 @@ func TestProcessorStart_TwoReceiversOneErrorOneSuccess(t *testing.T) {
 	defer cancel()
 	err := processor.Start(ctx)
 	a.Error(err, "expect to exit with error because we consumed all configured messages and one receiver failed to receive messages")
+	a.ErrorContains(err, "processor testReceiver1 failed to receive messages: max receive calls exceeded")
 	a.ErrorContains(err, "processor testReceiver2 failed to receive messages: fake receive error")
 	a.Equal(3, len(rcv1.ReceiveCalls), "there should be 3 entry in the ReceiveCalls array")
 	a.Equal(3, rcv1.ReceiveCalls[0], "the processor should have used max concurrency of 3")
@@ -383,6 +385,7 @@ func TestProcessorStart_TwoReceiversWithStartRetry(t *testing.T) {
 	defer cancel()
 	err := processor.Start(ctx)
 	a.Error(err, "expect to exit with error because we consumed all configured messages and one receiver failed to receive messages")
+	a.ErrorContains(err, "processor testReceiver1 failed to receive messages: max receive calls exceeded")
 	a.ErrorContains(err, "processor testReceiver2 failed to receive messages: fake receive error")
 	a.Equal(4, len(rcv1.ReceiveCalls), "there should be 4 entry in the ReceiveCalls array (3 receives and 1 retry)")
 	a.Equal(3, rcv1.ReceiveCalls[0], "the processor should have used max concurrency of 3")
@@ -417,9 +420,73 @@ func TestProcessorStart_MultiReceivers(t *testing.T) {
 	a.Error(err, "expect to exit with error because we consumed all configured messages")
 
 	for i, fakeReceiver := range fakeReceivers {
+		a.ErrorContains(err, fmt.Sprintf("processor testReceiver%d failed to receive messages: max receive calls exceeded", i))
 		a.Equal(len(fakeReceiver.ReceiveCalls), expectedReceiveCalls[i], "receiver %d should have received %d messages", i, expectedReceiveCalls[i])
 		a.Equal(fakeReceiver.ReceiveCalls[0], 3, "receiver %d should have used max concurrency of 3", i)
 	}
+}
+
+func TestProcessorStart_SinglePanic(t *testing.T) {
+	rcv1 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messagesChannel(1),
+		SetupMaxReceiveCalls:  2,
+		SetupReceivePanic:     "receive panic!",
+	}
+	close(rcv1.SetupReceivedMessages)
+	rcv2 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messagesChannel(1),
+		SetupMaxReceiveCalls:  2,
+	}
+	close(rcv2.SetupReceivedMessages)
+	rcvs := []*shuttle.ReceiverEx{
+		shuttle.NewReceiverEx("testReceiver1", rcv1),
+		shuttle.NewReceiverEx("testReceiver2", rcv2),
+	}
+	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(0*time.Second), nil)
+	//ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	//defer cancel()
+	ctx := context.Background()
+	// expect Start() function to not panic
+	g := NewWithT(t)
+	g.Expect(func() { processor.Start(ctx) }).To(Not(Panic()))
+	err := processor.Start(ctx)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor testReceiver1: receive panic!"))
+	g.Expect(err.Error()).To(ContainSubstring("processor testReceiver2 failed to receive messages: max receive calls exceeded"))
+}
+
+func TestProcessorStart_TwoPanics(t *testing.T) {
+	rcv1 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messagesChannel(1),
+		SetupMaxReceiveCalls:  2,
+		SetupReceivePanic:     "receive panic!",
+	}
+	close(rcv1.SetupReceivedMessages)
+	rcv2 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messagesChannel(1),
+		SetupMaxReceiveCalls:  2,
+		SetupReceivePanic:     "receive panic!",
+	}
+	close(rcv2.SetupReceivedMessages)
+	rcvs := []*shuttle.ReceiverEx{
+		shuttle.NewReceiverEx("testReceiver1", rcv1),
+		shuttle.NewReceiverEx("testReceiver2", rcv2),
+	}
+	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(0*time.Second), nil)
+	//ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	//defer cancel()
+	ctx := context.Background()
+	// expect Start() function to not panic
+	g := NewWithT(t)
+	g.Expect(func() { processor.Start(ctx) }).To(Not(Panic()))
+	err := processor.Start(ctx)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor testReceiver1: receive panic!"))
+	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor testReceiver2: receive panic!"))
 }
 
 func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {
