@@ -28,11 +28,11 @@ It allows concurrent message handling and provides a message handler middleware 
 // StartMaxAttempt defaults to 1 if not set (no retries). Not setting StartMaxAttempt, or setting it to non-positive value will fallback to the default.
 // StartRetryDelayStrategy defaults to a fixed 5-second delay if not set.
 type ProcessorOptions struct {
-MaxConcurrency  int
-ReceiveInterval *time.Duration
-
-StartMaxAttempt         int
-StartRetryDelayStrategy RetryDelayStrategy
+    MaxConcurrency  int
+    ReceiveInterval *time.Duration
+    
+    StartMaxAttempt         int
+    StartRetryDelayStrategy RetryDelayStrategy
 }
 ```
 
