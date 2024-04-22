@@ -128,23 +128,6 @@ func Test_RenewPeriodically(t *testing.T) {
 		20*time.Millisecond).Should(Succeed())
 }
 
-//nolint:staticcheck // still need to cover the deprecated func
-func Test_NewLockRenewerHandler_defaultToNotCancelMessageContext(t *testing.T) {
-	g := NewWithT(t)
-	interval := 20 * time.Millisecond
-	sbRenewer := &fakeSBLockRenewer{
-		Err: &azservicebus.Error{Code: azservicebus.CodeLockLost},
-	}
-
-	handler := shuttle.NewRenewLockHandler(sbRenewer, &interval,
-		shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
-			g.Consistently(func(g Gomega) {
-				g.Expect(ctx.Err()).To(BeNil())
-			}, "120ms", "10ms").Should(Succeed())
-		}))
-	handler.Handle(context.Background(), &fakeSettler{}, &azservicebus.ReceivedMessage{})
-}
-
 func Test_RenewPeriodically_Error(t *testing.T) {
 	type testCase struct {
 		name              string
