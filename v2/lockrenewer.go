@@ -67,35 +67,7 @@ func NewRenewLockHandler(options *LockRenewalOptions, handler Handler) HandlerFu
 // Deprecated: use NewRenewLockHandler
 // NewLockRenewalHandler returns a middleware handler that will renew the lock on the message at the specified interval.
 func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions, handler Handler) HandlerFunc {
-	interval := 10 * time.Second
-	cancelMessageContextOnStop := true
-	metricRecorder := processor.Metric
-	if options != nil {
-		if options.Interval != nil {
-			interval = *options.Interval
-		}
-		if options.CancelMessageContextOnStop != nil {
-			cancelMessageContextOnStop = *options.CancelMessageContextOnStop
-		}
-		if options.MetricRecorder != nil {
-			metricRecorder = options.MetricRecorder
-		}
-	}
-	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
-		plr := &peekLockRenewer{
-			next:                   handler,
-			lockRenewer:            lockRenewer,
-			renewalInterval:        &interval,
-			metrics:                metricRecorder,
-			cancelMessageCtxOnStop: cancelMessageContextOnStop,
-			stopped:                make(chan struct{}, 1), // buffered channel to ensure we are not blocking
-		}
-		renewalCtx, cancel := context.WithCancel(ctx)
-		plr.cancelMessageCtx = cancel
-		go plr.startPeriodicRenewal(renewalCtx, message)
-		handler.Handle(renewalCtx, settler, message)
-		plr.stop(renewalCtx)
-	}
+	return NewRenewLockHandler(options, handler)
 }
 
 // peekLockRenewer starts a background goroutine that renews the message lock at the given interval until Stop() is called
