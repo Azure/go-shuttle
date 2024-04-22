@@ -54,6 +54,7 @@ type fakeReceiver struct {
 	SetupReceivedMessages chan *azservicebus.ReceivedMessage
 	*fakeSettler
 	SetupMaxReceiveCalls int
+	SetupReceivePanic    string
 }
 
 func (f *fakeReceiver) ReceiveMessages(_ context.Context, maxMessages int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
@@ -67,6 +68,10 @@ func (f *fakeReceiver) ReceiveMessages(_ context.Context, maxMessages int, _ *az
 		if len(result) == maxMessages || len(f.SetupReceivedMessages) == 0 {
 			break
 		}
+	}
+
+	if f.SetupReceivePanic != "" {
+		panic(f.SetupReceivePanic)
 	}
 
 	// return an error if we request more messages than there are available.
