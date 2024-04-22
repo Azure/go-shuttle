@@ -59,7 +59,7 @@ func ExampleProcessor() {
 	cancel()
 }
 
-func ExampleMultiProcessor() {
+func ExampleProcessor_MultiProcessor() {
 	tokenCredential, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		panic(err)
@@ -537,6 +537,45 @@ func TestProcessorStart_TwoPanics(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor testReceiver1: receive panic!"))
 	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor testReceiver2: receive panic!"))
+}
+
+func TestProcessorStart_MultiProcessorWithNewRenewLockHandler(t *testing.T) {
+	rcv1 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messagesChannel(1),
+		SetupMaxReceiveCalls:  2,
+	}
+	close(rcv1.SetupReceivedMessages)
+	rcv2 := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messagesChannel(1),
+		SetupMaxReceiveCalls:  2,
+	}
+	close(rcv2.SetupReceivedMessages)
+	rcvs := []*shuttle.ReceiverEx{
+		shuttle.NewReceiverEx("testReceiver1", rcv1),
+		shuttle.NewReceiverEx("testReceiver2", rcv2),
+	}
+	lockRenewalInterval := 50 * time.Millisecond
+	lockRenewalOptions := &shuttle.LockRenewalOptions{Interval: &lockRenewalInterval}
+	processor := shuttle.NewMultiProcessor(rcvs,
+		shuttle.NewRenewLockHandler(lockRenewalOptions, MyHandler(150*time.Millisecond)),
+		&shuttle.ProcessorOptions{
+			MaxConcurrency: 2,
+		})
+	ctx, cancel := context.WithTimeout(context.TODO(), 120*time.Millisecond)
+	defer cancel()
+	err := processor.Start(ctx)
+	g := NewWithT(t)
+	g.Expect(err).To(HaveOccurred())
+	g.Eventually(
+		func(g Gomega) { g.Expect(rcv1.RenewCalled.Load()).To(Equal(int32(2))) },
+		130*time.Millisecond,
+		20*time.Millisecond).Should(Succeed())
+	g.Eventually(
+		func(g Gomega) { g.Expect(rcv2.RenewCalled.Load()).To(Equal(int32(2))) },
+		130*time.Millisecond,
+		20*time.Millisecond).Should(Succeed())
 }
 
 func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {
