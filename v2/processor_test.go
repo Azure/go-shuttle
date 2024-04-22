@@ -59,7 +59,7 @@ func ExampleProcessor() {
 	cancel()
 }
 
-func ExampleProcessor_MultiProcessor() {
+func ExampleProcessor_multiProcessor() {
 	tokenCredential, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		panic(err)
