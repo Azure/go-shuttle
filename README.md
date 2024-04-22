@@ -15,19 +15,32 @@ We are assuming that both the publisher and the listener are using go-shuttle
 The processor handles the message pump and feeds your message handler.
 It allows concurrent message handling and provides a message handler middleware pipeline to compose message handling behavior
 
-### Concurrent message handling
+### Processor Options
+
+`MaxConcurrency` and `ReceiveInterval` configures the concurrent message handling for the processor.
+
+`StartMaxAttempt` and `StartRetryDelayStrategy` configures the retry behaviour for the processor.
 
 ```golang
 // ProcessorOptions configures the processor
 // MaxConcurrency defaults to 1. Not setting MaxConcurrency, or setting it to 0 or a negative value will fallback to the default.
 // ReceiveInterval defaults to 2 seconds if not set.
+// StartMaxAttempt defaults to 1 if not set (no retries). Not setting StartMaxAttempt, or setting it to non-positive value will fallback to the default.
+// StartRetryDelayStrategy defaults to a fixed 5-second delay if not set.
 type ProcessorOptions struct {
-  MaxConcurrency  int
-  ReceiveInterval *time.Duration
+MaxConcurrency  int
+ReceiveInterval *time.Duration
+
+StartMaxAttempt         int
+StartRetryDelayStrategy RetryDelayStrategy
 }
 ```
 
-see [Processor example](v2/processor_test.go)
+### MultiProcessor
+
+`NewMultiProcessor` takes in a list of receivers and a message handler. It creates a processor for each receiver and starts them concurrently.
+
+see [Processor and MultiProcessor examples](v2/processor_test.go)
 
 ## Middlewares:
 GoSHuttle provides a few middleware to simplify the implementation of the message handler in the application code
@@ -55,7 +68,7 @@ This middleware will renew the lock on each message every 30 seconds until the m
 
 ```golang
 renewInterval := 30 * time.Second
-shuttle.NewLockRenewalHandler(receiver, &shuttle.LockRenewalOptions{Interval: &renewInterval}, handler)
+shuttle.NewRenewLockHandler(&shuttle.LockRenewalOptions{Interval: &renewInterval}, handler)
 ```
 
 see setup in [Processor example](v2/processor_test.go)
