@@ -27,7 +27,7 @@ func ExampleNewManagedSettlingHandler() {
 	lockRenewalInterval := 10 * time.Second
 	p := shuttle.NewProcessor(receiver,
 		shuttle.NewPanicHandler(nil,
-			shuttle.NewLockRenewalHandler(receiver, &shuttle.LockRenewalOptions{Interval: &lockRenewalInterval},
+			shuttle.NewRenewLockHandler(&shuttle.LockRenewalOptions{Interval: &lockRenewalInterval},
 				shuttle.NewManagedSettlingHandler(&shuttle.ManagedSettlingOptions{
 					RetryDecision:      &shuttle.MaxAttemptsRetryDecision{MaxAttempts: 2},
 					RetryDelayStrategy: &shuttle.ConstantDelayStrategy{Delay: 2 * time.Second},

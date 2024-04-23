@@ -31,8 +31,8 @@ type LockRenewalOptions struct {
 	MetricRecorder processor.Recorder
 }
 
-// NewLockRenewalHandler returns a middleware handler that will renew the lock on the message at the specified interval.
-func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions, handler Handler) HandlerFunc {
+// NewRenewLockHandler returns a middleware handler that will renew the lock on the message at the specified interval.
+func NewRenewLockHandler(options *LockRenewalOptions, handler Handler) HandlerFunc {
 	interval := 10 * time.Second
 	cancelMessageContextOnStop := true
 	metricRecorder := processor.Metric
@@ -50,7 +50,7 @@ func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions,
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 		plr := &peekLockRenewer{
 			next:                   handler,
-			lockRenewer:            lockRenewer,
+			lockRenewer:            settler,
 			renewalInterval:        &interval,
 			metrics:                metricRecorder,
 			cancelMessageCtxOnStop: cancelMessageContextOnStop,
@@ -62,6 +62,12 @@ func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions,
 		handler.Handle(renewalCtx, settler, message)
 		plr.stop(renewalCtx)
 	}
+}
+
+// Deprecated: use NewRenewLockHandler
+// NewLockRenewalHandler returns a middleware handler that will renew the lock on the message at the specified interval.
+func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions, handler Handler) HandlerFunc {
+	return NewRenewLockHandler(options, handler)
 }
 
 // peekLockRenewer starts a background goroutine that renews the message lock at the given interval until Stop() is called
