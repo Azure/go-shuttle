@@ -261,6 +261,17 @@ func TestSender_AzSender(t *testing.T) {
 	g.Expect(sender.AzSender()).To(Equal(azSender))
 }
 
+func TestSender_FailOver(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{SendMessageErr: fmt.Errorf("msg send failure")}
+	sender := NewSender(azSender, nil)
+	err := sender.SendMessage(context.Background(), "test")
+	g.Expect(err).To(HaveOccurred())
+	sender.FailOver(&fakeAzSender{})
+	err = sender.SendMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
 type fakeAzSender struct {
 	DoSendMessage                 func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
 	DoSendMessageBatch            func(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error

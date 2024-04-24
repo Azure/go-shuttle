@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
@@ -29,6 +30,7 @@ type AzServiceBusSender interface {
 // Sender contains an SBSender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
 type Sender struct {
 	sbSender AzServiceBusSender
+	mu       sync.RWMutex
 	options  *SenderOptions
 }
 
@@ -63,7 +65,7 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 	if ctx.Err() != nil {
 		return fmt.Errorf("failed to send message: %w", ctx.Err())
 	}
-	
+
 	msg, err := d.ToServiceBusMessage(ctx, mb, options...)
 	if err != nil {
 		return err
@@ -74,6 +76,8 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 		defer cancel()
 	}
 
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	errChan := make(chan error)
 
 	go func() {
@@ -135,7 +139,9 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 	if ctx.Err() != nil {
 		return fmt.Errorf("failed to send message: %w", ctx.Err())
 	}
-	
+
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	batch, err := d.sbSender.NewMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
 	if err != nil {
 		return err
@@ -178,7 +184,15 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 
 // AzSender returns the underlying azservicebus.Sender instance.
 func (d *Sender) AzSender() AzServiceBusSender {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return d.sbSender
+}
+
+func (d *Sender) FailOver(sender AzServiceBusSender) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.sbSender = sender
 }
 
 // SetMessageId sets the ServiceBus message's ID to a user-specified value
