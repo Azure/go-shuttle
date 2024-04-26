@@ -32,13 +32,14 @@ type ManagedSettler struct {
 }
 
 func (m *ManagedSettler) Handle(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
+	logger := getLogger()
 	if err := m.next.Handle(ctx, message); err != nil {
-		log(ctx, "error returned from the handler. Calling ManagedSettler error handler")
+		logger.ErrorContext(ctx, "error returned from the handler. Calling ManagedSettler error handler")
 		m.options.OnError(ctx, m.options, settler, message, err)
 		return
 	}
 	if err := settler.CompleteMessage(ctx, message, nil); err != nil {
-		log(ctx, err)
+		logger.ErrorContext(ctx, fmt.Sprintf("error completing message: %s", err))
 		m.options.OnAbandoned(ctx, message, err)
 		return
 		// if we fail to complete the message, we log the error and let the message lock expire.
@@ -150,8 +151,9 @@ func handleError(ctx context.Context,
 	if handleErr == nil {
 		handleErr = fmt.Errorf("nil error: %w", handleErr)
 	}
+	logger := getLogger()
 	if !options.RetryDecision.CanRetry(handleErr, message) {
-		log(ctx, fmt.Sprintf("moving message to dead letter queue because processing failed to an error: %s", handleErr))
+		logger.ErrorContext(ctx, fmt.Sprintf("moving message to dead letter queue because processing failed to an error: %s", handleErr))
 		deadLetterSettlement.settle(ctx, settler, message, &azservicebus.DeadLetterOptions{
 			Reason:             to.Ptr("ManagedSettlingHandlerDeadLettering"),
 			ErrorDescription:   to.Ptr(handleErr.Error()),
@@ -164,7 +166,7 @@ func handleError(ctx context.Context,
 	// the delay is implemented as an in-memory sleep before calling abandon.
 	// this will continue renewing the lock on the message while we wait for this delay to pass.
 	delay := options.RetryDelayStrategy.GetDelay(message.DeliveryCount)
-	log(ctx, fmt.Sprintf("delay strategy return delay of %s", delay))
+	logger.InfoContext(ctx, fmt.Sprintf("delay strategy return delay of %s", delay))
 	time.Sleep(delay)
 	abandonSettlement.settle(ctx, settler, message, nil)
 	options.OnAbandoned(ctx, message, handleErr)
