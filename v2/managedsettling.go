@@ -34,7 +34,7 @@ type ManagedSettler struct {
 func (m *ManagedSettler) Handle(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 	logger := getLogger()
 	if err := m.next.Handle(ctx, message); err != nil {
-		logger.ErrorContext(ctx, "error returned from the handler. Calling ManagedSettler error handler")
+		logger.ErrorContext(ctx, "error returned from the handler. Calling ManagedSettler error handler. error: %s", err)
 		m.options.OnError(ctx, m.options, settler, message, err)
 		return
 	}
