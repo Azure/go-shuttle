@@ -61,7 +61,7 @@ type NoOp struct {
 
 func (a *NoOp) Settle(ctx context.Context, _ MessageSettler, message *azservicebus.ReceivedMessage) {
 	span := tab.FromContext(ctx)
-	getLogger().WarnContext(ctx, "no op settlement. message lock is locked until: ", message.LockedUntil)
+	getLogger().WarnContext(ctx, fmt.Sprintf("no op settlement. message lock is locked until: %s", message.LockedUntil))
 	span.Logger().Info("no op settlement. message lock is not released")
 }
 
