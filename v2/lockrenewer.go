@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -32,8 +31,8 @@ type LockRenewalOptions struct {
 	MetricRecorder processor.Recorder
 }
 
-// NewLockRenewalHandler returns a middleware handler that will renew the lock on the message at the specified interval.
-func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions, handler Handler) HandlerFunc {
+// NewRenewLockHandler returns a middleware handler that will renew the lock on the message at the specified interval.
+func NewRenewLockHandler(options *LockRenewalOptions, handler Handler) HandlerFunc {
 	interval := 10 * time.Second
 	cancelMessageContextOnStop := true
 	metricRecorder := processor.Metric
@@ -51,7 +50,7 @@ func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions,
 	return func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) {
 		plr := &peekLockRenewer{
 			next:                   handler,
-			lockRenewer:            lockRenewer,
+			lockRenewer:            settler,
 			renewalInterval:        &interval,
 			metrics:                metricRecorder,
 			cancelMessageCtxOnStop: cancelMessageContextOnStop,
@@ -65,15 +64,10 @@ func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions,
 	}
 }
 
-// Deprecated: use NewLockRenewalHandler
-// NewRenewLockHandler starts a renewlock goroutine for each message received.
-func NewRenewLockHandler(lockRenewer LockRenewer, interval *time.Duration, handler Handler) HandlerFunc {
-	return NewLockRenewalHandler(lockRenewer,
-		&LockRenewalOptions{
-			Interval: interval,
-			// default to false on the old handler signature to keep the same behavior
-			CancelMessageContextOnStop: to.Ptr(false)},
-		handler)
+// Deprecated: use NewRenewLockHandler
+// NewLockRenewalHandler returns a middleware handler that will renew the lock on the message at the specified interval.
+func NewLockRenewalHandler(lockRenewer LockRenewer, options *LockRenewalOptions, handler Handler) HandlerFunc {
+	return NewRenewLockHandler(options, handler)
 }
 
 // peekLockRenewer starts a background goroutine that renews the message lock at the given interval until Stop() is called
