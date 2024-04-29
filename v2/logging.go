@@ -12,9 +12,9 @@ func getLogger() *slog.Logger {
 	return log
 }
 
-// EnableHandler allows to set a custom slog.Handler to be used by the go-shuttle logger.
+// SetLogHandler allows to set a custom slog.Handler to be used by the go-shuttle logger.
 // If handler is nil, the default slog logger will be used.
-func EnableHandler(handler slog.Handler) {
+func SetLogHandler(handler slog.Handler) {
 	if handler == nil {
 		log = slog.Default()
 	} else {

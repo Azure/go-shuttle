@@ -10,10 +10,10 @@ import (
 
 func TestSetSlogHandler(t *testing.T) {
 	g := NewWithT(t)
-	g.Expect(func() { EnableHandler(nil) }).ToNot(Panic())
+	g.Expect(func() { SetLogHandler(nil) }).ToNot(Panic())
 
 	buf := &bytes.Buffer{}
-	EnableHandler(slog.NewTextHandler(buf, nil))
+	SetLogHandler(slog.NewTextHandler(buf, nil))
 	getLogger().Info("testInfo")
 	g.Expect(buf.String()).To(ContainSubstring("testInfo"))
 }
