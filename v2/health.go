@@ -11,11 +11,16 @@ import (
 
 type HealthCheckFunc func(ctx context.Context, namespace string, client *azservicebus.Client) error
 
+// HealthChecker performs periodic health checks on the Service Bus Senders and Receivers
 type HealthChecker struct {
 	clients      map[string]*azservicebus.Client
 	entity       string
 	subscription string
 	interval     time.Duration
+}
+
+type HealthCheckerOptions struct {
+	HealthCheckTimeout time.Duration
 }
 
 // NewHealthChecker creates a new HealthChecker
@@ -62,15 +67,15 @@ func (h *HealthChecker) periodicHealthCheck(ctx context.Context, healthCheckFunc
 func (h *HealthChecker) senderHealthCheck(ctx context.Context, namespace string, client *azservicebus.Client) error {
 	s, err := client.NewSender(h.entity, nil)
 	if err != nil {
-		sender.Metric.IncConsecutiveConnectionFailureCount(namespace, h.entity)
+		sender.Metric.IncHealthCheckFailureCount(namespace, h.entity)
 		return err
 	}
 	_, err = s.NewMessageBatch(ctx, nil)
 	if err != nil {
-		sender.Metric.IncConsecutiveConnectionFailureCount(namespace, h.entity)
+		sender.Metric.IncHealthCheckFailureCount(namespace, h.entity)
 		return err
 	}
-	sender.Metric.IncConsecutiveConnectionSuccessCount(namespace, h.entity)
+	sender.Metric.IncHealthCheckSuccessCount(namespace, h.entity)
 	return s.Close(ctx)
 }
 
@@ -83,15 +88,15 @@ func (h *HealthChecker) receiverHealthCheck(ctx context.Context, namespace strin
 		r, err = client.NewReceiverForQueue(h.entity, nil)
 	}
 	if err != nil {
-		processor.Metric.IncConsecutiveConnectionFailureCount(namespace, h.entity, h.subscription)
+		processor.Metric.IncHealthCheckFailureCount(namespace, h.entity, h.subscription)
 		return err
 	}
 	_, err = r.PeekMessages(ctx, 1, nil)
 	if err != nil {
-		processor.Metric.IncConsecutiveConnectionFailureCount(namespace, h.entity, h.subscription)
+		processor.Metric.IncHealthCheckFailureCount(namespace, h.entity, h.subscription)
 		return err
 	}
-	processor.Metric.IncConsecutiveConnectionSuccessCount(namespace, h.entity, h.subscription)
+	processor.Metric.IncHealthCheckSuccessCount(namespace, h.entity, h.subscription)
 	return r.Close(ctx)
 
 }

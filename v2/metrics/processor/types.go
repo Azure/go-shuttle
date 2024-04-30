@@ -50,16 +50,16 @@ func NewRegistry() *Registry {
 			Help:      "total number of message lock renewal",
 			Subsystem: subsystem,
 		}, []string{messageTypeLabel}),
+		HealthCheckCount: prom.NewCounterVec(prom.CounterOpts{
+			Name:      "receiver_health_check_total",
+			Help:      "number of consecutive connection successes or failures",
+			Subsystem: subsystem,
+		}, []string{namespaceLabel, entityLabel, subscriptionLabel, successLabel}),
 		ConcurrentMessageCount: prom.NewGaugeVec(prom.GaugeOpts{
 			Name:      "concurrent_message_count",
 			Help:      "number of messages being handled concurrently",
 			Subsystem: subsystem,
 		}, []string{receiverNameLabel, messageTypeLabel}),
-		ConsecutiveConnectionCount: prom.NewGaugeVec(prom.GaugeOpts{
-			Name:      "receiver_consecutive_connection_count",
-			Help:      "number of consecutive connection successes or failures",
-			Subsystem: subsystem,
-		}, []string{namespaceLabel, entityLabel, subscriptionLabel, successLabel}),
 	}
 }
 
@@ -77,8 +77,8 @@ func (m *Registry) Init(reg prom.Registerer) {
 		m.MessageHandledCount,
 		m.MessageLockRenewedCount,
 		m.MessageDeadlineReachedCount,
-		m.ConcurrentMessageCount,
-		m.ConsecutiveConnectionCount)
+		m.HealthCheckCount,
+		m.ConcurrentMessageCount)
 }
 
 // Registry provides the prometheus metrics for the message processor
@@ -87,8 +87,8 @@ type Registry struct {
 	MessageHandledCount         *prom.CounterVec
 	MessageLockRenewedCount     *prom.CounterVec
 	MessageDeadlineReachedCount *prom.CounterVec
+	HealthCheckCount            *prom.CounterVec
 	ConcurrentMessageCount      *prom.GaugeVec
-	ConsecutiveConnectionCount  *prom.GaugeVec
 }
 
 // Recorder allows to initialize the metric registry and increase/decrease the registered metrics at runtime.
@@ -99,10 +99,10 @@ type Recorder interface {
 	IncMessageLockRenewedSuccess(msg *azservicebus.ReceivedMessage)
 	IncMessageHandled(receiverName string, msg *azservicebus.ReceivedMessage)
 	IncMessageReceived(receiverName string, count float64)
+	IncHealthCheckSuccessCount(namespace, entity, subscription string)
+	IncHealthCheckFailureCount(namespace, entity, subscription string)
 	IncConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage)
 	DecConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage)
-	IncConsecutiveConnectionSuccessCount(namespace, entity, subscription string)
-	IncConsecutiveConnectionFailureCount(namespace, entity, subscription string)
 }
 
 // IncMessageLockRenewedSuccess increase the message lock renewal success counter
@@ -152,32 +152,26 @@ func (m *Registry) IncMessageReceived(receiverName string, count float64) {
 	m.MessageReceivedCount.WithLabelValues(receiverName).Add(count)
 }
 
-// IncConsecutiveConnectionSuccessCount increases the connection success gauge and resets the failure gauge
-func (m *Registry) IncConsecutiveConnectionSuccessCount(namespace, entity, subscription string) {
+// IncHealthCheckSuccessCount increases the connection success gauge and resets the failure gauge
+func (m *Registry) IncHealthCheckSuccessCount(namespace, entity, subscription string) {
 	labels := map[string]string{
 		namespaceLabel:    namespace,
 		entityLabel:       entity,
 		subscriptionLabel: subscription,
 		successLabel:      "true",
 	}
-	m.ConsecutiveConnectionCount.With(labels).Inc()
-	// reset the failure count
-	labels[successLabel] = "false"
-	m.ConsecutiveConnectionCount.With(labels).Set(0)
+	m.HealthCheckCount.With(labels).Inc()
 }
 
-// IncConsecutiveConnectionFailureCount increases the connection failure gauge and resets the success gauge
-func (m *Registry) IncConsecutiveConnectionFailureCount(namespace, entity, subscription string) {
+// IncHealthCheckFailureCount increases the connection failure gauge and resets the success gauge
+func (m *Registry) IncHealthCheckFailureCount(namespace, entity, subscription string) {
 	labels := map[string]string{
 		namespaceLabel:    namespace,
 		entityLabel:       entity,
 		subscriptionLabel: subscription,
 		successLabel:      "false",
 	}
-	m.ConsecutiveConnectionCount.With(labels).Inc()
-	// reset the success count
-	labels[successLabel] = "true"
-	m.ConsecutiveConnectionCount.With(labels).Set(0)
+	m.HealthCheckCount.With(labels).Inc()
 }
 
 // Informer allows to inspect metrics value stored in the registry at runtime
@@ -207,10 +201,10 @@ func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 	return total, nil
 }
 
-// GetConsecutiveConnectionSuccessCount retrieves the current value of the ConsecutiveConnectionSuccessCount metric
-func (i *Informer) GetConsecutiveConnectionSuccessCount(namespace, entity, subscription string) (float64, error) {
+// GetHealthCheckSuccessCount retrieves the current value of the HealthCheckSuccessCount metric
+func (i *Informer) GetHealthCheckSuccessCount(namespace, entity, subscription string) (float64, error) {
 	var total float64
-	common.Collect(i.registry.ConsecutiveConnectionCount, func(m *dto.Metric) {
+	common.Collect(i.registry.HealthCheckCount, func(m *dto.Metric) {
 		labels := map[string]string{
 			namespaceLabel:    namespace,
 			entityLabel:       entity,
@@ -225,10 +219,10 @@ func (i *Informer) GetConsecutiveConnectionSuccessCount(namespace, entity, subsc
 	return total, nil
 }
 
-// GetConsecutiveConnectionFailureCount retrieves the current value of the ConsecutiveConnectionFailureCount metric
-func (i *Informer) GetConsecutiveConnectionFailureCount(namespace, entity, subscription string) (float64, error) {
+// GetHealthCheckFailureCount retrieves the current value of the HealthCheckFailureCount metric
+func (i *Informer) GetHealthCheckFailureCount(namespace, entity, subscription string) (float64, error) {
 	var total float64
-	common.Collect(i.registry.ConsecutiveConnectionCount, func(m *dto.Metric) {
+	common.Collect(i.registry.HealthCheckCount, func(m *dto.Metric) {
 		labels := map[string]string{
 			namespaceLabel:    namespace,
 			entityLabel:       entity,

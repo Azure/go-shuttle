@@ -26,7 +26,7 @@ func newRegistry() *Registry {
 			Help:      "total number of messages sent by the sender",
 			Subsystem: subsystem,
 		}, []string{successLabel}),
-		ConsecutiveConnectionCount: prom.NewGaugeVec(prom.GaugeOpts{
+		HealthCheckCount: prom.NewCounterVec(prom.CounterOpts{
 			Name:      "sender_consecutive_connection_count",
 			Help:      "number of consecutive connection successes or failures",
 			Subsystem: subsystem,
@@ -37,13 +37,13 @@ func newRegistry() *Registry {
 func (m *Registry) Init(reg prom.Registerer) {
 	reg.MustRegister(
 		m.MessageSentCount,
-		m.ConsecutiveConnectionCount,
+		m.HealthCheckCount,
 	)
 }
 
 type Registry struct {
-	MessageSentCount           *prom.CounterVec
-	ConsecutiveConnectionCount *prom.GaugeVec
+	MessageSentCount *prom.CounterVec
+	HealthCheckCount *prom.CounterVec
 }
 
 // Recorder allows to initialize the metric registry and increase/decrease the registered metrics at runtime.
@@ -51,8 +51,8 @@ type Recorder interface {
 	Init(registerer prom.Registerer)
 	IncSendMessageSuccessCount()
 	IncSendMessageFailureCount()
-	IncConsecutiveConnectionSuccessCount(namespace, entity string)
-	IncConsecutiveConnectionFailureCount(namespace, entity string)
+	IncHealthCheckSuccessCount(namespace, entity string)
+	IncHealthCheckFailureCount(namespace, entity string)
 }
 
 // IncSendMessageSuccessCount increases the MessageSentCount metric with success == true
@@ -71,30 +71,24 @@ func (m *Registry) IncSendMessageFailureCount() {
 		}).Inc()
 }
 
-// IncConsecutiveConnectionSuccessCount increases the connection success gauge and resets the failure gauge
-func (m *Registry) IncConsecutiveConnectionSuccessCount(namespace, entity string) {
+// IncHealthCheckSuccessCount increases the connection success gauge and resets the failure gauge
+func (m *Registry) IncHealthCheckSuccessCount(namespace, entity string) {
 	labels := map[string]string{
 		namespaceLabel: namespace,
 		entityLabel:    entity,
 		successLabel:   "true",
 	}
-	m.ConsecutiveConnectionCount.With(labels).Inc()
-	// reset the failure count
-	labels[successLabel] = "false"
-	m.ConsecutiveConnectionCount.With(labels).Set(0)
+	m.HealthCheckCount.With(labels).Inc()
 }
 
-// IncConsecutiveConnectionFailureCount increases the connection failure gauge and resets the success gauge
-func (m *Registry) IncConsecutiveConnectionFailureCount(namespace, entity string) {
+// IncHealthCheckFailureCount increases the connection failure gauge and resets the success gauge
+func (m *Registry) IncHealthCheckFailureCount(namespace, entity string) {
 	labels := map[string]string{
 		namespaceLabel: namespace,
 		entityLabel:    entity,
 		successLabel:   "false",
 	}
-	m.ConsecutiveConnectionCount.With(labels).Inc()
-	// reset the success count
-	labels[successLabel] = "true"
-	m.ConsecutiveConnectionCount.With(labels).Set(0)
+	m.HealthCheckCount.With(labels).Inc()
 }
 
 // Informer allows to inspect metrics value stored in the registry at runtime
@@ -119,10 +113,10 @@ func (i *Informer) GetSendMessageFailureCount() (float64, error) {
 	return total, nil
 }
 
-// GetConsecutiveConnectionSuccessCount retrieves the current value of the ConsecutiveConnectionSuccessCount metric
-func (i *Informer) GetConsecutiveConnectionSuccessCount(namespace, entity string) (float64, error) {
+// GetHealthCheckSuccessCount retrieves the current value of the HealthCheckSuccessCount metric
+func (i *Informer) GetHealthCheckSuccessCount(namespace, entity string) (float64, error) {
 	var total float64
-	common.Collect(i.registry.ConsecutiveConnectionCount, func(m *dto.Metric) {
+	common.Collect(i.registry.HealthCheckCount, func(m *dto.Metric) {
 		labels := map[string]string{
 			namespaceLabel: namespace,
 			entityLabel:    entity,
@@ -136,10 +130,10 @@ func (i *Informer) GetConsecutiveConnectionSuccessCount(namespace, entity string
 	return total, nil
 }
 
-// GetConsecutiveConnectionFailureCount retrieves the current value of the ConsecutiveConnectionFailureCount metric
-func (i *Informer) GetConsecutiveConnectionFailureCount(namespace, entity string) (float64, error) {
+// GetHealthCheckFailureCount retrieves the current value of the HealthCheckFailureCount metric
+func (i *Informer) GetHealthCheckFailureCount(namespace, entity string) (float64, error) {
 	var total float64
-	common.Collect(i.registry.ConsecutiveConnectionCount, func(m *dto.Metric) {
+	common.Collect(i.registry.HealthCheckCount, func(m *dto.Metric) {
 		labels := map[string]string{
 			namespaceLabel: namespace,
 			entityLabel:    entity,

@@ -113,46 +113,46 @@ func TestConnectionMetrics(t *testing.T) {
 		informer := &Informer{registry: r}
 
 		// before init
-		count, err := informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err := informer.GetHealthCheckSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
-		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
 
 		// after init, count 0
 		g.Expect(func() { r.Init(registerer) }).ToNot(Panic())
-		count, err = informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
-		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
 
 		// success count incremented
-		r.IncConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
-		count, err = informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		r.IncHealthCheckSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(1)))
-		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
 
 		// success count incremented
-		r.IncConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
-		count, err = informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		r.IncHealthCheckSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(2)))
-		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
 
 		// failure count incremented
-		r.IncConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
-		count, err = informer.GetConsecutiveConnectionSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		r.IncHealthCheckFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
-		count, err = informer.GetConsecutiveConnectionFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
+		count, err = informer.GetHealthCheckFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(1)))
 	}
