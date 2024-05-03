@@ -151,7 +151,7 @@ func TestConnectionMetrics(t *testing.T) {
 		r.IncHealthCheckFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		count, err = informer.GetHealthCheckSuccessCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(count).To(Equal(float64(0)))
+		g.Expect(count).To(Equal(float64(2)))
 		count, err = informer.GetHealthCheckFailureCount(tc.namespaceName, tc.entityName, tc.subscriptionName)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(1)))

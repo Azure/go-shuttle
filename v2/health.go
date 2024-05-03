@@ -9,10 +9,6 @@ import (
 	"github.com/Azure/go-shuttle/v2/metrics/sender"
 )
 
-const (
-	defaultHealthCheckTimeout = 5 * time.Second
-)
-
 type HealthCheckFunc func(ctx context.Context, namespace string, client *azservicebus.Client) error
 
 // HealthChecker performs periodic health checks on the Service Bus Senders and Receivers.
@@ -26,10 +22,11 @@ type HealthChecker struct {
 	subscription string
 	// interval is the time between health checks.
 	interval time.Duration
+	options  *HealthCheckerOptions
 }
 
 // HealthCheckerOptions configures the HealthChecker.
-// HealthCheckTimeout defaults to 5 seconds if not set or set to 0. Disabled when set to a negative value.
+// HealthCheckTimeout defaults to HealthChecker.interval if not set or set to 0 or set to be larger than interval.
 type HealthCheckerOptions struct {
 	// HealthCheckTimeout is the context timeout for each health check
 	HealthCheckTimeout time.Duration
@@ -41,8 +38,8 @@ func NewHealthChecker(clients map[string]*azservicebus.Client, entity, subscript
 	if options == nil {
 		options = &HealthCheckerOptions{}
 	}
-	if options.HealthCheckTimeout == 0 {
-		options.HealthCheckTimeout = defaultHealthCheckTimeout
+	if options.HealthCheckTimeout == 0 || options.HealthCheckTimeout > interval {
+		options.HealthCheckTimeout = interval
 	}
 
 	return &HealthChecker{
@@ -50,6 +47,7 @@ func NewHealthChecker(clients map[string]*azservicebus.Client, entity, subscript
 		entity:       entity,
 		subscription: subscription,
 		interval:     interval,
+		options:      options,
 	}
 }
 
@@ -74,14 +72,16 @@ func (h *HealthChecker) StartReceiverPeriodicHealthCheck(ctx context.Context) {
 }
 
 func (h *HealthChecker) periodicHealthCheck(ctx context.Context, healthCheckFunc HealthCheckFunc, namespace string, client *azservicebus.Client) {
+	nextCheck := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(h.interval):
+		case <-time.After(time.Until(nextCheck)):
 			if err := healthCheckFunc(ctx, namespace, client); err != nil {
 				log(ctx, err)
 			}
+			nextCheck = nextCheck.Add(h.interval)
 		}
 	}
 }
@@ -92,7 +92,10 @@ func (h *HealthChecker) senderHealthCheck(ctx context.Context, namespace string,
 		sender.Metric.IncHealthCheckFailureCount(namespace, h.entity)
 		return err
 	}
-	_, err = s.NewMessageBatch(ctx, nil)
+	sbCtx, cancel := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
+	defer cancel()
+	//err = h.senderPing(sbCtx, s)
+	_, err = s.NewMessageBatch(sbCtx, nil)
 	if err != nil {
 		sender.Metric.IncHealthCheckFailureCount(namespace, h.entity)
 		return err
@@ -104,16 +107,18 @@ func (h *HealthChecker) senderHealthCheck(ctx context.Context, namespace string,
 func (h *HealthChecker) receiverHealthCheck(ctx context.Context, namespace string, client *azservicebus.Client) error {
 	var r *azservicebus.Receiver
 	var err error
-	if h.subscription != "" {
-		r, err = client.NewReceiverForSubscription(h.entity, h.subscription, nil)
-	} else {
+	if h.subscription == "" {
 		r, err = client.NewReceiverForQueue(h.entity, nil)
+	} else {
+		r, err = client.NewReceiverForSubscription(h.entity, h.subscription, nil)
 	}
 	if err != nil {
 		processor.Metric.IncHealthCheckFailureCount(namespace, h.entity, h.subscription)
 		return err
 	}
-	_, err = r.PeekMessages(ctx, 1, nil)
+	sbCtx, cancel := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
+	defer cancel()
+	_, err = r.PeekMessages(sbCtx, 1, nil)
 	if err != nil {
 		processor.Metric.IncHealthCheckFailureCount(namespace, h.entity, h.subscription)
 		return err

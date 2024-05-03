@@ -27,8 +27,8 @@ func newRegistry() *Registry {
 			Subsystem: subsystem,
 		}, []string{successLabel}),
 		HealthCheckCount: prom.NewCounterVec(prom.CounterOpts{
-			Name:      "sender_consecutive_connection_count",
-			Help:      "number of consecutive connection successes or failures",
+			Name:      "sender_health_check_total",
+			Help:      "total number of sender health check successes or failures",
 			Subsystem: subsystem,
 		}, []string{namespaceLabel, entityLabel, successLabel}),
 	}
@@ -73,22 +73,22 @@ func (m *Registry) IncSendMessageFailureCount() {
 
 // IncHealthCheckSuccessCount increases the connection success gauge and resets the failure gauge
 func (m *Registry) IncHealthCheckSuccessCount(namespace, entity string) {
-	labels := map[string]string{
-		namespaceLabel: namespace,
-		entityLabel:    entity,
-		successLabel:   "true",
-	}
-	m.HealthCheckCount.With(labels).Inc()
+	m.HealthCheckCount.With(
+		prom.Labels{
+			namespaceLabel: namespace,
+			entityLabel:    entity,
+			successLabel:   "true",
+		}).Inc()
 }
 
 // IncHealthCheckFailureCount increases the connection failure gauge and resets the success gauge
 func (m *Registry) IncHealthCheckFailureCount(namespace, entity string) {
-	labels := map[string]string{
-		namespaceLabel: namespace,
-		entityLabel:    entity,
-		successLabel:   "false",
-	}
-	m.HealthCheckCount.With(labels).Inc()
+	m.HealthCheckCount.With(
+		prom.Labels{
+			namespaceLabel: namespace,
+			entityLabel:    entity,
+			successLabel:   "false",
+		}).Inc()
 }
 
 // Informer allows to inspect metrics value stored in the registry at runtime
@@ -125,7 +125,7 @@ func (i *Informer) GetHealthCheckSuccessCount(namespace, entity string) (float64
 		if !common.HasLabels(m, labels) {
 			return
 		}
-		total += m.GetGauge().GetValue()
+		total += m.GetCounter().GetValue()
 	})
 	return total, nil
 }
@@ -142,7 +142,7 @@ func (i *Informer) GetHealthCheckFailureCount(namespace, entity string) (float64
 		if !common.HasLabels(m, labels) {
 			return
 		}
-		total += m.GetGauge().GetValue()
+		total += m.GetCounter().GetValue()
 	})
 	return total, nil
 }

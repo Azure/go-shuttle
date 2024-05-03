@@ -52,7 +52,7 @@ func NewRegistry() *Registry {
 		}, []string{messageTypeLabel}),
 		HealthCheckCount: prom.NewCounterVec(prom.CounterOpts{
 			Name:      "receiver_health_check_total",
-			Help:      "number of consecutive connection successes or failures",
+			Help:      "total number of receiver health check successes or failures",
 			Subsystem: subsystem,
 		}, []string{namespaceLabel, entityLabel, subscriptionLabel, successLabel}),
 		ConcurrentMessageCount: prom.NewGaugeVec(prom.GaugeOpts{
@@ -214,7 +214,7 @@ func (i *Informer) GetHealthCheckSuccessCount(namespace, entity, subscription st
 		if !common.HasLabels(m, labels) {
 			return
 		}
-		total += m.GetGauge().GetValue()
+		total += m.GetCounter().GetValue()
 	})
 	return total, nil
 }
@@ -232,7 +232,7 @@ func (i *Informer) GetHealthCheckFailureCount(namespace, entity, subscription st
 		if !common.HasLabels(m, labels) {
 			return
 		}
-		total += m.GetGauge().GetValue()
+		total += m.GetCounter().GetValue()
 	})
 	return total, nil
 }
