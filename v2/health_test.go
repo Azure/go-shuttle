@@ -67,9 +67,9 @@ func TestHealthChecker_FailConnectionCheck(t *testing.T) {
 	interval := 20 * time.Millisecond
 
 	hc := NewHealthChecker(clients, "", "", interval, &HealthCheckerOptions{
-		HealthCheckTimeout: 10 * time.Millisecond,
+		HealthCheckTimeout: 5 * time.Millisecond,
 	})
-	a.Equal(10*time.Millisecond, hc.options.HealthCheckTimeout)
+	a.Equal(5*time.Millisecond, hc.options.HealthCheckTimeout)
 
 	for _, tc := range []testCase{
 		{entity: "testQueue", subscription: ""},
