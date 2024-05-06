@@ -26,7 +26,6 @@ func TestFunc_NewHealthCheckerNilOptions(t *testing.T) {
 	interval := 5 * time.Second
 
 	hc := NewHealthChecker(clients, entity, subscription, interval, nil)
-
 	if hc.options.HealthCheckTimeout != interval {
 		t.Errorf("failed to set HealthCheckTimeout, expected: %s, actual: %s", interval, hc.options.HealthCheckTimeout)
 	}
@@ -46,14 +45,21 @@ func TestFunc_NewHealthCheckerWithOptions(t *testing.T) {
 	hc := NewHealthChecker(clients, entity, subscription, interval, &HealthCheckerOptions{
 		HealthCheckTimeout: timeout,
 	})
-
 	if hc.options.HealthCheckTimeout != interval {
 		t.Errorf("failed to set HealthCheckTimeout, expected: %s, actual: %s", interval, hc.options.HealthCheckTimeout)
 	}
+
+	timeout = 1 * time.Second
+	hc = NewHealthChecker(clients, entity, subscription, interval, &HealthCheckerOptions{
+		HealthCheckTimeout: timeout,
+	})
+	if hc.options.HealthCheckTimeout != timeout {
+		t.Errorf("failed to set HealthCheckTimeout, expected: %s, actual: %s", timeout, hc.options.HealthCheckTimeout)
+	}
 }
 
-// With a failing connection check and a check interval of 20ms,
-// the health checker should have 0 successful checks and 5 failed checks after 90ms
+// With a failing connection and a check interval of 20ms,
+// the health checker should have 5 failed checks after 90ms
 func TestHealthChecker_FailConnectionCheck(t *testing.T) {
 	type testCase struct {
 		entity       string
@@ -99,6 +105,8 @@ func TestHealthChecker_FailConnectionCheck(t *testing.T) {
 	}
 }
 
+// With a successful connection and a check interval of 20ms,
+// the health checker should have 5 successful checks after 90ms
 func TestHealthChecker_SuccessConnectionCheck(t *testing.T) {
 	a := require.New(t)
 	metrics.Register(prometheus.NewRegistry())

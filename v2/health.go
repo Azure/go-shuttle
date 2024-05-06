@@ -94,7 +94,6 @@ func (h *HealthChecker) senderHealthCheck(ctx context.Context, namespace string,
 	}
 	sbCtx, cancel := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
 	defer cancel()
-	//err = h.senderPing(sbCtx, s)
 	_, err = s.NewMessageBatch(sbCtx, nil)
 	if err != nil {
 		sender.Metric.IncHealthCheckFailureCount(namespace, h.entity)
