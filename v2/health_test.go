@@ -82,7 +82,7 @@ func TestHealthChecker_FailConnectionCheck(t *testing.T) {
 		hc.StartSenderPeriodicHealthCheck(ctx)
 		hc.StartReceiverPeriodicHealthCheck(ctx)
 
-		time.Sleep(90 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		for i := 0; i < numClients; i++ {
 			namespaceName := fmt.Sprintf("myservicebus-%d.servicebus.windows.net", i)
@@ -125,7 +125,7 @@ func TestHealthChecker_SuccessConnectionCheck(t *testing.T) {
 		}(namespace, client)
 	}
 
-	time.Sleep(90 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	for i := 0; i < numClients; i++ {
 		namespaceName := fmt.Sprintf("myservicebus-%d.servicebus.windows.net", i)
 		informer := sender.NewInformer()
