@@ -76,12 +76,12 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 		defer cancel()
 	}
 
-	d.mu.RLock()
-	defer d.mu.RUnlock()
 	errChan := make(chan error)
-
 	go func() {
-		if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
+		d.mu.RLock()
+		err := d.sbSender.SendMessage(ctx, msg, nil) // sendMessageOptions currently does nothing
+		d.mu.RUnlock()
+		if err != nil {
 			errChan <- fmt.Errorf("failed to send message: %w", err)
 		} else {
 			errChan <- nil
@@ -141,8 +141,8 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 	}
 
 	d.mu.RLock()
-	defer d.mu.RUnlock()
 	batch, err := d.sbSender.NewMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
+	d.mu.RUnlock()
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,10 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 	errChan := make(chan error)
 
 	go func() {
-		if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
+		d.mu.RLock()
+		err := d.sbSender.SendMessageBatch(ctx, batch, nil)
+		d.mu.RUnlock()
+		if err != nil {
 			errChan <- fmt.Errorf("failed to send message batch: %w", err)
 		} else {
 			errChan <- nil
