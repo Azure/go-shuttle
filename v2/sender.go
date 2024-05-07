@@ -29,9 +29,13 @@ type AzServiceBusSender interface {
 
 // Sender contains an SBSender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
 type Sender struct {
+	// sbSender is responsible for message sending. It is protected by a mutex to prevent race conditions.
+	// Any usage of sbSender must consider the mutex and take the appropriate lock.
 	sbSender AzServiceBusSender
-	mu       sync.RWMutex
-	options  *SenderOptions
+	// mu is used to prevent race conditions when changing the sbSender instance.
+	// Use mu.Lock() only during FailOver and mu.RLock() for all other operations
+	mu      sync.RWMutex
+	options *SenderOptions
 }
 
 type SenderOptions struct {
@@ -192,6 +196,10 @@ func (d *Sender) AzSender() AzServiceBusSender {
 	return d.sbSender
 }
 
+// FailOver sets the underlying azservicebus.Sender instance to the provided one.
+// This is used when the traffic needs to be failed over to a different sender instance.
+// All ongoing send operations will continue to use the old sender instance,
+// while new send operations will use the new sender instance.
 func (d *Sender) FailOver(sender AzServiceBusSender) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
