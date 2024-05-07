@@ -159,7 +159,7 @@ func (p *Processor) Start(ctx context.Context) error {
 // Returns a combined list of errors during the start attempts or ctx.Err() if the context
 // is cancelled during the retries.
 func (p *Processor) startOne(ctx context.Context, receiverName string) error {
-	logger := getLogger()
+	logger := getLogger(ctx)
 	receiverEx, ok := p.receivers[receiverName]
 	if !ok {
 		return fmt.Errorf("processor %s not found", receiverName)
@@ -168,7 +168,7 @@ func (p *Processor) startOne(ctx context.Context, receiverName string) error {
 	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
 		if err := p.start(ctx, receiverEx); err != nil {
 			savedError = errors.Join(savedError, err)
-			logger.ErrorContext(ctx, fmt.Sprintf("processor %s start attempt %d failed: %v", receiverName, attempt, err))
+			logger.Error(fmt.Sprintf("processor %s start attempt %d failed: %v", receiverName, attempt, err))
 			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
 				break
 			}
@@ -176,7 +176,7 @@ func (p *Processor) startOne(ctx context.Context, receiverName string) error {
 			case <-time.After(p.options.StartRetryDelayStrategy.GetDelay(uint32(attempt))):
 				continue
 			case <-ctx.Done():
-				logger.InfoContext(ctx, "context done, stop retrying")
+				logger.Info("context done, stop retrying")
 				return ctx.Err()
 			}
 		}
@@ -186,15 +186,15 @@ func (p *Processor) startOne(ctx context.Context, receiverName string) error {
 
 // start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) start(ctx context.Context, receiverEx *ReceiverEx) error {
-	logger := getLogger()
+	logger := getLogger(ctx)
 	receiverName := receiverEx.name
 	receiver := receiverEx.sbReceiver
-	logger.InfoContext(ctx, fmt.Sprintf("starting processor %s", receiverName))
+	logger.Info(fmt.Sprintf("starting processor %s", receiverName))
 	messages, err := receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
 	if err != nil {
 		return fmt.Errorf("processor %s failed to receive messages: %w", receiverName, err)
 	}
-	logger.InfoContext(ctx, fmt.Sprintf("processor %s received %d messages - initial", receiverName, len(messages)))
+	logger.Info(fmt.Sprintf("processor %s received %d messages - initial", receiverName, len(messages)))
 	processor.Metric.IncMessageReceived(receiverName, float64(len(messages)))
 	for _, msg := range messages {
 		p.process(ctx, receiverEx, msg)
@@ -210,17 +210,17 @@ func (p *Processor) start(ctx context.Context, receiverEx *ReceiverEx) error {
 			if err != nil {
 				return fmt.Errorf("processor %s failed to receive messages: %w", receiverName, err)
 			}
-			logger.InfoContext(ctx, fmt.Sprintf("processor %s received %d messages from processor loop", receiverName, len(messages)))
+			logger.Info(fmt.Sprintf("processor %s received %d messages from processor loop", receiverName, len(messages)))
 			processor.Metric.IncMessageReceived(receiverName, float64(len(messages)))
 			for _, msg := range messages {
 				p.process(ctx, receiverEx, msg)
 			}
 		case <-ctx.Done():
-			logger.InfoContext(ctx, fmt.Sprintf("context done, stop receiving from processor %s", receiverName))
+			logger.Info(fmt.Sprintf("context done, stop receiving from processor %s", receiverName))
 			break
 		}
 	}
-	logger.InfoContext(ctx, fmt.Sprintf("exiting processor %s", receiverName))
+	logger.Info(fmt.Sprintf("exiting processor %s", receiverName))
 	return fmt.Errorf("processor %s stopped: %w", receiverName, ctx.Err())
 }
 
@@ -254,7 +254,7 @@ func NewPanicHandler(panicOptions *PanicHandlerOptions, handler Handler) Handler
 	if panicOptions == nil {
 		panicOptions = &PanicHandlerOptions{
 			OnPanicRecovered: func(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage, recovered any) {
-				getLogger().ErrorContext(ctx, fmt.Sprintf("panic recovered: %v", recovered))
+				getLogger(ctx).Error(fmt.Sprintf("panic recovered: %v", recovered))
 			},
 		}
 	}

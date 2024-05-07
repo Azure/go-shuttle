@@ -61,7 +61,7 @@ type NoOp struct {
 
 func (a *NoOp) Settle(ctx context.Context, _ MessageSettler, message *azservicebus.ReceivedMessage) {
 	span := tab.FromContext(ctx)
-	getLogger().WarnContext(ctx, fmt.Sprintf("no op settlement. message lock is locked until: %s", message.LockedUntil))
+	getLogger(ctx).Warn(fmt.Sprintf("no op settlement. message lock is locked until: %s", message.LockedUntil))
 	span.Logger().Info("no op settlement. message lock is not released")
 }
 
@@ -109,7 +109,7 @@ func (s settlement[T]) settle(ctx context.Context, settler MessageSettler, messa
 	span.Logger().Info(fmt.Sprintf("%s message", s.name))
 	if err := s.settleFunc(ctx, settler, message, options); err != nil {
 		wrapped := fmt.Errorf("%s settlement failed: %w", s.name, err)
-		getLogger().ErrorContext(ctx, wrapped.Error())
+		getLogger(ctx).Error(wrapped.Error())
 		span.Logger().Error(wrapped)
 		// the processing will terminate and the lock on the message will eventually be released after
 		// the message lock expires on the broker side
