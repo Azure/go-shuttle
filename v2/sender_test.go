@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -261,7 +262,50 @@ func TestSender_AzSender(t *testing.T) {
 	g.Expect(sender.AzSender()).To(Equal(azSender))
 }
 
+func TestSender_FailOver(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{SendMessageErr: fmt.Errorf("msg send failure")}
+	sender := NewSender(azSender, nil)
+	err := sender.SendMessage(context.Background(), "test")
+	g.Expect(err).To(HaveOccurred())
+	sender.FailOver(&fakeAzSender{})
+	err = sender.SendMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func TestSender_ConcurrentSendAndFailOver(t *testing.T) {
+	g := NewWithT(t)
+	azSender1 := &fakeAzSender{}
+	azSender2 := &fakeAzSender{}
+	sender := NewSender(azSender1, nil)
+
+	var wg sync.WaitGroup
+	numRoutines := 10
+
+	// start multiple goroutines to send messages
+	for i := 0; i < numRoutines; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			err := sender.SendMessage(context.Background(), fmt.Sprintf("test%d", i))
+			g.Expect(err).ToNot(HaveOccurred())
+			time.Sleep(time.Duration(i) * time.Millisecond)
+			err = sender.SendMessage(context.Background(), fmt.Sprintf("test%d-after-sleep", i))
+			g.Expect(err).ToNot(HaveOccurred())
+		}(i)
+	}
+	// call FailOver in the middle
+	time.Sleep(5 * time.Millisecond)
+	sender.FailOver(azSender2)
+	// wait for all goroutines to finish
+	wg.Wait()
+	// check that some messages were sent with the first sender and some with the second
+	g.Expect(azSender1.SendMessageCalled).To(BeTrue())
+	g.Expect(azSender2.SendMessageCalled).To(BeTrue())
+}
+
 type fakeAzSender struct {
+	mu                            sync.RWMutex
 	DoSendMessage                 func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
 	DoSendMessageBatch            func(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error
 	SendMessageReceivedValue      *azservicebus.Message
@@ -279,6 +323,8 @@ func (f *fakeAzSender) SendMessage(
 	ctx context.Context,
 	message *azservicebus.Message,
 	options *azservicebus.SendMessageOptions) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.SendMessageCalled = true
 	f.SendMessageReceivedValue = message
 	f.SendMessageReceivedCtx = ctx
@@ -294,6 +340,8 @@ func (f *fakeAzSender) SendMessageBatch(
 	ctx context.Context,
 	batch *azservicebus.MessageBatch,
 	options *azservicebus.SendMessageBatchOptions) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.SendMessageBatchCalled = true
 	f.SendMessageBatchReceivedValue = batch
 	if f.DoSendMessageBatch != nil {

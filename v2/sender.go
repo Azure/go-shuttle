@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
@@ -28,8 +29,13 @@ type AzServiceBusSender interface {
 
 // Sender contains an SBSender used to send the message to the ServiceBus queue and a Marshaller used to marshal any struct into a ServiceBus message
 type Sender struct {
+	// sbSender is responsible for message sending. It is protected by a mutex to prevent race conditions.
+	// Any usage of sbSender must consider the mutex and take the appropriate lock.
 	sbSender AzServiceBusSender
-	options  *SenderOptions
+	// mu is used to prevent race conditions when changing the sbSender instance.
+	// Use mu.Lock() only during FailOver and mu.RLock() for all other operations
+	mu      sync.RWMutex
+	options *SenderOptions
 }
 
 type SenderOptions struct {
@@ -63,7 +69,7 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 	if ctx.Err() != nil {
 		return fmt.Errorf("failed to send message: %w", ctx.Err())
 	}
-	
+
 	msg, err := d.ToServiceBusMessage(ctx, mb, options...)
 	if err != nil {
 		return err
@@ -75,9 +81,9 @@ func (d *Sender) SendMessage(ctx context.Context, mb MessageBody, options ...fun
 	}
 
 	errChan := make(chan error)
-
 	go func() {
-		if err := d.sbSender.SendMessage(ctx, msg, nil); err != nil { // sendMessageOptions currently does nothing
+		err := d.sendMessage(ctx, msg, nil) // sendMessageOptions currently does nothing
+		if err != nil {
 			errChan <- fmt.Errorf("failed to send message: %w", err)
 		} else {
 			errChan <- nil
@@ -135,8 +141,8 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 	if ctx.Err() != nil {
 		return fmt.Errorf("failed to send message: %w", ctx.Err())
 	}
-	
-	batch, err := d.sbSender.NewMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
+
+	batch, err := d.newMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
 	if err != nil {
 		return err
 	}
@@ -154,7 +160,7 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 	errChan := make(chan error)
 
 	go func() {
-		if err := d.sbSender.SendMessageBatch(ctx, batch, nil); err != nil {
+		if err := d.sendMessageBatch(ctx, batch, nil); err != nil {
 			errChan <- fmt.Errorf("failed to send message batch: %w", err)
 		} else {
 			errChan <- nil
@@ -173,12 +179,41 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 		}
 		return err
 	}
+}
 
+func (d *Sender) sendMessage(ctx context.Context, msg *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.sbSender.SendMessage(ctx, msg, options)
+}
+
+func (d *Sender) sendMessageBatch(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.sbSender.SendMessageBatch(ctx, batch, options)
+}
+
+func (d *Sender) newMessageBatch(ctx context.Context, options *azservicebus.MessageBatchOptions) (*azservicebus.MessageBatch, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.sbSender.NewMessageBatch(ctx, options)
 }
 
 // AzSender returns the underlying azservicebus.Sender instance.
 func (d *Sender) AzSender() AzServiceBusSender {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return d.sbSender
+}
+
+// FailOver sets the underlying azservicebus.Sender instance to the provided one.
+// This is used when the traffic needs to be failed over to a different sender instance.
+// All ongoing send operations will continue to use the old sender instance,
+// while new send operations will use the new sender instance.
+func (d *Sender) FailOver(sender AzServiceBusSender) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.sbSender = sender
 }
 
 // SetMessageId sets the ServiceBus message's ID to a user-specified value
