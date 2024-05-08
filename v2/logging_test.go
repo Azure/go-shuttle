@@ -1,11 +1,53 @@
 package shuttle
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 
 	. "github.com/onsi/gomega"
 )
+
+func TestSetSlogHandler(t *testing.T) {
+	g := NewWithT(t)
+	g.Expect(func() { getLogger(context.Background()).Info("test") }).ToNot(Panic())
+	g.Expect(func() { SetLogHandler(nil) }).ToNot(Panic())
+
+	buf := &bytes.Buffer{}
+	SetLogHandler(slog.NewTextHandler(buf, nil))
+	getLogger(context.Background()).Info("testInfo")
+	g.Expect(buf.String()).To(ContainSubstring("testInfo"))
+
+	// coverage for contextLogger
+	getLogger(context.Background()).Warn("testWarn")
+	getLogger(context.Background()).Error("testError")
+}
+
+// coverage for deprecated SetLoggerFunc
+func TestSetLoggerFunc(t *testing.T) {
+	SetLoggerFunc(func(ctx context.Context) Logger {
+		return getTestLogger(ctx)
+	})
+	defer SetLoggerFunc(func(ctx context.Context) Logger { return &contextLogger{ctx: ctx, logger: slog.Default()} })
+	logger := &testLogger{}
+	ctx := context.WithValue(context.Background(), testlogkey, logger)
+	getLogger(ctx).Info("test")
+	g := NewWithT(t)
+	g.Expect(getLogger(ctx)).To(Equal(logger))
+	g.Expect(logger.entries).To(HaveLen(1))
+	g.Expect(logger.entries[0]).To(Equal("test"))
+
+	g.Expect(func() { getLogger(ctx).Info("") }).ToNot(Panic())
+
+	// getLogger returns nil
+	nilCtx := context.WithValue(context.Background(), testlogkey, nil)
+	g.Expect(func() { getLogger(nilCtx).Info("test") }).ToNot(Panic())
+
+	//coverage on testlogger
+	logger.Warn("test")
+	logger.Error("test")
+}
 
 type testLogger struct {
 	entries []string
@@ -27,30 +69,5 @@ func getTestLogger(ctx context.Context) Logger {
 	if l, ok := ctx.Value(testlogkey).(*testLogger); ok {
 		return l
 	}
-	return nil
-}
-
-func TestSetLoggerFunc(t *testing.T) {
-	t.Setenv("GOSHUTTLE_LOG", "ALL")
-	SetLoggerFunc(func(ctx context.Context) Logger {
-		return getTestLogger(ctx)
-	})
-	defer SetLoggerFunc(func(_ context.Context) Logger { return &printLogger{} })
-	logger := &testLogger{}
-	ctx := context.WithValue(context.Background(), testlogkey, logger)
-	log(ctx, "test")
-	g := NewWithT(t)
-	g.Expect(getLogger(ctx)).To(Equal(logger))
-	g.Expect(logger.entries).To(HaveLen(1))
-	g.Expect(logger.entries[0]).To(Equal("test"))
-
-	g.Expect(func() { log(ctx, nil) }).ToNot(Panic())
-
-	// getLogger returns nil
-	nilCtx := context.WithValue(context.Background(), testlogkey, nil)
-	g.Expect(func() { log(nilCtx, "test") }).ToNot(Panic())
-
-	//coverage on testlogger
-	logger.Warn("test")
-	logger.Error("test")
+	return &contextLogger{ctx: ctx, logger: slog.Default()}
 }
