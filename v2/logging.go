@@ -2,9 +2,7 @@ package shuttle
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"time"
+	"log/slog"
 )
 
 type Logger interface {
@@ -13,33 +11,40 @@ type Logger interface {
 	Error(s string)
 }
 
+var getLogger = func(ctx context.Context) Logger {
+	return &contextLogger{ctx: ctx, logger: slog.Default()}
+}
+
+// Deprecated: Use SetLogHandler instead to adapt slog.
 // SetLoggerFunc sets the function to be used to acquire a logger when go-shuttle logs.
 func SetLoggerFunc(fn func(ctx context.Context) Logger) {
 	getLogger = fn
 }
 
-var getLogger = func(_ context.Context) Logger { return &printLogger{} }
-
-type printLogger struct{}
-
-func (l *printLogger) Info(s string) {
-	fmt.Println(append(append([]any{}, "INFO - ", time.Now().UTC(), " - "), s)...)
-}
-
-func (l *printLogger) Warn(s string) {
-	fmt.Println(append(append([]any{}, "WARN - ", time.Now().UTC(), " - "), s)...)
-}
-
-func (l *printLogger) Error(s string) {
-	fmt.Println(append(append([]any{}, "ERROR - ", time.Now().UTC(), " - "), s)...)
-}
-
-func log(ctx context.Context, a ...any) {
-	if os.Getenv("GOSHUTTLE_LOG") == "ALL" {
-		l := getLogger(ctx)
-		if l == nil {
-			return
-		}
-		l.Info(fmt.Sprint(a...))
+// SetLogHandler allows to set a custom slog.Handler to be used by the go-shuttle logger.
+// If handler is nil, the default slog handler will be used.
+func SetLogHandler(handler slog.Handler) {
+	if handler == nil {
+		handler = slog.Default().Handler()
 	}
+	getLogger = func(ctx context.Context) Logger {
+		return &contextLogger{ctx: ctx, logger: slog.New(handler)}
+	}
+}
+
+type contextLogger struct {
+	ctx    context.Context
+	logger *slog.Logger
+}
+
+func (l *contextLogger) Info(s string) {
+	l.logger.InfoContext(l.ctx, s)
+}
+
+func (l *contextLogger) Warn(s string) {
+	l.logger.WarnContext(l.ctx, s)
+}
+
+func (l *contextLogger) Error(s string) {
+	l.logger.ErrorContext(l.ctx, s)
 }

@@ -92,16 +92,17 @@ type peekLockRenewer struct {
 
 // stop will stop the renewal loop. if LockRenewalOptions.CancelMessageContextOnStop is set to true, it cancels the message context.
 func (plr *peekLockRenewer) stop(ctx context.Context) {
+	logger := getLogger(ctx)
 	plr.alive.Store(false)
 	// don't send the stop signal to the loop if there is already one in the channel
 	if len(plr.stopped) == 0 {
 		plr.stopped <- struct{}{}
 	}
 	if plr.cancelMessageCtxOnStop {
-		log(ctx, "canceling message context")
+		logger.Info("canceling message context")
 		plr.cancelMessageCtx()
 	}
-	log(ctx, "stopped periodic renewal")
+	logger.Info("stopped periodic renewal")
 }
 
 func (plr *peekLockRenewer) isPermanent(err error) bool {
@@ -115,6 +116,7 @@ func (plr *peekLockRenewer) isPermanent(err error) bool {
 }
 
 func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *azservicebus.ReceivedMessage) {
+	logger := getLogger(ctx)
 	count := 0
 	span := trace.SpanFromContext(ctx)
 	for plr.alive.Store(true); plr.alive.Load(); {
@@ -123,11 +125,11 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			if !plr.alive.Load() {
 				return
 			}
-			log(ctx, "renewing lock")
+			logger.Info("renewing lock")
 			count++
 			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
 			if err != nil {
-				log(ctx, fmt.Sprintf("failed to renew lock: %s", err))
+				logger.Error(fmt.Sprintf("failed to renew lock: %s", err))
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					// if the error is a context error
 					// we stop and let the next loop iteration handle the exit.
@@ -144,7 +146,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 				// if the error is identified as permanent, we stop the renewal.
 				// if the error is anything else, we keep trying the renewal.
 				if plr.isPermanent(err) {
-					log(ctx, fmt.Sprintf("stopping periodic renewal for message: %s", message.MessageID))
+					logger.Error(fmt.Sprintf("stopping periodic renewal for message: %s", message.MessageID))
 					plr.stop(ctx)
 				}
 				continue
@@ -152,7 +154,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			span.AddEvent("message lock renewed", trace.WithAttributes(attribute.Int("count", count)))
 			plr.metrics.IncMessageLockRenewedSuccess(message)
 		case <-ctx.Done():
-			log(ctx, "context done: stopping periodic renewal")
+			logger.Info("context done: stopping periodic renewal")
 			span.AddEvent("context done: stopping message lock renewal")
 			err := ctx.Err()
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -162,7 +164,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			plr.stop(ctx)
 		case <-plr.stopped:
 			if plr.alive.Load() {
-				log(ctx, "stop signal received: exiting periodic renewal")
+				logger.Info("stop signal received: exiting periodic renewal")
 				plr.alive.Store(false)
 			}
 		}
