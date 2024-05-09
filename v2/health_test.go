@@ -247,13 +247,13 @@ type fakeHealthChecker struct {
 	subscriptionName string
 }
 
-func (f *fakeHealthChecker) HealthCheck(_ context.Context, _ *azservicebus.Client, _ context.CancelFunc) error {
+func (f *fakeHealthChecker) HealthCheck(_ context.Context, _ *azservicebus.Client) error {
 	return nil
 }
 
-func (f *fakeHealthChecker) IncHealthCheckMetric(namespaceName string, healthCheckErr error) {
+func (f *fakeHealthChecker) incHealthCheckMetric(namespaceName string, healthCheckErr error) {
 	shc := &SenderHealthChecker{EntityName: f.entityName}
-	shc.IncHealthCheckMetric(namespaceName, healthCheckErr)
+	shc.incHealthCheckMetric(namespaceName, healthCheckErr)
 	rhc := &ReceiverHealthChecker{EntityName: f.entityName, SubscriptionName: f.subscriptionName}
-	rhc.IncHealthCheckMetric(namespaceName, healthCheckErr)
+	rhc.incHealthCheckMetric(namespaceName, healthCheckErr)
 }

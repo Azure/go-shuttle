@@ -2,6 +2,7 @@ package shuttle
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
@@ -65,12 +66,15 @@ func (h *HealthChecker) periodicHealthCheck(ctx context.Context, hc HealthChecka
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Until(nextCheck)):
-			sbCtx, cancelFunc := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
-			err := hc.HealthCheck(sbCtx, client, cancelFunc)
-			if err != nil {
-				getLogger(ctx).Error(err.Error())
-			}
-			hc.IncHealthCheckMetric(namespaceName, err)
+			func() {
+				sbCtx, cancel := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
+				defer cancel()
+				err := hc.HealthCheck(sbCtx, client)
+				if err != nil {
+					getLogger(ctx).Error(fmt.Sprintf("Health check failed for namespace %s: %s", namespaceName, err.Error()))
+				}
+				hc.incHealthCheckMetric(namespaceName, err)
+			}()
 			nextCheck = nextCheck.Add(h.options.HealthCheckInterval)
 		}
 	}
@@ -78,8 +82,8 @@ func (h *HealthChecker) periodicHealthCheck(ctx context.Context, hc HealthChecka
 
 // HealthCheckable is an interface for performing health checks on azservicebus.Sender and azservicebus.Receiver.
 type HealthCheckable interface {
-	HealthCheck(ctx context.Context, client *azservicebus.Client, cancelFunc context.CancelFunc) error
-	IncHealthCheckMetric(namespaceName string, healthCheckErr error)
+	HealthCheck(ctx context.Context, client *azservicebus.Client) error
+	incHealthCheckMetric(namespaceName string, healthCheckErr error)
 }
 
 // SenderHealthChecker performs health checks on azservicebus.Sender.
@@ -88,20 +92,25 @@ type SenderHealthChecker struct {
 }
 
 // HealthCheck performs a health check on azservicebus.Sender by creating a new message batch.
-func (s *SenderHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client, cancelFunc context.CancelFunc) error {
-	defer cancelFunc()
+func (s *SenderHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client) (err error) {
 	sbSender, err := client.NewSender(s.EntityName, nil)
+	defer func() {
+		if sbSender != nil {
+			if closeErr := sbSender.Close(ctx); closeErr != nil {
+				getLogger(ctx).Error(closeErr.Error())
+				err = closeErr
+			}
+		}
+	}()
 	if err != nil {
-		return err
+		return
 	}
-	if _, err = sbSender.NewMessageBatch(ctx, nil); err != nil {
-		return err
-	}
-	return sbSender.Close(ctx)
+	_, err = sbSender.NewMessageBatch(ctx, nil)
+	return
 }
 
 // IncHealthCheckMetric increments the sender health check metric based on the health check result.
-func (s *SenderHealthChecker) IncHealthCheckMetric(namespaceName string, healthCheckErr error) {
+func (s *SenderHealthChecker) incHealthCheckMetric(namespaceName string, healthCheckErr error) {
 	if healthCheckErr != nil {
 		sender.Metric.IncHealthCheckFailureCount(namespaceName, s.EntityName)
 	} else {
@@ -116,21 +125,26 @@ type ReceiverHealthChecker struct {
 }
 
 // HealthCheck performs a health check on the azservicebus.Receiver by peeking a message.
-func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client, cancelFunc context.CancelFunc) error {
-	defer cancelFunc()
+func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client) (err error) {
 	sbReceiver, err := r.createReceiver(client)
+	defer func() {
+		if sbReceiver != nil {
+			if closeErr := sbReceiver.Close(ctx); closeErr != nil {
+				getLogger(ctx).Error(closeErr.Error())
+				err = closeErr
+			}
+		}
+	}()
 	if err != nil {
-		return err
+		return
 	}
 	// note: PeekMessages() does not return an error when the entity is empty
-	if _, err = sbReceiver.PeekMessages(ctx, 1, nil); err != nil {
-		return err
-	}
-	return sbReceiver.Close(ctx)
+	_, err = sbReceiver.PeekMessages(ctx, 1, nil)
+	return
 }
 
 // IncHealthCheckMetric increments the receiver health check metric based on the health check result.
-func (r *ReceiverHealthChecker) IncHealthCheckMetric(namespaceName string, healthCheckErr error) {
+func (r *ReceiverHealthChecker) incHealthCheckMetric(namespaceName string, healthCheckErr error) {
 	if healthCheckErr != nil {
 		processor.Metric.IncHealthCheckFailureCount(namespaceName, r.EntityName, r.SubscriptionName)
 	} else {
