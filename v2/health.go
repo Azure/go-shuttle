@@ -92,7 +92,7 @@ type SenderHealthChecker struct {
 }
 
 // HealthCheck performs a health check on azservicebus.Sender by creating a new message batch.
-func (s *SenderHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client) (err error) {
+func (s *SenderHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client) error {
 	sbSender, err := client.NewSender(s.EntityName, nil)
 	defer func() {
 		if sbSender != nil {
@@ -103,10 +103,10 @@ func (s *SenderHealthChecker) HealthCheck(ctx context.Context, client *azservice
 		}
 	}()
 	if err != nil {
-		return
+		return err
 	}
 	_, err = sbSender.NewMessageBatch(ctx, nil)
-	return
+	return err
 }
 
 // IncHealthCheckMetric increments the sender health check metric based on the health check result.
@@ -125,7 +125,7 @@ type ReceiverHealthChecker struct {
 }
 
 // HealthCheck performs a health check on the azservicebus.Receiver by peeking a message.
-func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client) (err error) {
+func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client) error {
 	sbReceiver, err := r.createReceiver(client)
 	defer func() {
 		if sbReceiver != nil {
@@ -136,11 +136,11 @@ func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, client *azservi
 		}
 	}()
 	if err != nil {
-		return
+		return err
 	}
 	// note: PeekMessages() does not return an error when the entity is empty
 	_, err = sbReceiver.PeekMessages(ctx, 1, nil)
-	return
+	return err
 }
 
 // IncHealthCheckMetric increments the receiver health check metric based on the health check result.
