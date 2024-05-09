@@ -9,119 +9,138 @@ import (
 	"github.com/Azure/go-shuttle/v2/metrics/sender"
 )
 
-type HealthCheckFunc func(ctx context.Context, namespace string, client *azservicebus.Client) error
+const defaultHealthCheckInterval = 1 * time.Minute
 
 // HealthChecker performs periodic health checks on the Service Bus Senders and Receivers.
-// It uses azservicebus.Sender.NewMessageBatch() and azservicebus.Receiver.PeekMessages() to perform the health checks.
 type HealthChecker struct {
-	// clients is a map of namespace name to azservicebus.Client.
+	// clients is a map of namespaceName name to azservicebus.Client.
 	clients map[string]*azservicebus.Client
-	// entity is the name of the queue or topic.
-	entity string
-	// subscription is the name of the subscription. Leave empty for queues and senders.
-	subscription string
-	// interval is the time between health checks.
-	interval time.Duration
-	options  *HealthCheckerOptions
+	options *HealthCheckerOptions
 }
 
 // HealthCheckerOptions configures the HealthChecker.
+// HealthCheckInterval defaults to 1 minute if not set or set to <= 0.
 // HealthCheckTimeout defaults to HealthChecker.interval if not set or set to 0 or set to be larger than interval.
 type HealthCheckerOptions struct {
+	// HealthCheckInterval is the time between health checks.
+	HealthCheckInterval time.Duration
 	// HealthCheckTimeout is the context timeout for each health check
 	HealthCheckTimeout time.Duration
 }
 
-// NewHealthChecker creates a new HealthChecker with the provided clients, entity, subscription, and interval.
-// clients is a map of namespace name to azservicebus.Client.
-func NewHealthChecker(clients map[string]*azservicebus.Client, entity, subscription string, interval time.Duration, options *HealthCheckerOptions) *HealthChecker {
+// NewHealthChecker creates a new HealthChecker with the provided clients.
+// clients is a map of namespaceName name to azservicebus.Client.
+func NewHealthChecker(clients map[string]*azservicebus.Client, options *HealthCheckerOptions) *HealthChecker {
 	if options == nil {
 		options = &HealthCheckerOptions{}
 	}
-	if options.HealthCheckTimeout == 0 || options.HealthCheckTimeout > interval {
-		options.HealthCheckTimeout = interval
+	if options.HealthCheckInterval <= 0 {
+		options.HealthCheckInterval = defaultHealthCheckInterval
+	}
+	if options.HealthCheckTimeout <= 0 || options.HealthCheckTimeout > options.HealthCheckInterval {
+		options.HealthCheckTimeout = options.HealthCheckInterval
 	}
 
 	return &HealthChecker{
-		clients:      clients,
-		entity:       entity,
-		subscription: subscription,
-		interval:     interval,
-		options:      options,
+		clients: clients,
+		options: options,
 	}
 }
 
-// StartSenderPeriodicHealthCheck starts a periodic health check for the sender.
-// It uses azservicebus.Sender.NewMessageBatch() to perform the health check.
-// Stops when the context is cancelled.
-func (h *HealthChecker) StartSenderPeriodicHealthCheck(ctx context.Context) {
-	for namespace, client := range h.clients {
-		go h.periodicHealthCheck(ctx, h.senderHealthCheck, namespace, client)
+// StartPeriodicHealthCheck starts the periodic health check for the provided HealthCheckable.
+// The health check will run on each client in the HealthChecker.
+// Stops when the context is canceled.
+func (h *HealthChecker) StartPeriodicHealthCheck(ctx context.Context, hc HealthCheckable) {
+	for namespaceName, client := range h.clients {
+		go func(namespaceName string, client *azservicebus.Client) {
+			h.periodicHealthCheck(ctx, hc, namespaceName, client)
+		}(namespaceName, client)
 	}
 }
 
-// StartReceiverPeriodicHealthCheck starts a periodic health check for the receiver
-// It uses azservicebus.Receiver.PeekMessages() to perform the health check.
-// Stops when the context is cancelled.
-func (h *HealthChecker) StartReceiverPeriodicHealthCheck(ctx context.Context) {
-	for namespace, client := range h.clients {
-		go func(namespace string, client *azservicebus.Client) {
-			go h.periodicHealthCheck(ctx, h.receiverHealthCheck, namespace, client)
-		}(namespace, client)
-	}
-}
-
-func (h *HealthChecker) periodicHealthCheck(ctx context.Context, healthCheckFunc HealthCheckFunc, namespace string, client *azservicebus.Client) {
+func (h *HealthChecker) periodicHealthCheck(ctx context.Context, hc HealthCheckable, namespaceName string, client *azservicebus.Client) {
 	nextCheck := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Until(nextCheck)):
-			if err := healthCheckFunc(ctx, namespace, client); err != nil {
-				log(ctx, err)
+			sbCtx, cancelFunc := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
+			err := hc.HealthCheck(sbCtx, client, cancelFunc)
+			if err != nil {
+				getLogger(ctx).Error(err.Error())
 			}
-			nextCheck = nextCheck.Add(h.interval)
+			hc.IncHealthCheckMetric(namespaceName, err)
+			nextCheck = nextCheck.Add(h.options.HealthCheckInterval)
 		}
 	}
 }
 
-func (h *HealthChecker) senderHealthCheck(ctx context.Context, namespace string, client *azservicebus.Client) error {
-	s, err := client.NewSender(h.entity, nil)
-	if err != nil {
-		sender.Metric.IncHealthCheckFailureCount(namespace, h.entity)
-		return err
-	}
-	sbCtx, cancel := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
-	defer cancel()
-	_, err = s.NewMessageBatch(sbCtx, nil)
-	if err != nil {
-		sender.Metric.IncHealthCheckFailureCount(namespace, h.entity)
-		return err
-	}
-	sender.Metric.IncHealthCheckSuccessCount(namespace, h.entity)
-	return s.Close(ctx)
+// HealthCheckable is an interface for performing health checks on azservicebus.Sender and azservicebus.Receiver.
+type HealthCheckable interface {
+	HealthCheck(ctx context.Context, client *azservicebus.Client, cancelFunc context.CancelFunc) error
+	IncHealthCheckMetric(namespaceName string, healthCheckErr error)
 }
 
-func (h *HealthChecker) receiverHealthCheck(ctx context.Context, namespace string, client *azservicebus.Client) error {
-	var r *azservicebus.Receiver
-	var err error
-	if h.subscription == "" {
-		r, err = client.NewReceiverForQueue(h.entity, nil)
+// SenderHealthChecker performs health checks on azservicebus.Sender.
+type SenderHealthChecker struct {
+	EntityName string
+}
+
+// HealthCheck performs a health check on azservicebus.Sender by creating a new message batch.
+func (s *SenderHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client, cancelFunc context.CancelFunc) error {
+	defer cancelFunc()
+	sbSender, err := client.NewSender(s.EntityName, nil)
+	if err != nil {
+		return err
+	}
+	if _, err = sbSender.NewMessageBatch(ctx, nil); err != nil {
+		return err
+	}
+	return sbSender.Close(ctx)
+}
+
+// IncHealthCheckMetric increments the sender health check metric based on the health check result.
+func (s *SenderHealthChecker) IncHealthCheckMetric(namespaceName string, healthCheckErr error) {
+	if healthCheckErr != nil {
+		sender.Metric.IncHealthCheckFailureCount(namespaceName, s.EntityName)
 	} else {
-		r, err = client.NewReceiverForSubscription(h.entity, h.subscription, nil)
+		sender.Metric.IncHealthCheckSuccessCount(namespaceName, s.EntityName)
 	}
+}
+
+// ReceiverHealthChecker performs health checks on azservicebus.Receiver.
+type ReceiverHealthChecker struct {
+	EntityName       string
+	SubscriptionName string
+}
+
+// HealthCheck performs a health check on the azservicebus.Receiver by peeking a message.
+func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client, cancelFunc context.CancelFunc) error {
+	defer cancelFunc()
+	sbReceiver, err := r.createReceiver(client)
 	if err != nil {
-		processor.Metric.IncHealthCheckFailureCount(namespace, h.entity, h.subscription)
 		return err
 	}
-	sbCtx, cancel := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
-	defer cancel()
-	_, err = r.PeekMessages(sbCtx, 1, nil)
-	if err != nil {
-		processor.Metric.IncHealthCheckFailureCount(namespace, h.entity, h.subscription)
+	// note: PeekMessages() does not return an error when the entity is empty
+	if _, err = sbReceiver.PeekMessages(ctx, 1, nil); err != nil {
 		return err
 	}
-	processor.Metric.IncHealthCheckSuccessCount(namespace, h.entity, h.subscription)
-	return r.Close(ctx)
+	return sbReceiver.Close(ctx)
+}
+
+// IncHealthCheckMetric increments the receiver health check metric based on the health check result.
+func (r *ReceiverHealthChecker) IncHealthCheckMetric(namespaceName string, healthCheckErr error) {
+	if healthCheckErr != nil {
+		processor.Metric.IncHealthCheckFailureCount(namespaceName, r.EntityName, r.SubscriptionName)
+	} else {
+		processor.Metric.IncHealthCheckSuccessCount(namespaceName, r.EntityName, r.SubscriptionName)
+	}
+}
+
+func (r *ReceiverHealthChecker) createReceiver(client *azservicebus.Client) (*azservicebus.Receiver, error) {
+	if r.SubscriptionName == "" {
+		return client.NewReceiverForQueue(r.EntityName, nil)
+	}
+	return client.NewReceiverForSubscription(r.EntityName, r.SubscriptionName, nil)
 }
