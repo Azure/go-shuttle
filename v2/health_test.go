@@ -247,7 +247,8 @@ type fakeHealthChecker struct {
 	subscriptionName string
 }
 
-func (f *fakeHealthChecker) HealthCheck(_ context.Context, _ *azservicebus.Client) error {
+func (f *fakeHealthChecker) HealthCheck(_ context.Context, namespaceName string, _ *azservicebus.Client) error {
+	f.incHealthCheckMetric(namespaceName, nil)
 	return nil
 }
 

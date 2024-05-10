@@ -69,11 +69,10 @@ func (h *HealthChecker) periodicHealthCheck(ctx context.Context, hc HealthChecka
 			func() {
 				sbCtx, cancel := context.WithTimeout(ctx, h.options.HealthCheckTimeout)
 				defer cancel()
-				err := hc.HealthCheck(sbCtx, client)
+				err := hc.HealthCheck(sbCtx, namespaceName, client)
 				if err != nil {
 					getLogger(ctx).Error(fmt.Sprintf("Health check failed for namespace %s: %s", namespaceName, err.Error()))
 				}
-				hc.incHealthCheckMetric(namespaceName, err)
 			}()
 			nextCheck = nextCheck.Add(h.options.HealthCheckInterval)
 		}
@@ -82,8 +81,7 @@ func (h *HealthChecker) periodicHealthCheck(ctx context.Context, hc HealthChecka
 
 // HealthCheckable is an interface for performing health checks on azservicebus.Sender and azservicebus.Receiver.
 type HealthCheckable interface {
-	HealthCheck(ctx context.Context, client *azservicebus.Client) error
-	incHealthCheckMetric(namespaceName string, healthCheckErr error)
+	HealthCheck(ctx context.Context, namespaceName string, client *azservicebus.Client) error
 }
 
 // SenderHealthChecker performs health checks on azservicebus.Sender.
@@ -92,7 +90,7 @@ type SenderHealthChecker struct {
 }
 
 // HealthCheck performs a health check on azservicebus.Sender by creating a new message batch.
-func (s *SenderHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client) error {
+func (s *SenderHealthChecker) HealthCheck(ctx context.Context, namespaceName string, client *azservicebus.Client) error {
 	sbSender, err := client.NewSender(s.EntityName, nil)
 	defer func() {
 		if sbSender != nil {
@@ -101,6 +99,7 @@ func (s *SenderHealthChecker) HealthCheck(ctx context.Context, client *azservice
 				err = closeErr
 			}
 		}
+		s.incHealthCheckMetric(namespaceName, err)
 	}()
 	if err != nil {
 		return err
@@ -125,7 +124,7 @@ type ReceiverHealthChecker struct {
 }
 
 // HealthCheck performs a health check on the azservicebus.Receiver by peeking a message.
-func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, client *azservicebus.Client) error {
+func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, namespaceName string, client *azservicebus.Client) error {
 	sbReceiver, err := r.createReceiver(client)
 	defer func() {
 		if sbReceiver != nil {
@@ -134,6 +133,7 @@ func (r *ReceiverHealthChecker) HealthCheck(ctx context.Context, client *azservi
 				err = closeErr
 			}
 		}
+		r.incHealthCheckMetric(namespaceName, err)
 	}()
 	if err != nil {
 		return err
