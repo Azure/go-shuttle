@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/go-shuttle/v2/metrics/common"
 	prom "github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )
@@ -15,6 +16,9 @@ const (
 	messageTypeLabel   = "messageType"
 	deliveryCountLabel = "deliveryCount"
 	successLabel       = "success"
+	namespaceLabel     = "namespace"
+	entityLabel        = "entity"
+	subscriptionLabel  = "subscription"
 )
 
 var (
@@ -46,6 +50,11 @@ func NewRegistry() *Registry {
 			Help:      "total number of message lock renewal",
 			Subsystem: subsystem,
 		}, []string{messageTypeLabel}),
+		HealthCheckCount: prom.NewCounterVec(prom.CounterOpts{
+			Name:      "receiver_health_check_total",
+			Help:      "total number of receiver health check successes or failures",
+			Subsystem: subsystem,
+		}, []string{namespaceLabel, entityLabel, subscriptionLabel, successLabel}),
 		ConcurrentMessageCount: prom.NewGaugeVec(prom.GaugeOpts{
 			Name:      "concurrent_message_count",
 			Help:      "number of messages being handled concurrently",
@@ -68,6 +77,7 @@ func (m *Registry) Init(reg prom.Registerer) {
 		m.MessageHandledCount,
 		m.MessageLockRenewedCount,
 		m.MessageDeadlineReachedCount,
+		m.HealthCheckCount,
 		m.ConcurrentMessageCount)
 }
 
@@ -77,6 +87,7 @@ type Registry struct {
 	MessageHandledCount         *prom.CounterVec
 	MessageLockRenewedCount     *prom.CounterVec
 	MessageDeadlineReachedCount *prom.CounterVec
+	HealthCheckCount            *prom.CounterVec
 	ConcurrentMessageCount      *prom.GaugeVec
 }
 
@@ -88,6 +99,8 @@ type Recorder interface {
 	IncMessageLockRenewedSuccess(msg *azservicebus.ReceivedMessage)
 	IncMessageHandled(receiverName string, msg *azservicebus.ReceivedMessage)
 	IncMessageReceived(receiverName string, count float64)
+	IncHealthCheckSuccessCount(namespace, entity, subscription string)
+	IncHealthCheckFailureCount(namespace, entity, subscription string)
 	IncConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage)
 	DecConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage)
 }
@@ -139,6 +152,28 @@ func (m *Registry) IncMessageReceived(receiverName string, count float64) {
 	m.MessageReceivedCount.WithLabelValues(receiverName).Add(count)
 }
 
+// IncHealthCheckSuccessCount increases the connection success gauge and resets the failure gauge
+func (m *Registry) IncHealthCheckSuccessCount(namespace, entity, subscription string) {
+	labels := map[string]string{
+		namespaceLabel:    namespace,
+		entityLabel:       entity,
+		subscriptionLabel: subscription,
+		successLabel:      "true",
+	}
+	m.HealthCheckCount.With(labels).Inc()
+}
+
+// IncHealthCheckFailureCount increases the connection failure gauge and resets the success gauge
+func (m *Registry) IncHealthCheckFailureCount(namespace, entity, subscription string) {
+	labels := map[string]string{
+		namespaceLabel:    namespace,
+		entityLabel:       entity,
+		subscriptionLabel: subscription,
+		successLabel:      "false",
+	}
+	m.HealthCheckCount.With(labels).Inc()
+}
+
 // Informer allows to inspect metrics value stored in the registry at runtime
 type Informer struct {
 	registry *Registry
@@ -157,8 +192,8 @@ func NewInformerFor(r *Registry) *Informer {
 // GetMessageLockRenewedFailureCount retrieves the current value of the MessageLockRenewedFailureCount metric
 func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 	var total float64
-	collect(i.registry.MessageLockRenewedCount, func(m *dto.Metric) {
-		if !hasLabel(m, successLabel, "false") {
+	common.Collect(i.registry.MessageLockRenewedCount, func(m *dto.Metric) {
+		if !common.HasLabel(m, successLabel, "false") {
 			return
 		}
 		total += m.GetCounter().GetValue()
@@ -166,28 +201,38 @@ func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 	return total, nil
 }
 
-func hasLabel(m *dto.Metric, key string, value string) bool {
-	for _, pair := range m.Label {
-		if pair == nil {
-			continue
+// GetHealthCheckSuccessCount retrieves the current value of the HealthCheckSuccessCount metric
+func (i *Informer) GetHealthCheckSuccessCount(namespace, entity, subscription string) (float64, error) {
+	var total float64
+	common.Collect(i.registry.HealthCheckCount, func(m *dto.Metric) {
+		labels := map[string]string{
+			namespaceLabel:    namespace,
+			entityLabel:       entity,
+			subscriptionLabel: subscription,
+			successLabel:      "true",
 		}
-		if pair.GetName() == key && pair.GetValue() == value {
-			return true
+		if !common.HasLabels(m, labels) {
+			return
 		}
-	}
-	return false
+		total += m.GetCounter().GetValue()
+	})
+	return total, nil
 }
 
-// collect calls the function for each metric associated with the Collector
-func collect(col prom.Collector, do func(*dto.Metric)) {
-	c := make(chan prom.Metric)
-	go func(c chan prom.Metric) {
-		col.Collect(c)
-		close(c)
-	}(c)
-	for x := range c { // eg range across distinct label vector values
-		m := &dto.Metric{}
-		_ = x.Write(m)
-		do(m)
-	}
+// GetHealthCheckFailureCount retrieves the current value of the HealthCheckFailureCount metric
+func (i *Informer) GetHealthCheckFailureCount(namespace, entity, subscription string) (float64, error) {
+	var total float64
+	common.Collect(i.registry.HealthCheckCount, func(m *dto.Metric) {
+		labels := map[string]string{
+			namespaceLabel:    namespace,
+			entityLabel:       entity,
+			subscriptionLabel: subscription,
+			successLabel:      "false",
+		}
+		if !common.HasLabels(m, labels) {
+			return
+		}
+		total += m.GetCounter().GetValue()
+	})
+	return total, nil
 }
