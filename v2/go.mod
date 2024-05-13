@@ -8,7 +8,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.7.0
 	github.com/devigned/tab v0.1.1
 	github.com/onsi/gomega v1.33.1
-	github.com/prometheus/client_golang v1.19.0
+	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/client_model v0.6.1
 	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/otel v1.26.0
