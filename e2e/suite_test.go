@@ -88,7 +88,7 @@ func (s *SBSuite) InitFromEnv() error {
 }
 
 func (s *SBSuite) SetupSuite() {
-	if err := godotenv.Load("../../.env"); err != nil {
+	if err := godotenv.Load("../.env"); err != nil {
 		s.T().Log(err)
 	}
 	s.T().Setenv("GOSHUTTLE_LOG", "ALL")

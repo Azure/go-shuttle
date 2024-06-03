@@ -1,0 +1,271 @@
+=== RUN   TestSuite
+=== RUN   TestSuite/TestPublishAndListen_ConcurrentLockRenewal
+    suite_test.go:132: topic updated: <nil>
+    suite_test.go:152: subscription updated: 0x14000336210
+    e2e_test.go:42: creating sender...
+    e2e_test.go:45: sending message...
+    e2e_test.go:26: creating receiver...
+    e2e_test.go:36: start processor...
+INFO -  2024-06-03 19:27:29.154503 +0000 UTC  -  starting processor
+    e2e_test.go:51: message 0 sent...
+    e2e_test.go:51: message 1 sent...
+    e2e_test.go:51: message 2 sent...
+    e2e_test.go:51: message 3 sent...
+INFO -  2024-06-03 19:27:29.82422 +0000 UTC  -  received 25 messages - initial
+    e2e_test.go:64: Processing message.
+         Delivery Count: 1
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 2998e2891717438a9262f9ebc10172af - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:65: ID: 655ba8f108da42b3849397bddd300145 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 4880a1041a1f485881d43c9df1d62443 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 5d4c6fe38f0841a3925dc677d99587fb - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 0d035087c04c44aeaf5ff8e06ff57b23 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 6367d9ac81ad428b877e79a544a437b7 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 13495d5acdc54fed8c7289c0fb80b1a0 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:65: ID: 9f06d96ec5484377a8b21fc1c6666a3b - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 6c316730442a4bc09af35bbd01bf9801 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: f851bc5af1214a539317c4c07a590da2 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:65: ID: 17db7d5842cf4381ad927910e9773472 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: a2e96623f2e04a79b76c3c249b424d7d - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 166168fbe3d140ada8e3907af70624ad - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 5874696c49d34071a06db0f48a82301d - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:65: ID: 8f6a55e8ee6b45869f096a4f89400155 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:65: ID: dd3305b73374479ea603b05568155569 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 630071e81b55476dabab2c00bd1ce2e2 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: e42bce4863874601b4099b4d3e7a3af8 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: b89b4d9616f14129a579f6b745613f4d - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 2
+    e2e_test.go:65: ID: 94038ee9575d40d0b8017f23e131eb2e - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:65: ID: 1f1582ef58094a1b9657fed497f094db - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: f525b6fe15494acda4bc374c70b661de - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: e726cd5db50346f6876f032560e3b1da - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:65: ID: 81d289a22f754594814006ccc133e052 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:64: Processing message.
+         Delivery Count: 3
+    e2e_test.go:65: ID: 4f9ac6208ad44731af69e5765fd1f0b0 - Locked Until: 2024-06-03 19:27:39.947 +0000 UTC
+    e2e_test.go:66: sleeping...
+    e2e_test.go:51: message 4 sent...
+    e2e_test.go:51: message 5 sent...
+    e2e_test.go:51: message 6 sent...
+    e2e_test.go:51: message 7 sent...
+    e2e_test.go:51: message 8 sent...
+    e2e_test.go:51: message 9 sent...
+    e2e_test.go:51: message 10 sent...
+    e2e_test.go:51: message 11 sent...
+    e2e_test.go:51: message 12 sent...
+    e2e_test.go:51: message 13 sent...
+    e2e_test.go:51: message 14 sent...
+    e2e_test.go:51: message 15 sent...
+    e2e_test.go:51: message 16 sent...
+    e2e_test.go:51: message 17 sent...
+    e2e_test.go:51: message 18 sent...
+    e2e_test.go:51: message 19 sent...
+    e2e_test.go:51: message 20 sent...
+    e2e_test.go:51: message 21 sent...
+    e2e_test.go:51: message 22 sent...
+    e2e_test.go:51: message 23 sent...
+    e2e_test.go:51: message 24 sent...
+INFO -  2024-06-03 19:27:31.825664 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825496 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825648 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825839 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825853 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.82586 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825871 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825881 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825882 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825891 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825903 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825918 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.82592 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.82593 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825937 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825944 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825958 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.82594 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825972 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825974 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825981 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825988 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.826012 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.825985 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:31.826255 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.870618 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.870991 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.871138 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.871243 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.871398 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.871564 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.871578 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.871606 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.871626 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.873264 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.875428 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.87548 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.875493 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.875677 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.875823 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.875979 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.87631 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.876427 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.876449 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.876461 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.876471 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.87648 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.876637 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.876684 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:33.876698 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.892145 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.89677 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.897401 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.897496 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.897711 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.897756 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.938594 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.9387 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.938916 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.93897 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.940646 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.940734 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.940771 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.940855 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.941106 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.941173 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.941249 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.941571 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.941742 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.941793 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.943918 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.944134 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.944239 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.944379 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:35.944404 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.915638 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.919053 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.926899 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.927112 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.927255 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.927331 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.966264 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.966376 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.9664 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.966423 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.966633 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.966975 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.967039 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.967068 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.967083 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.968609 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.968676 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.9687 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.96879 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.96882 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.97017 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.970274 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.970693 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.970739 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:37.975615 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.937225 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.941175 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.947802 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.94782 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.954016 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.954023 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.987606 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.987779 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.99305 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.994535 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.995779 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.995972 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.996036 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.99606 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.996075 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.996132 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.996148 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:39.996218 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:40.0108 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:40.010993 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:40.011006 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:40.011015 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:40.012291 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:40.012297 +0000 UTC  -  renewing lock
+INFO -  2024-06-03 19:27:40.012309 +0000 UTC  -  renewing lock
+    e2e_test.go:69: completing message...
+    e2e_test.go:69: completing message...
+    e2e_test.go:69: completing message...
+    e2e_test.go:69: completing message...
+    e2e_test.go:69: completing message...
+--- PASS: TestSuite/TestPublishAndListen_ConcurrentLockRenewal (13.43s)
+--- PASS: TestSuite (13.43s)
+PASS
+ok  	e2e	13.613s
+
+DONE 2 tests in 14.646s

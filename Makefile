@@ -69,7 +69,7 @@ integration-compose: build-test-image
 	@docker-compose --env-file "${ENVFILE}" up
 
 integration-local:
-	LOG_DIRECTORY=. ./run-integration.sh TestConnectionString/TestCreate*
+	LOG_DIRECTORY=. ./run-integration.sh
 
 integration-pipeline: scripts/containergroup.yaml
 	SUITE=$$(echo "${SUITE}" | tr '[:upper:]' '[:lower:]') \
