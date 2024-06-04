@@ -31,12 +31,11 @@ func (s *SBSuite) TestPublishAndListen_ConcurrentLockRenewal() {
 			shuttle.NewPanicHandler(nil,
 				shuttle.NewRenewLockHandler(&shuttle.LockRenewalOptions{Interval: &lockRenewalInterval},
 					shuttle.NewSettlementHandler(nil,
-						testConcurrentLockRenewalHandler(t, success, sendCount)))), &shuttle.ProcessorOptions{MaxConcurrency: 25})
+						testHandler(t, success, sendCount)))), &shuttle.ProcessorOptions{MaxConcurrency: 25})
 
 		t.Logf("start processor...")
 		err = p.Start(ctx)
 		t.Logf("processor exited: %s", err)
-		//require.EqualError(t, err, context.DeadlineExceeded.Error())
 	}()
 
 	t.Logf("creating sender...")
@@ -55,23 +54,6 @@ func (s *SBSuite) TestPublishAndListen_ConcurrentLockRenewal() {
 		require.True(t, ok)
 	case <-ctx.Done():
 		t.Errorf("did not complete the message in time")
-	}
-}
-
-func testConcurrentLockRenewalHandler(t *testing.T, success chan bool, expectedCount int) shuttle.Settler {
-	var count uint32
-	return func(ctx context.Context, message *azservicebus.ReceivedMessage) shuttle.Settlement {
-		t.Logf("Processing message.\n Delivery Count: %d\n", message.DeliveryCount)
-		t.Logf("ID: %s - Locked Until: %s\n", message.MessageID, message.LockedUntil)
-		t.Logf("sleeping...")
-		atomic.AddUint32(&count, 1)
-		t.Logf("current send count: %d", count)
-		time.Sleep(10 * time.Second)
-		if count == uint32(expectedCount) {
-			success <- true
-		}
-		t.Logf("completing message...")
-		return &shuttle.Complete{}
 	}
 }
 
@@ -103,7 +85,7 @@ func (s *SBSuite) TestSenderFailOverAndMultiProcessor() {
 			shuttle.NewPanicHandler(nil,
 				shuttle.NewRenewLockHandler(&shuttle.LockRenewalOptions{Interval: &lockRenewalInterval},
 					shuttle.NewSettlementHandler(nil,
-						testConcurrentLockRenewalHandler(t, success, sendCountPerNamespace*2)))), &shuttle.ProcessorOptions{MaxConcurrency: 20})
+						testHandler(t, success, sendCountPerNamespace*2)))), &shuttle.ProcessorOptions{MaxConcurrency: 20})
 
 		t.Logf("start processor...")
 		err = p.Start(ctx)
@@ -133,5 +115,22 @@ func (s *SBSuite) TestSenderFailOverAndMultiProcessor() {
 		require.True(t, ok)
 	case <-ctx.Done():
 		t.Errorf("did not complete the message in time")
+	}
+}
+
+func testHandler(t *testing.T, success chan bool, expectedCount int) shuttle.Settler {
+	var count uint32
+	return func(ctx context.Context, message *azservicebus.ReceivedMessage) shuttle.Settlement {
+		t.Logf("Processing message.\n Delivery Count: %d\n", message.DeliveryCount)
+		t.Logf("ID: %s - Locked Until: %s\n", message.MessageID, message.LockedUntil)
+		t.Logf("sleeping...")
+		atomic.AddUint32(&count, 1)
+		t.Logf("current send count: %d", count)
+		time.Sleep(10 * time.Second)
+		if count == uint32(expectedCount) {
+			success <- true
+		}
+		t.Logf("completing message...")
+		return &shuttle.Complete{}
 	}
 }
