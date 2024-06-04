@@ -40,11 +40,17 @@ type SBSuite struct {
 	// closer         io.Closer # TODO - implement closer functionality
 	sbAdminClient *azadmin.Client
 	sbClient      *azservicebus.Client
+
+	// FailOver fields
+	FailOverConnStr       string
+	FailOverNamespace     string
+	sbFailOverAdminClient *azadmin.Client
+	sbFailOverClient      *azservicebus.Client
 }
 
-func (s *SBSuite) GetSender(queueOrTopic string) (*azservicebus.Sender, error) {
+func (s *SBSuite) GetSender(client *azservicebus.Client, queueOrTopic string) (*azservicebus.Sender, error) {
 	// prefix the queue/topic
-	return s.sbClient.NewSender(queueOrTopic, nil)
+	return client.NewSender(queueOrTopic, nil)
 }
 
 func init() {
@@ -83,6 +89,7 @@ func (s *SBSuite) InitFromEnv() error {
 		setFromEnv("AZURE_CLIENT_ID", &s.ClientID),
 		setFromEnv("AZURE_CLIENT_SECRET", &s.ClientSecret),
 		setFromEnv("SERVICEBUS_CONNECTION_STRING", &s.ConnStr),
+		setFromEnv("SERVICEBUS_FAILOVER_CONNECTION_STRING", &s.FailOverConnStr),
 		setFromEnv("TEST_RESOURCE_GROUP", &s.ResourceGroup),
 		setFromEnv("TEST_LOCATION", &s.Location))
 }
@@ -91,7 +98,6 @@ func (s *SBSuite) SetupSuite() {
 	if err := godotenv.Load("../.env"); err != nil {
 		s.T().Log(err)
 	}
-	s.T().Setenv("GOSHUTTLE_LOG", "ALL")
 	if os.Getenv("TRACING") == "1" {
 		_, err := initTracing()
 		if err != nil {
@@ -110,33 +116,41 @@ func (s *SBSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.sbAdminClient, err = azadmin.NewClientFromConnectionString(s.ConnStr, nil)
 	s.Require().NoError(err)
+
+	parsed, err = parsedConnectionFromStr(s.FailOverConnStr)
+	s.Require().NoErrorf(err, "failover connection string could not be parsed")
+	s.FailOverNamespace = parsed.Namespace
+	s.sbFailOverClient, err = azservicebus.NewClientFromConnectionString(s.FailOverConnStr, nil)
+	s.Require().NoError(err)
+	s.sbFailOverAdminClient, err = azadmin.NewClientFromConnectionString(s.FailOverConnStr, nil)
+	s.Require().NoError(err)
 }
 
 func (s *SBSuite) ApplyPrefix(name string) string {
 	return fmt.Sprintf("%s-%s", s.Prefix, name)
 }
 
-func (s *SBSuite) EnsureTopic(ctx context.Context, t *testing.T, name string) {
-	topic, err := s.sbAdminClient.GetTopic(ctx, name, nil)
+func (s *SBSuite) EnsureTopic(ctx context.Context, t *testing.T, adminClient *azadmin.Client, name string) {
+	topic, err := adminClient.GetTopic(ctx, name, nil)
 	require.NoError(t, err)
 	if topic == nil {
-		createResponse, err := s.sbAdminClient.CreateTopic(ctx, name, &azadmin.CreateTopicOptions{
+		createResponse, err := adminClient.CreateTopic(ctx, name, &azadmin.CreateTopicOptions{
 			Properties: &azadmin.TopicProperties{},
 		})
 		require.NoError(t, err)
 		t.Logf("topic created: %v", createResponse.Status)
 		return
 	}
-	updateResponse, err := s.sbAdminClient.UpdateTopic(ctx, name, azadmin.TopicProperties{}, nil)
+	updateResponse, err := adminClient.UpdateTopic(ctx, name, azadmin.TopicProperties{}, nil)
 	require.NoError(t, err)
 	t.Logf("topic updated: %v", updateResponse.Status)
 }
 
-func (s *SBSuite) EnsureTopicSubscription(ctx context.Context, t *testing.T, topicName, subscriptionName string) {
-	sub, err := s.sbAdminClient.GetSubscription(ctx, topicName, subscriptionName, nil)
+func (s *SBSuite) EnsureTopicSubscription(ctx context.Context, t *testing.T, adminClient *azadmin.Client, topicName, subscriptionName string) {
+	sub, err := adminClient.GetSubscription(ctx, topicName, subscriptionName, nil)
 	require.NoError(t, err)
 	if sub == nil {
-		createResponse, err := s.sbAdminClient.CreateSubscription(ctx, topicName, subscriptionName, &azadmin.CreateSubscriptionOptions{
+		createResponse, err := adminClient.CreateSubscription(ctx, topicName, subscriptionName, &azadmin.CreateSubscriptionOptions{
 			Properties: &azadmin.SubscriptionProperties{
 				LockDuration: to.Ptr("PT10S"),
 			},
@@ -145,7 +159,7 @@ func (s *SBSuite) EnsureTopicSubscription(ctx context.Context, t *testing.T, top
 		t.Logf("subscription created: %v", createResponse.Status)
 		return
 	}
-	updateResponse, err := s.sbAdminClient.UpdateSubscription(ctx, topicName, subscriptionName, azadmin.SubscriptionProperties{
+	updateResponse, err := adminClient.UpdateSubscription(ctx, topicName, subscriptionName, azadmin.SubscriptionProperties{
 		LockDuration: to.Ptr("PT10S"),
 	}, nil)
 	require.NoError(t, err)
@@ -153,6 +167,14 @@ func (s *SBSuite) EnsureTopicSubscription(ctx context.Context, t *testing.T, top
 }
 
 func (s *SBSuite) TearDownSuite() {
+	t := s.T()
+	t.Log("tearing down suite")
+	_, err := s.sbAdminClient.DeleteTopic(context.Background(), s.ApplyPrefix("lock-renewal-topic"), nil)
+	t.Logf("deleting lock-renewal-topic: %v", err)
+	_, err = s.sbAdminClient.DeleteTopic(context.Background(), s.ApplyPrefix("failover-topic"), nil)
+	t.Logf("deleting primary failover-topic: %v", err)
+	_, err = s.sbFailOverAdminClient.DeleteTopic(context.Background(), s.ApplyPrefix("failover-topic"), nil)
+	t.Logf("deleting backup failover-topic: %v", err)
 	p, _ := os.FindProcess(syscall.Getpid())
 	if err := p.Signal(syscall.SIGINT); err != nil {
 		return

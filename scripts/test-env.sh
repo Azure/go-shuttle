@@ -46,6 +46,23 @@ SERVICEBUS_CONNECTION_STRING=$(az servicebus namespace authorization-rule keys l
 --query primaryConnectionString \
 -o tsv)
 
+echo "get failover servicebus id"
+SERVICEBUS_FAILOVER_ID=$(az servicebus namespace show \
+--name "${SERVICEBUS_NAMESPACE_NAME}-failover" \
+-g ${TEST_RESOURCE_GROUP} \
+--subscription ${AZURE_SUBSCRIPTION_ID} \
+--query id \
+-o tsv)
+
+echo "get failover servicebus connection string"
+SERVICEBUS_FAILOVER_CONNECTION_STRING=$(az servicebus namespace authorization-rule keys list \
+--resource-group ${TEST_RESOURCE_GROUP} \
+--namespace-name "${SERVICEBUS_NAMESPACE_NAME}-failover" \
+--subscription ${AZURE_SUBSCRIPTION_ID} \
+--name "RootManageSharedAccessKey" \
+--query primaryConnectionString \
+-o tsv)
+
 echo "get storage account key"
 STORAGE_ACCOUNT_KEY=$(az storage account keys list \
   --resource-group "${TEST_RESOURCE_GROUP}" \
@@ -70,6 +87,8 @@ findOrReplace "REGISTRY_PASSWORD" "${REGISTRY_PASSWORD}" "${DOTENV}"
 findOrReplace "REGISTRY" "${REGISTRY}" "${DOTENV}"
 findOrReplace "SERVICEBUS_ID" "${SERVICEBUS_ID}" "${DOTENV}"
 findOrReplace "SERVICEBUS_CONNECTION_STRING" "${SERVICEBUS_CONNECTION_STRING}" "${DOTENV}"
+findOrReplace "SERVICEBUS_FAILOVER_ID" "${SERVICEBUS_FAILOVER_ID}" "${DOTENV}"
+findOrReplace "SERVICEBUS_FAILOVER_CONNECTION_STRING" "${SERVICEBUS_FAILOVER_CONNECTION_STRING}" "${DOTENV}"
 findOrReplace "STORAGE_ACCOUNT_KEY" "${STORAGE_ACCOUNT_KEY}" "${DOTENV}"
 
 
