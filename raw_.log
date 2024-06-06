@@ -1,0 +1,459 @@
+=== RUN   TestSuite
+=== RUN   TestSuite/TestPublishAndListen_ConcurrentLockRenewal
+    suite_test.go:141: topic created: 0x140002129b0
+    suite_test.go:159: subscription created: 0x14000212b90
+    e2e_test.go:41: creating sender...
+    e2e_test.go:44: sending message...
+    e2e_test.go:26: creating receiver...
+    e2e_test.go:36: start processor...
+2024/06/06 12:39:50 INFO starting processor receiver
+    e2e_test.go:50: message 0 sent...
+    e2e_test.go:50: message 1 sent...
+    e2e_test.go:50: message 2 sent...
+    e2e_test.go:50: message 3 sent...
+    e2e_test.go:50: message 4 sent...
+    e2e_test.go:50: message 5 sent...
+    e2e_test.go:50: message 6 sent...
+2024/06/06 12:39:50 INFO processor receiver received 5 messages - initial
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 81c00b0f380d4eb78ee217a18779f66f - Locked Until: 2024-06-06 19:40:00.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 0d9182ba904f4994a03f5f2e7f243c3f - Locked Until: 2024-06-06 19:40:00.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 2
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 710a7c1ad0bb46ceb7956584482cf3e7 - Locked Until: 2024-06-06 19:40:00.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 3
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 6b0ede821f0b43439beb6c7d771bf5ac - Locked Until: 2024-06-06 19:40:00.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 4
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 4821b1ee2c834791850f57e138f0f266 - Locked Until: 2024-06-06 19:40:00.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 5
+    e2e_test.go:50: message 7 sent...
+    e2e_test.go:50: message 8 sent...
+    e2e_test.go:50: message 9 sent...
+    e2e_test.go:50: message 10 sent...
+    e2e_test.go:50: message 11 sent...
+    e2e_test.go:50: message 12 sent...
+    e2e_test.go:50: message 13 sent...
+    e2e_test.go:50: message 14 sent...
+    e2e_test.go:50: message 15 sent...
+    e2e_test.go:50: message 16 sent...
+    e2e_test.go:50: message 17 sent...
+    e2e_test.go:50: message 18 sent...
+    e2e_test.go:50: message 19 sent...
+    e2e_test.go:50: message 20 sent...
+    e2e_test.go:50: message 21 sent...
+    e2e_test.go:50: message 22 sent...
+    e2e_test.go:50: message 23 sent...
+    e2e_test.go:50: message 24 sent...
+2024/06/06 12:39:51 INFO processor receiver received 20 messages from processor loop
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: c4e8ba30b12547e08df8840df0bea166 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:125: ID: 7549afb2961e423680826dde92ea99ce - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 7
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: a099e73b8a1947688d8462cde1c14776 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:125: ID: c1e4e69641a9410ead81325630e14090 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 8
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: adb9069d3cd447b9886160cf9dd287c0 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 9
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 277b64b9b48f4bc6b41650e1f20d5cdf - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 10
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 03fb6e28de7142f89b0be5bd3a9cbc55 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 11
+    e2e_test.go:125: ID: 325f89ea3fa34ab3a77015486f1d4a0b - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 12
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 3c2adc0990c944c29e779563d1b43f02 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 13
+    e2e_test.go:125: ID: d1f4382587b24126abdb645011aee59a - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 14
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 037aa752b3a648f4b5a9b5cb4a83e8c9 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 15
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 16
+    e2e_test.go:125: ID: 5fd6e2204e0041d3b4ad8871f4342602 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 17
+    e2e_test.go:125: ID: c00bf20a127d43feaeb764ed02940b22 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 18
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 2befaeb562654af19fd088a0207d19c9 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 19
+    e2e_test.go:128: current send count: 6
+    e2e_test.go:125: ID: 1cd27b574eb441ccade3b78e60f8224f - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 20
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 6d470522c2594b86a83eff68f9e6b62d - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 21
+    e2e_test.go:125: ID: 2007c31618ec4541b0c01ab636dd02a6 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 22
+    e2e_test.go:125: ID: bae03ce8ec9a48d7aba092d8706855ee - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 23
+    e2e_test.go:125: ID: a1c48d6414964d64a35e9cfd3fb09a28 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 24
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: fce13345209b41b2991dd79468f57c75 - Locked Until: 2024-06-06 19:40:01.959 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 25
+2024/06/06 12:39:52 INFO renewing lock
+2024/06/06 12:39:52 INFO renewing lock
+2024/06/06 12:39:52 INFO renewing lock
+2024/06/06 12:39:52 INFO renewing lock
+2024/06/06 12:39:52 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:53 INFO renewing lock
+2024/06/06 12:39:54 INFO renewing lock
+2024/06/06 12:39:54 INFO renewing lock
+2024/06/06 12:39:54 INFO renewing lock
+2024/06/06 12:39:54 INFO renewing lock
+2024/06/06 12:39:54 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:55 INFO renewing lock
+2024/06/06 12:39:56 INFO renewing lock
+2024/06/06 12:39:56 INFO renewing lock
+2024/06/06 12:39:56 INFO renewing lock
+2024/06/06 12:39:56 INFO renewing lock
+2024/06/06 12:39:56 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:57 INFO renewing lock
+2024/06/06 12:39:58 INFO renewing lock
+2024/06/06 12:39:58 INFO renewing lock
+2024/06/06 12:39:58 INFO renewing lock
+2024/06/06 12:39:58 INFO renewing lock
+2024/06/06 12:39:58 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+2024/06/06 12:39:59 INFO renewing lock
+    e2e_test.go:133: completing message...
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done, stop receiving from processor receiver
+2024/06/06 12:40:00 INFO exiting processor receiver
+2024/06/06 12:40:00 ERROR processor receiver start attempt 0 failed: processor receiver stopped: context canceled
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+--- PASS: TestSuite/TestPublishAndListen_ConcurrentLockRenewal (21.51s)
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+=== RUN   TestSuite/TestSenderFailOverAndMultiProcessor
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 ERROR complete settlement failed: context canceled
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+2024/06/06 12:40:00 INFO context done: stopping periodic renewal
+2024/06/06 12:40:00 INFO canceling message context
+2024/06/06 12:40:00 INFO stopped periodic renewal
+    suite_test.go:141: topic created: 0x14000055ed0
+    suite_test.go:141: topic created: 0x14000212e50
+    suite_test.go:159: subscription created: 0x14000213030
+    suite_test.go:159: subscription created: 0x14000213240
+    e2e_test.go:74: creating receiver...
+    e2e_test.go:90: start processor...
+2024/06/06 12:40:07 INFO starting processor failover
+2024/06/06 12:40:07 INFO starting processor primary
+2024/06/06 12:40:08 INFO processor primary received 1 messages - initial
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: cd8848a76c1a4efe8a6394a852b6751c - Locked Until: 2024-06-06 19:40:18.069 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 1
+2024/06/06 12:40:08 INFO processor failover received 1 messages - initial
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 78d06470850b4650884f9470143bc0bf - Locked Until: 2024-06-06 19:40:18.865 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 2
+2024/06/06 12:40:09 INFO processor primary received 9 messages from processor loop
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 5aee1a0edf3541009eabba447461eb08 - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 3
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 49b3fef8c0684cfea96d1c944d6082f6 - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 4
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 237eb48e633a4263827b30f128e09927 - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 5
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 9ea13dcf065f41438a295b3112b2bf50 - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 6
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 7ca8ba25de014b8d92c6d20e41fbb825 - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 7
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: ff6a45758fbc4ddabba5c3c423114da8 - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 8
+    e2e_test.go:125: ID: 7ad65976a03b453bbc689ad64a50d5da - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 9
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: f58c7aff53594bfdb5d11f7212216a18 - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 10
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 8e7468b743b7433fbd9f0018f825f5ae - Locked Until: 2024-06-06 19:40:19.115 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 11
+2024/06/06 12:40:09 INFO processor failover received 9 messages from processor loop
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 9e7433e2fa8e4ac6b4d51cb8b88e57f5 - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 12
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: b6147c8dfcbf4686bc427228412bcd38 - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 13
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 5bd66f3578ad4f60af9c428ccb5af5e5 - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 14
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: 2a8aaa2bbebd47878079b1b440c4b2ef - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 15
+    e2e_test.go:125: ID: e1c7500cce49470d9466e6575c4ec88e - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 16
+    e2e_test.go:125: ID: e877ed4bf9fb434585d00ea93c8a0c7e - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 17
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: d3832757fdfa489c97aa7a34b0683d1c - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 18
+    e2e_test.go:124: Processing message.
+         Delivery Count: 1
+    e2e_test.go:125: ID: f66556646a944d00b86d54e14f42be06 - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 19
+    e2e_test.go:125: ID: b3c19ec886254e1db50fa34620de88d6 - Locked Until: 2024-06-06 19:40:19.912 +0000 UTC
+    e2e_test.go:126: sleeping...
+    e2e_test.go:128: current send count: 20
+2024/06/06 12:40:10 INFO renewing lock
+2024/06/06 12:40:10 INFO renewing lock

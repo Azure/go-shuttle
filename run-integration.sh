@@ -3,6 +3,7 @@
 set -ex
 
 go install gotest.tools/gotestsum@latest
+go install github.com/jstemmer/go-junit-report/v2@latest
 
 if [ -n "$LOG_DIRECTORY" ]; then
   echo "Log directory defined"
@@ -25,6 +26,8 @@ else
    START_SLEEP=0
 fi
 sleep "${START_SLEEP}"
+
+cd e2e
 #DEBUG_LEVEL=3 go test -v -timeout 120m --tags=integration,debug ./integration "$@" 2>&1 | tee "${LOG_DIRECTORY}/raw.log" >(go-junit-report -set-exit-code > "${LOG_DIRECTORY}/integration.junit.xml")
 # go test -v -timeout 120m --tags=integration ./integration "$@" 2>&1 | tee "${LOG_DIRECTORY}/raw.log" >(go-junit-report -set-exit-code > "${LOG_DIRECTORY}/integration.junit.xml")
-TEST_DIRECTORY=./integration gotestsum --format standard-verbose -- -p 1 -timeout 120m --tags=integration -run "${SUITE}" ./integration | tee "${LOG_DIRECTORY}/raw_${SUITE}.log"
+TEST_DIRECTORY=./e2e gotestsum --format standard-verbose -- ./... -p 1 -timeout 120m --tags=e2e -run "${SUITE}" | tee "../${LOG_DIRECTORY}/raw_${SUITE}.log"

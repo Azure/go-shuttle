@@ -27,6 +27,8 @@ properties:
         value: ${AZURE_CLIENT_ID}
       - name: SERVICEBUS_CONNECTION_STRING
         secureValue: ${SERVICEBUS_CONNECTION_STRING}
+      - name: SERVICEBUS_FAILOVER_CONNECTION_STRING
+        secureValue: ${SERVICEBUS_FAILOVER_CONNECTION_STRING}
       - name: SERVICEBUS_NAMESPACE_NAME
         value: ${SERVICEBUS_NAMESPACE_NAME}
       - name: MANAGED_IDENTITY_CLIENT_ID
@@ -44,7 +46,7 @@ properties:
       - name: SUITE
         value: ${SUITE}
       - name: GOTESTSUM_JUNITFILE
-        value: ${GOTESTSUM_JUNITFILE}
+        value: ${LOG_DIRECTORY}/${SUITE}.junit.xml
       - name: START_SLEEP
         value: 90
   imageRegistryCredentials: # Credentials to pull a private image

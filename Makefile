@@ -13,6 +13,15 @@ LOG_DIRECTORY?=/aci/logs/localrun_$(shell date -u +"%FT%H%M%S%Z")
 ACI_CONTAINER_NAME?=tester
 export
 
+.PHONY: check-suite
+check-suite:
+ifeq ($(SUITE),)
+	$(eval SUITE = TestSuite)
+	@echo "SUITE is not set. Setting SUITE to: $(SUITE)"
+else
+	@echo "running suite $(SUITE)"
+endif
+
 .PHONY: test-setup
 test-setup:
 	scripts/test-setup.sh "${ENVFILE}"
@@ -29,19 +38,18 @@ build-test-image:
 	echo "envfile : ${ENVFILE}"
 	echo "REGISTRY : ${REGISTRY}"
 
-	docker build -t ${IMAGE} .
+	docker build -t ${IMAGE} . --platform linux/amd64
 
 push-test-image:
 	@docker login -u ${REGISTRY_USER} -p ${REGISTRY_PASSWORD} ${REGISTRY}
 	docker push ${IMAGE}
-
 
 test-aci: clean-aci scripts/containergroup.yaml
 	containerId=$$(az container create --file scripts/containergroup.yaml \
 	--name "${ACI_CONTAINER_NAME}" \
 	--resource-group ${TEST_RESOURCE_GROUP} \
 	--subscription ${AZURE_SUBSCRIPTION_ID} \
-	--environment-variables SUITE=${SUITE} \
+	--environment-variables "SUITE"="${SUITE}" \
 	--verbose \
 	--query id -o tsv); \
 	./scripts/wait-aci.sh $${containerId}
@@ -53,7 +61,7 @@ shell-aci: clean-aci
 	--command-line "/bin/bash"; \
 	az container attach --name "pubsubtester" --resource-group "${TEST_RESOURCE_GROUP}"
 
-scripts/containergroup.yaml:
+scripts/containergroup.yaml: check-suite
 	envsubst < scripts/containergroup.template.yaml > scripts/containergroup.yaml
 
 clean-aci:
@@ -69,7 +77,7 @@ integration-compose: build-test-image
 	@docker-compose --env-file "${ENVFILE}" up
 
 integration-local:
-	LOG_DIRECTORY=. ./run-integration.sh TestConnectionString/TestCreate*
+	LOG_DIRECTORY=. ./run-integration.sh
 
 integration-pipeline: scripts/containergroup.yaml
 	SUITE=$$(echo "${SUITE}" | tr '[:upper:]' '[:lower:]') \

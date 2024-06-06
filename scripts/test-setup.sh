@@ -73,6 +73,34 @@ az role assignment create \
 --role "Azure Service Bus Data Owner" \
 -o none
 
+# Create a fail over namespace for the service bus
+echo "create servicebus failover namespace"
+SERVICEBUS_FAILOVER_ID=$(az servicebus namespace create \
+--name "${SERVICEBUS_NAMESPACE_NAME}-failover" \
+-l ${TEST_LOCATION} \
+-g ${TEST_RESOURCE_GROUP} \
+--subscription ${AZURE_SUBSCRIPTION_ID} \
+--sku premium \
+--query id \
+-o tsv)
+
+echo "get servicebus failover connection string"
+SERVICEBUS_FAILOVER_CONNECTION_STRING=$(az servicebus namespace authorization-rule keys list \
+--resource-group ${TEST_RESOURCE_GROUP} \
+--namespace-name "${SERVICEBUS_NAMESPACE_NAME}-failover" \
+--subscription ${AZURE_SUBSCRIPTION_ID} \
+--name "RootManageSharedAccessKey" \
+--query primaryConnectionString \
+-o tsv)
+
+echo "assign failover servicebus role to identity"
+az role assignment create \
+--assignee-object-id "${MANAGED_IDENTITY_PRINCIPAL_ID}" \
+--assignee-principal-type ServicePrincipal \
+--scope "${SERVICEBUS_FAILOVER_ID}" \
+--role "Azure Service Bus Data Owner" \
+-o none
+
 # Create the storage account with the parameters
 az storage account create \
     --resource-group ${TEST_RESOURCE_GROUP} \
@@ -108,6 +136,8 @@ findOrReplace "REGISTRY_PASSWORD" "${REGISTRY_PASSWORD}" "${DOTENV}"
 findOrReplace "REGISTRY" "${REGISTRY}" "${DOTENV}"
 findOrReplace "SERVICEBUS_ID" "${SERVICEBUS_ID}" "${DOTENV}"
 findOrReplace "SERVICEBUS_CONNECTION_STRING" "${SERVICEBUS_CONNECTION_STRING}" "${DOTENV}"
+findOrReplace "SERVICEBUS_FAILOVER_ID" "${SERVICEBUS_FAILOVER_ID}" "${DOTENV}"
+findOrReplace "SERVICEBUS_FAILOVER_CONNECTION_STRING" "${SERVICEBUS_FAILOVER_CONNECTION_STRING}" "${DOTENV}"
 findOrReplace "STORAGE_ACCOUNT_KEY" "${STORAGE_ACCOUNT_KEY}" "${DOTENV}"
 
 
