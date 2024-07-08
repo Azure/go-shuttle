@@ -262,18 +262,18 @@ func TestSender_AzSender(t *testing.T) {
 	g.Expect(sender.AzSender()).To(Equal(azSender))
 }
 
-func TestSender_FailOver(t *testing.T) {
+func TestSender_SetAzSender(t *testing.T) {
 	g := NewWithT(t)
 	azSender := &fakeAzSender{SendMessageErr: fmt.Errorf("msg send failure")}
 	sender := NewSender(azSender, nil)
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).To(HaveOccurred())
-	sender.FailOver(&fakeAzSender{})
+	sender.SetAzSender(&fakeAzSender{})
 	err = sender.SendMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
 }
 
-func TestSender_ConcurrentSendAndFailOver(t *testing.T) {
+func TestSender_ConcurrentSendAndSetAzSender(t *testing.T) {
 	g := NewWithT(t)
 	azSender1 := &fakeAzSender{}
 	azSender2 := &fakeAzSender{}
@@ -294,9 +294,9 @@ func TestSender_ConcurrentSendAndFailOver(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 		}(i)
 	}
-	// call FailOver in the middle
+	// call SetAzSender in the middle
 	time.Sleep(5 * time.Millisecond)
-	sender.FailOver(azSender2)
+	sender.SetAzSender(azSender2)
 	// wait for all goroutines to finish
 	wg.Wait()
 	// check that some messages were sent with the first sender and some with the second
