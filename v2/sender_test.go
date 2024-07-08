@@ -271,6 +271,8 @@ func TestSender_SetAzSender(t *testing.T) {
 	sender.SetAzSender(&fakeAzSender{})
 	err = sender.SendMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
+	// coverage for deprecated FailOver() function
+	sender.FailOver(&fakeAzSender{})
 }
 
 func TestSender_ConcurrentSendAndSetAzSender(t *testing.T) {
