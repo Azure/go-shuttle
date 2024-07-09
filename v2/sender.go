@@ -206,14 +206,19 @@ func (d *Sender) AzSender() AzServiceBusSender {
 	return d.sbSender
 }
 
-// FailOver sets the underlying azservicebus.Sender instance to the provided one.
-// This is used when the traffic needs to be failed over to a different sender instance.
+// SetAzSender sets the underlying azservicebus.Sender instance to the provided one.
 // All ongoing send operations will continue to use the old sender instance,
 // while new send operations will use the new sender instance.
-func (d *Sender) FailOver(sender AzServiceBusSender) {
+func (d *Sender) SetAzSender(sender AzServiceBusSender) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.sbSender = sender
+}
+
+// Deprecated: use SetAzSender.
+// FailOver sets the underlying azservicebus.Sender instance to the provided one.
+func (d *Sender) FailOver(sender AzServiceBusSender) {
+	d.SetAzSender(sender)
 }
 
 // SetMessageId sets the ServiceBus message's ID to a user-specified value
