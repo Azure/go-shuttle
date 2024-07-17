@@ -61,6 +61,12 @@ func TestSendMetrics(t *testing.T) {
 	count, err = informer.GetSendMessageFailureCount()
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(count).To(Equal(float64(1)))
+
+	// count resets properly
+	r.ResetSendMessageCount()
+	count, err = informer.GetSendMessageFailureCount()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(count).To(Equal(float64(0)))
 }
 
 func TestConnectionMetrics(t *testing.T) {

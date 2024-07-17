@@ -51,6 +51,7 @@ type Recorder interface {
 	Init(registerer prom.Registerer)
 	IncSendMessageSuccessCount()
 	IncSendMessageFailureCount()
+	ResetSendMessageCount()
 	IncHealthCheckSuccessCount(namespace, entity string)
 	IncHealthCheckFailureCount(namespace, entity string)
 }
@@ -69,6 +70,10 @@ func (m *Registry) IncSendMessageFailureCount() {
 		prom.Labels{
 			successLabel: "false",
 		}).Inc()
+}
+
+func (m *Registry) ResetSendMessageCount() {
+	m.MessageSentCount.Reset()
 }
 
 // IncHealthCheckSuccessCount increases the connection success gauge and resets the failure gauge
