@@ -23,6 +23,10 @@ type LockRenewer interface {
 type LockRenewalOptions struct {
 	// Interval defines the frequency at which we renew the lock on the message. Defaults to 10 seconds.
 	Interval *time.Duration
+	// LockRenewalTimeout is the timeout value used on the context when sending RenewMessageLock() request.
+	// Defaults to Interval if not set or 0.
+	// Disabled when set to a negative value
+	LockRenewalTimeout *time.Duration
 	// CancelMessageContextOnStop will cancel the downstream message context when the renewal handler is stopped.
 	// Defaults to true.
 	CancelMessageContextOnStop *bool
@@ -34,11 +38,16 @@ type LockRenewalOptions struct {
 // NewRenewLockHandler returns a middleware handler that will renew the lock on the message at the specified interval.
 func NewRenewLockHandler(options *LockRenewalOptions, handler Handler) HandlerFunc {
 	interval := 10 * time.Second
+	lockRenewalTimeout := interval
 	cancelMessageContextOnStop := true
 	metricRecorder := processor.Metric
 	if options != nil {
 		if options.Interval != nil {
 			interval = *options.Interval
+			lockRenewalTimeout = interval
+		}
+		if options.LockRenewalTimeout != nil {
+			lockRenewalTimeout = *options.LockRenewalTimeout
 		}
 		if options.CancelMessageContextOnStop != nil {
 			cancelMessageContextOnStop = *options.CancelMessageContextOnStop
@@ -52,6 +61,7 @@ func NewRenewLockHandler(options *LockRenewalOptions, handler Handler) HandlerFu
 			next:                   handler,
 			lockRenewer:            settler,
 			renewalInterval:        &interval,
+			renewalTimeout:         &lockRenewalTimeout,
 			metrics:                metricRecorder,
 			cancelMessageCtxOnStop: cancelMessageContextOnStop,
 			stopped:                make(chan struct{}, 1), // buffered channel to ensure we are not blocking
@@ -77,6 +87,7 @@ type peekLockRenewer struct {
 	next                   Handler
 	lockRenewer            LockRenewer
 	renewalInterval        *time.Duration
+	renewalTimeout         *time.Duration
 	metrics                processor.Recorder
 	alive                  atomic.Bool
 	cancelMessageCtxOnStop bool
@@ -127,7 +138,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			}
 			logger.Info("renewing lock")
 			count++
-			err := plr.lockRenewer.RenewMessageLock(ctx, message, nil)
+			err := plr.renewMessageLock(ctx, message, nil)
 			if err != nil {
 				logger.Error(fmt.Sprintf("failed to renew lock: %s", err))
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -169,4 +180,13 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 			}
 		}
 	}
+}
+
+func (plr *peekLockRenewer) renewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error {
+	if *plr.renewalInterval > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, *plr.renewalTimeout)
+		defer cancel()
+	}
+	return plr.lockRenewer.RenewMessageLock(ctx, message, options)
 }
