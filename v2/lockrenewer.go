@@ -25,7 +25,8 @@ type LockRenewalOptions struct {
 	Interval *time.Duration
 	// LockRenewalTimeout is the timeout value used on the context when sending RenewMessageLock() request.
 	// Defaults to Interval if not set or 0.
-	// Disabled when set to a negative value
+	// Disabled when set to a negative value.
+	// Recommended to set to LockDuration - Interval.
 	LockRenewalTimeout *time.Duration
 	// CancelMessageContextOnStop will cancel the downstream message context when the renewal handler is stopped.
 	// Defaults to true.
@@ -46,7 +47,7 @@ func NewRenewLockHandler(options *LockRenewalOptions, handler Handler) HandlerFu
 			interval = *options.Interval
 			lockRenewalTimeout = interval
 		}
-		if options.LockRenewalTimeout != nil {
+		if options.LockRenewalTimeout != nil && *options.LockRenewalTimeout != 0 {
 			lockRenewalTimeout = *options.LockRenewalTimeout
 		}
 		if options.CancelMessageContextOnStop != nil {
@@ -183,7 +184,8 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 }
 
 func (plr *peekLockRenewer) renewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error {
-	if *plr.renewalInterval > 0 {
+	if *plr.renewalTimeout > 0 {
+		getLogger(ctx).Info(fmt.Sprintf("renewing lock with timeout: %s", *plr.renewalTimeout))
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, *plr.renewalTimeout)
 		defer cancel()

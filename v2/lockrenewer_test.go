@@ -20,6 +20,7 @@ import (
 type fakeSBRenewLockSettler struct {
 	fakeSettler
 
+	Delay      time.Duration
 	PerMessage map[*azservicebus.ReceivedMessage]*atomic.Int32
 	mapLock    sync.Mutex
 	Err        error
@@ -27,6 +28,15 @@ type fakeSBRenewLockSettler struct {
 
 func (r *fakeSBRenewLockSettler) RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage,
 	_ *azservicebus.RenewMessageLockOptions) error {
+	if r.Delay > 0 {
+		select {
+		case <-time.After(r.Delay):
+			break
+		case <-ctx.Done():
+			r.RenewCalled.Add(1)
+			return r.Err
+		}
+	}
 	r.RenewCalled.Add(1)
 	r.mapLock.Lock()
 	defer r.mapLock.Unlock()
@@ -266,6 +276,191 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 				}))
 			msg := &azservicebus.ReceivedMessage{}
 			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			if tc.isRenewerCanceled {
+				cancel()
+			}
+			defer cancel()
+			lr.Handle(ctx, tc.settler, msg)
+			tc.verify(NewWithT(t), &tc, informer)
+		})
+	}
+}
+
+func Test_RenewTimeoutOption(t *testing.T) {
+	type testCase struct {
+		name              string
+		settler           *fakeSBRenewLockSettler
+		isRenewerCanceled bool
+		renewTimeout      *time.Duration
+		cancelCtxOnStop   *bool
+		completeDelay     time.Duration
+		processorCtx      context.Context
+		gotMessageCtx     context.Context
+		verify            func(g Gomega, tc *testCase, metrics *processor.Informer)
+	}
+	testCases := []testCase{
+		{
+			name: "should time out at the same time as the renewal interval if not set",
+			settler: &fakeSBRenewLockSettler{
+				// set delay to be greater than interval to check for lockTimeout
+				Delay: time.Duration(100) * time.Millisecond,
+				// customized error to check renewal timeout config
+				Err: fmt.Errorf("renew timeout"),
+			},
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
+				// first renewal attempt at 0ms and finish at 50ms
+				// after interval 50ms, second renewal attempt start at 100ms and finish at 150ms
+				// eventually, the downstream handler completed at 180ms and message context was canceled
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(2))) },
+					180*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+				g.Expect(tc.gotMessageCtx.Err()).To(Equal(context.Canceled))
+				// processor context healthy because we finished early
+				g.Expect(tc.processorCtx.Err()).To(BeNil())
+			},
+		},
+		{
+			name: "should time out at the same time as the renewal interval if set to 0",
+			settler: &fakeSBRenewLockSettler{
+				// set delay to be greater than interval to check for lockTimeout
+				Delay: time.Duration(100) * time.Millisecond,
+				// customized error to check renewal timeout config
+				Err: fmt.Errorf("renew timeout"),
+			},
+			renewTimeout: to.Ptr(time.Duration(0)),
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
+				// first renewal attempt at 0ms and finish at 50ms
+				// after interval 50ms, second renewal attempt start at 100ms and finish at 150ms
+				// eventually, the downstream handler completed at 180ms and message context was canceled
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(2))) },
+					180*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+				g.Expect(tc.gotMessageCtx.Err()).To(Equal(context.Canceled))
+				g.Expect(tc.processorCtx.Err()).To(BeNil())
+			},
+		},
+		{
+			name: "should time out sooner than renewal interval if set",
+			settler: &fakeSBRenewLockSettler{
+				// set delay to be greater than interval to check for lockTimeout
+				Delay: time.Duration(100) * time.Millisecond,
+				// customized error to check renewal timeout config
+				Err: fmt.Errorf("renew timeout"),
+			},
+			renewTimeout: to.Ptr(time.Duration(10) * time.Millisecond),
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
+				// first renewal attempt at 0ms and finish at 10ms
+				// second renewal attempt start at 60ms and finish at 70ms
+				// third renewal attempt start at 120ms and finish at 130ms
+				// eventually, the downstream handler completed at 180ms and message context was canceled
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(3))) },
+					180*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+				g.Expect(tc.gotMessageCtx.Err()).To(Equal(context.Canceled))
+				g.Expect(tc.processorCtx.Err()).To(BeNil())
+			},
+		},
+		{
+			name: "should time out later than renewal interval if set",
+			settler: &fakeSBRenewLockSettler{
+				// set delay to be greater than interval to check for lockTimeout
+				Delay: time.Duration(200) * time.Millisecond,
+				// customized error to check renewal timeout config
+				Err: fmt.Errorf("renew timeout"),
+			},
+			renewTimeout: to.Ptr(time.Duration(100) * time.Millisecond),
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
+				// first renewal attempt at 0ms and finish at 100ms
+				// second renewal attempt start at 150ms and is supposed to finish at 250ms
+				// downstream handler completed at 180ms and message context was canceled before secondary attempt finished
+				// the second renewal attempt was not finished and RenewCalled should be 1
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(1))) },
+					300*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+				g.Expect(tc.gotMessageCtx.Err()).To(Equal(context.Canceled))
+				g.Expect(tc.processorCtx.Err()).To(BeNil())
+			},
+		},
+		{
+			name: "should eventually exit if RenewMessageLock() hangs and renewTimeout is disabled",
+			settler: &fakeSBRenewLockSettler{
+				// set delay to be greater than interval to check for lockTimeout
+				Delay: time.Duration(300) * time.Millisecond,
+				// customized error to check renewal timeout config
+				Err: fmt.Errorf("renew timeout"),
+			},
+			renewTimeout:  to.Ptr(time.Duration(-1)),
+			completeDelay: 300 * time.Millisecond,
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
+				// first renewal attempt at 0ms and hangs, processor context times out at 210ms
+				// the second renewal attempt was not made and RenewCalled should be 1
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(1))) },
+					300*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+				// message context was canceled by lockrenewer
+				g.Expect(tc.gotMessageCtx.Err()).To(Equal(context.DeadlineExceeded))
+				// processor context timed out
+				g.Expect(tc.processorCtx.Err()).To(Equal(context.DeadlineExceeded))
+			},
+		},
+		{
+			name: "should exit after first lock renewal failure due to context errors",
+			settler: &fakeSBRenewLockSettler{
+				// set delay to be greater than interval to check for lockTimeout
+				Delay: time.Duration(100) * time.Millisecond,
+				// customized error to check renewal timeout config
+				Err: context.DeadlineExceeded,
+			},
+			renewTimeout: to.Ptr(time.Duration(0)),
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
+				// first renewal attempt at 0ms and finish at 50ms with error DeadlineExceeded
+				// lock renew handler cancels message context of downstream handler
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(1))) },
+					60*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+				g.Expect(tc.gotMessageCtx.Err()).To(Equal(context.Canceled))
+				g.Expect(tc.processorCtx.Err()).To(BeNil())
+			},
+		},
+	}
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			interval := 50 * time.Millisecond
+			reg := processor.NewRegistry()
+			reg.Init(prometheus.NewRegistry())
+			informer := processor.NewInformerFor(reg)
+			lr := shuttle.NewRenewLockHandler(
+				&shuttle.LockRenewalOptions{
+					Interval:                   &interval,
+					CancelMessageContextOnStop: tc.cancelCtxOnStop,
+					LockRenewalTimeout:         tc.renewTimeout,
+					MetricRecorder:             reg,
+				},
+				shuttle.HandlerFunc(func(ctx context.Context, settler shuttle.MessageSettler,
+					message *azservicebus.ReceivedMessage) {
+					tc.gotMessageCtx = ctx
+					completeDelay := 180 * time.Millisecond
+					if tc.completeDelay > 0 {
+						completeDelay = tc.completeDelay
+					}
+					select {
+					case <-time.After(completeDelay):
+						break
+					case <-ctx.Done():
+						break
+					}
+				}))
+			msg := &azservicebus.ReceivedMessage{}
+			ctx, cancel := context.WithTimeout(context.Background(), 210*time.Millisecond)
+			tc.processorCtx = ctx
 			if tc.isRenewerCanceled {
 				cancel()
 			}
