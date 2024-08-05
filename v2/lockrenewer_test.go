@@ -577,6 +577,24 @@ func Test_RenewRetry(t *testing.T) {
 			},
 		},
 		{
+			name: "should not retry if renew fails for LockLost error",
+			settler: &fakeSBRenewLockSettler{
+				Err: &azservicebus.Error{Code: azservicebus.CodeLockLost},
+			},
+			msgLockedDuration: 1 * time.Minute,
+			renewTimeout:      to.Ptr(100 * time.Millisecond),
+			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
+				// should renew 3 times before message completes at 180ms
+				g.Eventually(
+					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(1))) },
+					180*time.Millisecond,
+					20*time.Millisecond).Should(Succeed())
+				g.Expect(tc.gotMessageCtx.Err()).To(Equal(context.Canceled))
+				// processor context healthy because we finished early
+				g.Expect(tc.processorCtx.Err()).To(BeNil())
+			},
+		},
+		{
 			name: "should not retry if renew fails due to context canceled",
 			settler: &fakeSBRenewLockSettler{
 				Err: context.Canceled,
