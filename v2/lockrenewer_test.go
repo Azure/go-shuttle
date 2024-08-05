@@ -452,7 +452,7 @@ func Test_RenewRetry(t *testing.T) {
 		isRenewerCanceled bool
 		renewTimeout      *time.Duration
 		cancelCtxOnStop   *bool
-		msgLockedUntil    *time.Time
+		msgLockedDuration time.Duration
 		completeDelay     time.Duration
 		processorCtx      context.Context
 		gotMessageCtx     context.Context
@@ -466,8 +466,8 @@ func Test_RenewRetry(t *testing.T) {
 				Delay: time.Duration(100) * time.Millisecond,
 				Err:   context.Canceled,
 			},
-			msgLockedUntil: to.Ptr(time.Now()),
-			renewTimeout:   to.Ptr(60 * time.Millisecond),
+			msgLockedDuration: 0,
+			renewTimeout:      to.Ptr(60 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				g.Eventually(
 					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(0))) },
@@ -485,8 +485,8 @@ func Test_RenewRetry(t *testing.T) {
 				Delay: time.Duration(100) * time.Millisecond,
 				Err:   context.Canceled,
 			},
-			msgLockedUntil: to.Ptr(time.Now().Add(1 * time.Minute)),
-			renewTimeout:   to.Ptr(60 * time.Millisecond),
+			msgLockedDuration: 1 * time.Minute,
+			renewTimeout:      to.Ptr(60 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				// renewal times out every 60ms with context.Canceled error
 				// retry should continue until the downstream handler completes at 180ms
@@ -506,9 +506,9 @@ func Test_RenewRetry(t *testing.T) {
 				Delay: time.Duration(100) * time.Millisecond,
 				Err:   context.Canceled,
 			},
-			msgLockedUntil: to.Ptr(time.Now().Add(1 * time.Minute)),
-			renewTimeout:   to.Ptr(50 * time.Millisecond),
-			completeDelay:  300 * time.Millisecond,
+			msgLockedDuration: 1 * time.Minute,
+			renewTimeout:      to.Ptr(50 * time.Millisecond),
+			completeDelay:     300 * time.Millisecond,
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				// renewal times out every 50ms with context.Canceled error
 				// retry should continue until upstream context exceeds deadline at 210ms
@@ -528,8 +528,8 @@ func Test_RenewRetry(t *testing.T) {
 				Delay: time.Duration(100) * time.Millisecond,
 				Err:   context.Canceled,
 			},
-			msgLockedUntil: to.Ptr(time.Now().Add(130 * time.Millisecond)),
-			renewTimeout:   to.Ptr(50 * time.Millisecond),
+			msgLockedDuration: 130 * time.Millisecond,
+			renewTimeout:      to.Ptr(50 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				// renewal times out every 50ms with context.Canceled error
 				// retry should continue until lock expires at 110ms
@@ -543,10 +543,10 @@ func Test_RenewRetry(t *testing.T) {
 			},
 		},
 		{
-			name:           "should not retry if renew is successful",
-			settler:        &fakeSBRenewLockSettler{},
-			msgLockedUntil: to.Ptr(time.Now().Add(1 * time.Minute)),
-			renewTimeout:   to.Ptr(100 * time.Millisecond),
+			name:              "should not retry if renew is successful",
+			settler:           &fakeSBRenewLockSettler{},
+			msgLockedDuration: 1 * time.Minute,
+			renewTimeout:      to.Ptr(100 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				// should renew 3 times before message completes at 180ms
 				g.Eventually(
@@ -563,8 +563,8 @@ func Test_RenewRetry(t *testing.T) {
 			settler: &fakeSBRenewLockSettler{
 				Err: fmt.Errorf("unknown error"),
 			},
-			msgLockedUntil: to.Ptr(time.Now().Add(1 * time.Minute)),
-			renewTimeout:   to.Ptr(100 * time.Millisecond),
+			msgLockedDuration: 1 * time.Minute,
+			renewTimeout:      to.Ptr(100 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				// should renew 3 times before message completes at 180ms
 				g.Eventually(
@@ -581,8 +581,8 @@ func Test_RenewRetry(t *testing.T) {
 			settler: &fakeSBRenewLockSettler{
 				Err: context.DeadlineExceeded,
 			},
-			msgLockedUntil: to.Ptr(time.Now().Add(1 * time.Minute)),
-			renewTimeout:   to.Ptr(100 * time.Millisecond),
+			msgLockedDuration: 1 * time.Minute,
+			renewTimeout:      to.Ptr(100 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				// should renew 3 times before message completes at 180ms
 				g.Eventually(
@@ -625,7 +625,7 @@ func Test_RenewRetry(t *testing.T) {
 					}
 				}))
 			msg := &azservicebus.ReceivedMessage{
-				LockedUntil: tc.msgLockedUntil,
+				LockedUntil: to.Ptr(time.Now().Add(tc.msgLockedDuration)),
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 210*time.Millisecond)
 			tc.processorCtx = ctx
