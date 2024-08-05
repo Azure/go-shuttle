@@ -528,7 +528,7 @@ func Test_RenewRetry(t *testing.T) {
 				Delay: time.Duration(100) * time.Millisecond,
 				Err:   context.Canceled,
 			},
-			msgLockedUntil: to.Ptr(time.Now().Add(110 * time.Millisecond)),
+			msgLockedUntil: to.Ptr(time.Now().Add(130 * time.Millisecond)),
 			renewTimeout:   to.Ptr(50 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				// renewal times out every 50ms with context.Canceled error
