@@ -584,7 +584,7 @@ func Test_RenewRetry(t *testing.T) {
 			msgLockedDuration: 1 * time.Minute,
 			renewTimeout:      to.Ptr(100 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
-				// should renew 3 times before message completes at 180ms
+				// should immediately exit lock renewal because the error is permanent
 				g.Eventually(
 					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(1))) },
 					180*time.Millisecond,
@@ -602,7 +602,7 @@ func Test_RenewRetry(t *testing.T) {
 			msgLockedDuration: 1 * time.Minute,
 			renewTimeout:      to.Ptr(100 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
-				// should renew 3 times before message completes at 180ms
+				// should exit the renewal after first attempt because context is canceled
 				g.Eventually(
 					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(1))) },
 					180*time.Millisecond,
