@@ -192,10 +192,16 @@ func (plr *peekLockRenewer) renewMessageLock(ctx context.Context, message *azser
 	}
 	// we should keep retrying until lock expiry or until message context is done
 	for time.Until(*message.LockedUntil) > 0 && ctx.Err() == nil {
-		err := plr.renewMessageLockWithTimeout(ctx, renewalTimeout, message, options)
+		var renewErr error
+		func() {
+			getLogger(ctx).Info(fmt.Sprintf("renewing lock with timeout: %s", renewalTimeout))
+			renewalCtx, cancel := context.WithTimeout(ctx, renewalTimeout)
+			defer cancel()
+			renewErr = plr.lockRenewer.RenewMessageLock(renewalCtx, message, options)
+		}()
 		// exit the renewal if we get any error other than context deadline exceeded or if the error is nil.
-		if !errors.Is(err, context.DeadlineExceeded) {
-			return err
+		if !errors.Is(renewErr, context.DeadlineExceeded) {
+			return renewErr
 		}
 	}
 	// lock is expired or message context is done
@@ -203,11 +209,4 @@ func (plr *peekLockRenewer) renewMessageLock(ctx context.Context, message *azser
 		return ctx.Err()
 	}
 	return lockLostErr
-}
-
-func (plr *peekLockRenewer) renewMessageLockWithTimeout(ctx context.Context, timeout time.Duration, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error {
-	getLogger(ctx).Info(fmt.Sprintf("renewing lock with timeout: %s", timeout))
-	renewalCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	return plr.lockRenewer.RenewMessageLock(renewalCtx, message, options)
 }
