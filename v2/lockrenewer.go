@@ -182,7 +182,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 
 func (plr *peekLockRenewer) renewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error {
 	lockLostErr := &azservicebus.Error{Code: azservicebus.CodeLockLost}
-	renewalTimeout := time.Until(*message.LockedUntil)
+	renewalTimeout := time.Until(*message.LockedUntil) // assumes messages.LockedUntil is set
 	if renewalTimeout < 0 {
 		// if the lock is already expired, we should not attempt to renew it.
 		return lockLostErr
