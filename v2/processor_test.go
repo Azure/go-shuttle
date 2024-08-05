@@ -581,14 +581,18 @@ func TestProcessorStart_MultiProcessorWithNewRenewLockHandler(t *testing.T) {
 func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {
 	messages := make(chan *azservicebus.ReceivedMessage, messageCount)
 	for i := 0; i < messageCount; i++ {
-		messages <- &azservicebus.ReceivedMessage{}
+		messages <- &azservicebus.ReceivedMessage{
+			LockedUntil: to.Ptr(time.Now().Add(1 * time.Minute)),
+		}
 	}
 	return messages
 }
 
 func enqueueCount(q chan *azservicebus.ReceivedMessage, messageCount int) {
 	for i := 0; i < messageCount; i++ {
-		q <- &azservicebus.ReceivedMessage{}
+		q <- &azservicebus.ReceivedMessage{
+			LockedUntil: to.Ptr(time.Now().Add(1 * time.Minute)),
+		}
 	}
 }
 
