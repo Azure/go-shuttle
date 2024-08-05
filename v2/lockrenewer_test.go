@@ -188,10 +188,10 @@ func Test_RenewPeriodically_Error(t *testing.T) {
 			},
 		},
 		{
-			name:              "stop periodic renewal on renewal context deadline exceeded",
+			name:              "stop periodic renewal on renewal context canceled",
 			isRenewerCanceled: false,
 			settler: &fakeSBRenewLockSettler{
-				Err: context.DeadlineExceeded,
+				Err: context.Canceled,
 			},
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
 				g.Consistently(
@@ -381,16 +381,16 @@ func Test_RenewTimeoutOption(t *testing.T) {
 			},
 		},
 		{
-			name: "should exit after first lock renewal failure due to context deadline exceeded",
+			name: "should exit after first lock renewal failure due to context canceled",
 			settler: &fakeSBRenewLockSettler{
 				// set delay to be greater than interval to check for lockTimeout
 				Delay: time.Duration(100) * time.Millisecond,
 				// customized error to check renewal timeout config
-				Err: context.DeadlineExceeded,
+				Err: context.Canceled,
 			},
 			renewTimeout: to.Ptr(time.Duration(0)),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
-				// first renewal attempt at 0ms and finish at 50ms with error DeadlineExceeded
+				// first renewal attempt at 0ms and finish at 50ms with error Canceled
 				// lock renew handler cancels message context of downstream handler
 				g.Eventually(
 					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(1))) },
@@ -464,7 +464,7 @@ func Test_RenewRetry(t *testing.T) {
 			settler: &fakeSBRenewLockSettler{
 				// set delay to be greater than interval to check for lockTimeout
 				Delay: time.Duration(100) * time.Millisecond,
-				Err:   context.Canceled,
+				Err:   context.DeadlineExceeded,
 			},
 			msgLockedDuration: 0,
 			renewTimeout:      to.Ptr(60 * time.Millisecond),
@@ -479,16 +479,16 @@ func Test_RenewRetry(t *testing.T) {
 			},
 		},
 		{
-			name: "should continue retry if error is context Canceled",
+			name: "should continue retry if error is context deadline exceeded",
 			settler: &fakeSBRenewLockSettler{
 				// set delay to be greater than interval to check for lockTimeout
 				Delay: time.Duration(100) * time.Millisecond,
-				Err:   context.Canceled,
+				Err:   context.DeadlineExceeded,
 			},
 			msgLockedDuration: 1 * time.Minute,
 			renewTimeout:      to.Ptr(60 * time.Millisecond),
 			verify: func(g Gomega, tc *testCase, metrics *processor.Informer) {
-				// renewal times out every 60ms with context.Canceled error
+				// renewal times out every 60ms with context.DeadlineExceeded error
 				// retry should continue until the downstream handler completes at 180ms
 				g.Eventually(
 					func(g Gomega) { g.Expect(tc.settler.RenewCalled.Load()).To(Equal(int32(3))) },
@@ -504,7 +504,7 @@ func Test_RenewRetry(t *testing.T) {
 			settler: &fakeSBRenewLockSettler{
 				// set delay to be greater than interval to check for lockTimeout
 				Delay: time.Duration(100) * time.Millisecond,
-				Err:   context.Canceled,
+				Err:   context.DeadlineExceeded,
 			},
 			msgLockedDuration: 1 * time.Minute,
 			renewTimeout:      to.Ptr(50 * time.Millisecond),
@@ -526,7 +526,7 @@ func Test_RenewRetry(t *testing.T) {
 			settler: &fakeSBRenewLockSettler{
 				// set delay to be greater than interval to check for lockTimeout
 				Delay: time.Duration(100) * time.Millisecond,
-				Err:   context.Canceled,
+				Err:   context.DeadlineExceeded,
 			},
 			msgLockedDuration: 130 * time.Millisecond,
 			renewTimeout:      to.Ptr(50 * time.Millisecond),
@@ -577,9 +577,9 @@ func Test_RenewRetry(t *testing.T) {
 			},
 		},
 		{
-			name: "should not retry if renew fails due to context timeout exceeded",
+			name: "should not retry if renew fails due to context canceled",
 			settler: &fakeSBRenewLockSettler{
-				Err: context.DeadlineExceeded,
+				Err: context.Canceled,
 			},
 			msgLockedDuration: 1 * time.Minute,
 			renewTimeout:      to.Ptr(100 * time.Millisecond),

@@ -193,8 +193,8 @@ func (plr *peekLockRenewer) renewMessageLock(ctx context.Context, message *azser
 	// we should keep retrying until lock expiry or until message context is done
 	for time.Until(*message.LockedUntil) > 0 && ctx.Err() == nil {
 		err := plr.renewMessageLockWithTimeout(ctx, renewalTimeout, message, options)
-		// exit the renewal if we get any error other than context canceled or if the error is nil.
-		if !errors.Is(err, context.Canceled) {
+		// exit the renewal if we get any error other than context deadline exceeded or if the error is nil.
+		if !errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
 	}
