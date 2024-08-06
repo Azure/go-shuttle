@@ -30,7 +30,7 @@ func TestRegistry_Init(t *testing.T) {
 	fRegistry := &fakeRegistry{}
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
-	g.Expect(fRegistry.collectors).To(HaveLen(6))
+	g.Expect(fRegistry.collectors).To(HaveLen(7))
 	Metric.IncMessageReceived("testReceiverName", 10)
 }
 
@@ -68,16 +68,26 @@ func TestLockRenewalMetrics(t *testing.T) {
 		count, err := informer.GetMessageLockRenewedFailureCount()
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
+		count, err = informer.GetMessageLockRenewalTimeoutCount()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
 
 		// after init, count 0
 		g.Expect(func() { r.Init(registerer) }).ToNot(Panic())
 		count, err = informer.GetMessageLockRenewedFailureCount()
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(0)))
+		count, err = informer.GetMessageLockRenewalTimeoutCount()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(0)))
 
 		// count incremented
 		r.IncMessageLockRenewedFailure(tc.msg)
 		count, err = informer.GetMessageLockRenewedFailureCount()
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(count).To(Equal(float64(1)))
+		r.IncMessageLockRenewalTimeoutCount(tc.msg)
+		count, err = informer.GetMessageLockRenewalTimeoutCount()
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(count).To(Equal(float64(1)))
 
