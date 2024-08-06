@@ -147,6 +147,7 @@ func (plr *peekLockRenewer) startPeriodicRenewal(ctx context.Context, message *a
 					continue
 				}
 				plr.metrics.IncMessageLockRenewedFailure(message)
+				span.RecordError(fmt.Errorf("failed to renew lock: %w", err))
 				// on error, we continue to the next loop iteration.
 				// if the context is Done, we will enter the ctx.Done() case and exit the renewal.
 				// if the error is identified as permanent, we stop the renewal.
@@ -199,7 +200,7 @@ func (plr *peekLockRenewer) renewMessageLock(ctx context.Context, message *azser
 		}()
 		if renewErr != nil {
 			getLogger(ctx).Error(fmt.Sprintf("failed to renew lock: %s", renewErr))
-			span.RecordError(fmt.Errorf("failed to renew lock: %w", renewErr))
+			span.AddEvent("failed to renew message lock", trace.WithAttributes(attribute.String("errorDetails", renewErr.Error())))
 		}
 		// exit the renewal if no error or if we get any error other than context deadline exceeded
 		if !errors.Is(renewErr, context.DeadlineExceeded) {
