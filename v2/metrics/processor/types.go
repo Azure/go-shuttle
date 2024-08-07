@@ -45,9 +45,14 @@ func NewRegistry() *Registry {
 			Help:      "total number of message lock renewal",
 			Subsystem: subsystem,
 		}, []string{messageTypeLabel, successLabel}),
+		MessageLockRenewalTimeoutCount: prom.NewCounterVec(prom.CounterOpts{
+			Name:      "message_lock_renewal_timeout_total",
+			Help:      "total number of message lock renewal calls that timed out",
+			Subsystem: subsystem,
+		}, []string{messageTypeLabel}),
 		MessageDeadlineReachedCount: prom.NewCounterVec(prom.CounterOpts{
 			Name:      "message_deadline_reached_total",
-			Help:      "total number of message lock renewal",
+			Help:      "total number of message lock renewal that reached deadline",
 			Subsystem: subsystem,
 		}, []string{messageTypeLabel}),
 		HealthCheckCount: prom.NewCounterVec(prom.CounterOpts{
@@ -76,6 +81,7 @@ func (m *Registry) Init(reg prom.Registerer) {
 		m.MessageReceivedCount,
 		m.MessageHandledCount,
 		m.MessageLockRenewedCount,
+		m.MessageLockRenewalTimeoutCount,
 		m.MessageDeadlineReachedCount,
 		m.HealthCheckCount,
 		m.ConcurrentMessageCount)
@@ -83,12 +89,13 @@ func (m *Registry) Init(reg prom.Registerer) {
 
 // Registry provides the prometheus metrics for the message processor
 type Registry struct {
-	MessageReceivedCount        *prom.CounterVec
-	MessageHandledCount         *prom.CounterVec
-	MessageLockRenewedCount     *prom.CounterVec
-	MessageDeadlineReachedCount *prom.CounterVec
-	HealthCheckCount            *prom.CounterVec
-	ConcurrentMessageCount      *prom.GaugeVec
+	MessageReceivedCount           *prom.CounterVec
+	MessageHandledCount            *prom.CounterVec
+	MessageLockRenewedCount        *prom.CounterVec
+	MessageLockRenewalTimeoutCount *prom.CounterVec
+	MessageDeadlineReachedCount    *prom.CounterVec
+	HealthCheckCount               *prom.CounterVec
+	ConcurrentMessageCount         *prom.GaugeVec
 }
 
 // Recorder allows to initialize the metric registry and increase/decrease the registered metrics at runtime.
@@ -97,6 +104,7 @@ type Recorder interface {
 	IncMessageDeadlineReachedCount(msg *azservicebus.ReceivedMessage)
 	IncMessageLockRenewedFailure(msg *azservicebus.ReceivedMessage)
 	IncMessageLockRenewedSuccess(msg *azservicebus.ReceivedMessage)
+	IncMessageLockRenewalTimeoutCount(msg *azservicebus.ReceivedMessage)
 	IncMessageHandled(receiverName string, msg *azservicebus.ReceivedMessage)
 	IncMessageReceived(receiverName string, count float64)
 	IncHealthCheckSuccessCount(namespace, entity, subscription string)
@@ -139,6 +147,12 @@ func (m *Registry) DecConcurrentMessageCount(receiverName string, msg *azservice
 	labels := getMessageTypeLabel(msg)
 	labels[receiverNameLabel] = receiverName
 	m.ConcurrentMessageCount.With(labels).Dec()
+}
+
+// IncMessageDeadlineReachedCount increases the message deadline reached counter
+func (m *Registry) IncMessageLockRenewalTimeoutCount(msg *azservicebus.ReceivedMessage) {
+	labels := getMessageTypeLabel(msg)
+	m.MessageLockRenewalTimeoutCount.With(labels).Inc()
 }
 
 // IncMessageDeadlineReachedCount increases the message deadline reached counter
@@ -196,6 +210,15 @@ func (i *Informer) GetMessageLockRenewedFailureCount() (float64, error) {
 		if !common.HasLabel(m, successLabel, "false") {
 			return
 		}
+		total += m.GetCounter().GetValue()
+	})
+	return total, nil
+}
+
+// GetMessageLockRenewalTimeoutCount retrieves the current value of the MessageLockRenewalTimeoutCount metric
+func (i *Informer) GetMessageLockRenewalTimeoutCount() (float64, error) {
+	var total float64
+	common.Collect(i.registry.MessageLockRenewalTimeoutCount, func(m *dto.Metric) {
 		total += m.GetCounter().GetValue()
 	})
 	return total, nil
