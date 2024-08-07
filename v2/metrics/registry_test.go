@@ -27,5 +27,5 @@ func TestRegister(t *testing.T) {
 	g := NewWithT(t)
 	reg := &fakeRegistry{}
 	g.Expect(func() { Register(reg) }).ToNot(Panic())
-	g.Expect(reg.collectors).To(HaveLen(8))
+	g.Expect(reg.collectors).To(HaveLen(9))
 }

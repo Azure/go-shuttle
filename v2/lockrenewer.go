@@ -206,6 +206,8 @@ func (plr *peekLockRenewer) renewMessageLock(ctx context.Context, message *azser
 		if !errors.Is(renewErr, context.DeadlineExceeded) {
 			return renewErr
 		}
+		// renewErr is context.DeadlineExceeded, increment metric and retry
+		plr.metrics.IncMessageLockRenewalTimeoutCount(message)
 	}
 	// lock is expired or message context is done
 	if ctx.Err() != nil {
