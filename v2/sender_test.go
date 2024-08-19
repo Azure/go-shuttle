@@ -25,7 +25,7 @@ func TestFunc_NewSender(t *testing.T) {
 
 	sender = NewSender(nil, &SenderOptions{EnableTracingPropagation: true})
 	if sender.options.Marshaller == nil {
-		t.Errorf("failed to set marshaller, expected: %s, actual: %s", reflect.TypeOf(&DefaultJSONMarshaller{}), reflect.TypeOf(sender.options.Marshaller))
+		t.Errorf("failed to set marshaller")
 	}
 	if !sender.options.EnableTracingPropagation {
 		t.Errorf("failed to set EnableTracingPropagation, expected: true, actual: %t", sender.options.EnableTracingPropagation)
