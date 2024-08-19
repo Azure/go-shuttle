@@ -3,13 +3,10 @@ package shuttle
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"github.com/devigned/tab"
 )
-
-const settlementTimeout = 30 * time.Second
 
 // Settlement represents an action to take on a message. Abandon, Complete, DeadLetter, Defer, NoOp
 type Settlement interface {
@@ -110,10 +107,7 @@ type settlement[T any] struct {
 func (s settlement[T]) settle(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage, options T) {
 	span := tab.FromContext(ctx)
 	span.Logger().Info(fmt.Sprintf("%s message", s.name))
-	settleCtx, cancel := context.WithTimeout(ctx, settlementTimeout)
-	defer cancel()
-	getLogger(ctx).Info(fmt.Sprintf("%s message with ID: %s", s.name, message.MessageID))
-	if err := s.settleFunc(settleCtx, settler, message, options); err != nil {
+	if err := s.settleFunc(ctx, settler, message, options); err != nil {
 		wrapped := fmt.Errorf("%s settlement failed: %w", s.name, err)
 		getLogger(ctx).Error(wrapped.Error())
 		span.Logger().Error(wrapped)

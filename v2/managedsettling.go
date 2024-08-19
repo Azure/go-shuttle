@@ -38,9 +38,7 @@ func (m *ManagedSettler) Handle(ctx context.Context, settler MessageSettler, mes
 		m.options.OnError(ctx, m.options, settler, message, err)
 		return
 	}
-	settleCtx, cancel := context.WithTimeout(ctx, settlementTimeout)
-	defer cancel()
-	if err := settler.CompleteMessage(settleCtx, message, nil); err != nil {
+	if err := settler.CompleteMessage(ctx, message, nil); err != nil {
 		logger.Error(fmt.Sprintf("error completing message: %s", err))
 		m.options.OnAbandoned(ctx, message, err)
 		return
