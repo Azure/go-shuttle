@@ -31,7 +31,7 @@ func TestSetLoggerFunc(t *testing.T) {
 	})
 	defer SetLoggerFunc(func(ctx context.Context) Logger { return &contextLogger{ctx: ctx, logger: slog.Default()} })
 	logger := &testLogger{}
-	ctx := context.WithValue(context.Background(), testlogkey, logger)
+	ctx := context.WithValue(context.Background(), testLogKey{}, logger)
 	getLogger(ctx).Info("test")
 	g := NewWithT(t)
 	g.Expect(getLogger(ctx)).To(Equal(logger))
@@ -41,7 +41,7 @@ func TestSetLoggerFunc(t *testing.T) {
 	g.Expect(func() { getLogger(ctx).Info("") }).ToNot(Panic())
 
 	// getLogger returns nil
-	nilCtx := context.WithValue(context.Background(), testlogkey, nil)
+	nilCtx := context.WithValue(context.Background(), testLogKey{}, nil)
 	g.Expect(func() { getLogger(nilCtx).Info("test") }).ToNot(Panic())
 
 	//coverage on testlogger
@@ -53,12 +53,11 @@ type testLogger struct {
 	entries []string
 }
 
-var testlogkey = struct{}{}
+type testLogKey struct{}
 
 func (t *testLogger) Info(s string) {
 	t.entries = append(t.entries, s)
 }
-
 func (t *testLogger) Warn(s string) {
 }
 
@@ -66,7 +65,7 @@ func (t *testLogger) Error(s string) {
 }
 
 func getTestLogger(ctx context.Context) Logger {
-	if l, ok := ctx.Value(testlogkey).(*testLogger); ok {
+	if l, ok := ctx.Value(testLogKey{}).(*testLogger); ok {
 		return l
 	}
 	return &contextLogger{ctx: ctx, logger: slog.Default()}

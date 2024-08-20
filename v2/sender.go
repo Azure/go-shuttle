@@ -53,7 +53,10 @@ type SenderOptions struct {
 // NewSender takes in a Sender and a Marshaller to create a new object that can send messages to the ServiceBus queue
 func NewSender(sender AzServiceBusSender, options *SenderOptions) *Sender {
 	if options == nil {
-		options = &SenderOptions{Marshaller: &DefaultJSONMarshaller{}}
+		options = &SenderOptions{}
+	}
+	if options.Marshaller == nil {
+		options.Marshaller = &DefaultJSONMarshaller{}
 	}
 	if options.SendTimeout == 0 {
 		options.SendTimeout = defaultSendTimeout

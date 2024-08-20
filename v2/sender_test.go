@@ -22,6 +22,17 @@ func TestFunc_NewSender(t *testing.T) {
 	if sender.options.Marshaller != marshaller {
 		t.Errorf("failed to set marshaller, expected: %s, actual: %s", reflect.TypeOf(marshaller), reflect.TypeOf(sender.options.Marshaller))
 	}
+
+	sender = NewSender(nil, &SenderOptions{EnableTracingPropagation: true})
+	if sender.options.Marshaller == nil {
+		t.Errorf("failed to set marshaller")
+	}
+	if !sender.options.EnableTracingPropagation {
+		t.Errorf("failed to set EnableTracingPropagation, expected: true, actual: %t", sender.options.EnableTracingPropagation)
+	}
+	if sender.options.SendTimeout != defaultSendTimeout {
+		t.Errorf("failed to set SendTimeout, expected: %s, actual: %s", defaultSendTimeout, sender.options.SendTimeout)
+	}
 }
 
 func TestHandlers_SetMessageId(t *testing.T) {
