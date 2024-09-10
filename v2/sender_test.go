@@ -330,6 +330,7 @@ type fakeAzSender struct {
 	NewMessageBatchReturnValue    *azservicebus.MessageBatch
 	NewMessageBatchErr            error
 	SendMessageBatchReceivedValue *azservicebus.MessageBatch
+	CloseErr                      error
 }
 
 func (f *fakeAzSender) SendMessage(
@@ -369,4 +370,8 @@ func (f *fakeAzSender) NewMessageBatch(
 	ctx context.Context,
 	options *azservicebus.MessageBatchOptions) (*azservicebus.MessageBatch, error) {
 	return f.NewMessageBatchReturnValue, f.NewMessageBatchErr
+}
+
+func (f *fakeAzSender) Close(ctx context.Context) error {
+	return f.CloseErr
 }
