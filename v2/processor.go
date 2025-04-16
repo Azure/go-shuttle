@@ -56,7 +56,6 @@ type Processor struct {
 	options           ProcessorOptions
 	handle            Handler
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor, shared across all receivers
-	mu                sync.Mutex
 }
 
 // ProcessorOptions configures the processor
