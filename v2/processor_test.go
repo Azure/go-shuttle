@@ -104,7 +104,7 @@ func ExampleProcessor_multiProcessor() {
 	cancel()
 }
 
-func TestProcessorStart_DefaultsToMaxConcurrency1(t *testing.T) {
+func TestProcessorStart_DefaultsToMaxConcurrency(t *testing.T) {
 	a := require.New(t)
 	messages := make(chan *azservicebus.ReceivedMessage, 1)
 	messages <- &azservicebus.ReceivedMessage{}
@@ -162,6 +162,88 @@ func TestProcessorStart_CanSetMaxConcurrency(t *testing.T) {
 	a.ErrorContains(err, "max receive calls exceeded")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(10, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 10")
+}
+
+func TestProcessorStart_MaxReceiveCountOverridesMaxConcurrency(t *testing.T) {
+	a := require.New(t)
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupMaxReceiveCalls:  2,
+		SetupReceivedMessages: messagesChannel(10),
+	}
+	close(rcv.SetupReceivedMessages)
+	processor := shuttle.NewProcessor(rcv, MyHandler(1*time.Second), &shuttle.ProcessorOptions{
+		MaxConcurrency:  10,
+		MaxReceiveCount: 4,
+		ReceiveInterval: to.Ptr(20 * time.Millisecond),
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err := processor.Start(ctx)
+	a.ErrorContains(err, "max receive calls exceeded")
+	a.Equal(2, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
+	a.Equal(4, rcv.ReceiveCalls[0], "the processor should have used max receive count of 4 initially")
+	a.Equal(4, rcv.ReceiveCalls[1], "the processor should have received 4 because it is less than available concurrency")
+}
+
+func TestProcessorStart_MaxReceiveCountOverridesMaxConcurrencyReceiveDelta(t *testing.T) {
+	a := require.New(t)
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupMaxReceiveCalls:  2,
+		SetupReceivedMessages: messagesChannel(10),
+	}
+	close(rcv.SetupReceivedMessages)
+	processor := shuttle.NewProcessor(rcv, MyHandler(1*time.Second), &shuttle.ProcessorOptions{
+		MaxConcurrency:  10,
+		MaxReceiveCount: 6,
+		ReceiveInterval: to.Ptr(20 * time.Millisecond),
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err := processor.Start(ctx)
+	a.ErrorContains(err, "max receive calls exceeded")
+	a.Equal(2, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
+	a.Equal(6, rcv.ReceiveCalls[0], "the processor should have used max receive count of 6 initially")
+	a.Equal(4, rcv.ReceiveCalls[1], "the processor should have received 4 because of the 6 ongoing messages")
+}
+
+func TestProcessorStart_MaxReceiveCountGreaterThanMaxConcurrency(t *testing.T) {
+	a := require.New(t)
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage),
+	}
+	close(rcv.SetupReceivedMessages)
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
+		MaxConcurrency:  5,
+		MaxReceiveCount: 10,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := processor.Start(ctx)
+	a.ErrorContains(err, "max receive calls exceeded")
+	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
+	a.Equal(5, rcv.ReceiveCalls[0], "the processor should have used max concurrency as max receive count")
+}
+
+func TestProcessorStart_DisableMaxReceiveCount(t *testing.T) {
+	a := require.New(t)
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage),
+	}
+	close(rcv.SetupReceivedMessages)
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
+		MaxConcurrency:  5,
+		MaxReceiveCount: -1,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := processor.Start(ctx)
+	a.ErrorContains(err, "max receive calls exceeded")
+	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
+	a.Equal(5, rcv.ReceiveCalls[0], "the processor should have used max concurrency as max receive count")
 }
 
 func TestProcessorStart_Interval(t *testing.T) {
@@ -246,7 +328,7 @@ func TestProcessorStart_ReceiveDelta(t *testing.T) {
 	a.Equal(5, rcv.ReceiveCalls[1], "the processor should request 5 (delta)")
 }
 
-func TestProcessorStart_DefaultsToStartMaxAttempt1(t *testing.T) {
+func TestProcessorStart_DefaultsToStartMaxAttempt(t *testing.T) {
 	a := require.New(t)
 	messages := make(chan *azservicebus.ReceivedMessage, 1)
 	close(messages)
@@ -495,8 +577,6 @@ func TestProcessorStart_SinglePanic(t *testing.T) {
 		shuttle.NewReceiverEx("testReceiver2", rcv2),
 	}
 	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(0*time.Second), nil)
-	//ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	//defer cancel()
 	ctx := context.Background()
 	// expect Start() function to not panic
 	g := NewWithT(t)
@@ -527,8 +607,6 @@ func TestProcessorStart_TwoPanics(t *testing.T) {
 		shuttle.NewReceiverEx("testReceiver2", rcv2),
 	}
 	processor := shuttle.NewMultiProcessor(rcvs, MyHandler(0*time.Second), nil)
-	//ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	//defer cancel()
 	ctx := context.Background()
 	// expect Start() function to not panic
 	g := NewWithT(t)

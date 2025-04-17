@@ -60,15 +60,24 @@ type Processor struct {
 
 // ProcessorOptions configures the processor
 // MaxConcurrency defaults to 1. Not setting MaxConcurrency, or setting it to 0 or a negative value will fallback to the default.
+// MaxReceiveCount defaults to MaxConcurrency if not set. Not setting MaxReceiveCount, or setting it to 0 or a negative value will fallback to the default.
+// Setting it to a value greater than MaxConcurrency will also fallback to the default.
 // ReceiveInterval defaults to 2 seconds if not set.
 // StartMaxAttempt defaults to 1 if not set (no retries). Not setting StartMaxAttempt, or setting it to non-positive value will fallback to the default.
 // StartRetryDelayStrategy defaults to a fixed 5-second delay if not set.
 type ProcessorOptions struct {
-	MaxConcurrency  int
+	// MaxConcurrency is the maximum number of concurrent messages to process at a time.
+	MaxConcurrency int
+
+	// MaxReceiveCount is the maximum number of messages to receive at a time. This value is passed to the receiver.
+	MaxReceiveCount int
+
+	// ReceiveInterval is the interval between each receive call.
 	ReceiveInterval *time.Duration
 
 	// StartMaxAttempt is the maximum number of attempts to start the processor.
 	StartMaxAttempt int
+
 	// StartRetryDelay is the delay between each start attempt.
 	StartRetryDelayStrategy RetryDelayStrategy
 }
@@ -76,6 +85,7 @@ type ProcessorOptions struct {
 func applyProcessorOptions(options *ProcessorOptions) *ProcessorOptions {
 	opts := &ProcessorOptions{
 		MaxConcurrency:          1,
+		MaxReceiveCount:         1,
 		ReceiveInterval:         to.Ptr(1 * time.Second),
 		StartMaxAttempt:         1,
 		StartRetryDelayStrategy: &ConstantDelayStrategy{Delay: 5 * time.Second},
@@ -86,6 +96,10 @@ func applyProcessorOptions(options *ProcessorOptions) *ProcessorOptions {
 		}
 		if options.MaxConcurrency > 0 {
 			opts.MaxConcurrency = options.MaxConcurrency
+			opts.MaxReceiveCount = options.MaxConcurrency
+		}
+		if options.MaxReceiveCount > 0 && options.MaxReceiveCount < opts.MaxConcurrency {
+			opts.MaxReceiveCount = options.MaxReceiveCount
 		}
 		if options.StartMaxAttempt > 0 {
 			opts.StartMaxAttempt = options.StartMaxAttempt
@@ -190,7 +204,7 @@ func (p *Processor) start(ctx context.Context, receiverEx *ReceiverEx) error {
 	receiverName := receiverEx.name
 	receiver := receiverEx.sbReceiver
 	logger.Info(fmt.Sprintf("starting processor %s", receiverName))
-	messages, err := receiver.ReceiveMessages(ctx, p.options.MaxConcurrency, nil)
+	messages, err := receiver.ReceiveMessages(ctx, p.options.MaxReceiveCount, nil)
 	if err != nil {
 		return fmt.Errorf("processor %s failed to receive messages: %w", receiverName, err)
 	}
@@ -202,7 +216,7 @@ func (p *Processor) start(ctx context.Context, receiverEx *ReceiverEx) error {
 	for ctx.Err() == nil {
 		select {
 		case <-time.After(*p.options.ReceiveInterval):
-			maxMessages := p.options.MaxConcurrency - len(p.concurrencyTokens)
+			maxMessages := min(p.options.MaxReceiveCount, p.options.MaxConcurrency-len(p.concurrencyTokens))
 			if ctx.Err() != nil || maxMessages == 0 {
 				break
 			}
