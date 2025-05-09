@@ -95,6 +95,30 @@ func TestHandlers_SetMessageTTL(t *testing.T) {
 	}
 }
 
+func TestHandlers_SetSubject(t *testing.T) {
+	subject := "test-subject"
+	blankMsg := &azservicebus.Message{}
+	handler := SetSubject(subject)
+	if err := handler(blankMsg); err != nil {
+		t.Errorf("Unexpected error in set subject test: %s", err)
+	}
+	if *blankMsg.Subject != subject {
+		t.Errorf("for subject expected %s, got %s", subject, *blankMsg.Subject)
+	}
+}
+
+func TestHandlers_SetTo(t *testing.T) {
+	to := "test-to"
+	blankMsg := &azservicebus.Message{}
+	handler := SetTo(to)
+	if err := handler(blankMsg); err != nil {
+		t.Errorf("Unexpected error in set to test: %s", err)
+	}
+	if *blankMsg.To != to {
+		t.Errorf("for to expected %s, got %s", to, *blankMsg.To)
+	}
+}
+
 func TestSender_SenderTracePropagation(t *testing.T) {
 	g := NewWithT(t)
 	azSender := &fakeAzSender{}

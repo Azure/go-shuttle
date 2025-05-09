@@ -266,6 +266,22 @@ func SetMessageTTL(ttl time.Duration) func(msg *azservicebus.Message) error {
 	}
 }
 
+// SetSubject sets the ServiceBus message's Subject property to a user-specified value
+func SetSubject(subject string) func(msg *azservicebus.Message) error {
+	return func(msg *azservicebus.Message) error {
+		msg.Subject = &subject
+		return nil
+	}
+}
+
+// SetTo sets the ServiceBus message's To property to a user-specified value
+func SetTo(to string) func(msg *azservicebus.Message) error {
+	return func(msg *azservicebus.Message) error {
+		msg.To = &to
+		return nil
+	}
+}
+
 func getMessageType(mb MessageBody) string {
 	var msgType string
 	vo := reflect.ValueOf(mb)
