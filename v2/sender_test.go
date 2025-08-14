@@ -7,7 +7,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unsafe"
 
 	"go.opentelemetry.io/otel/sdk/trace"
 
@@ -510,49 +509,6 @@ func TestSender_SendAsBatch_SendBatchError_EmptyBatch(t *testing.T) {
 	g.Expect(azSender.SendMessageBatchCalled).To(BeTrue())
 }
 
-// fakeMessageBatch simulates azservicebus.MessageBatch behavior for testing
-type fakeMessageBatch struct {
-	messages      []*azservicebus.Message
-	maxMessages   int
-	maxSize       int
-	currentSize   int
-	addMessageErr error // Can be set to simulate AddMessage failures
-}
-
-func newFakeMessageBatch(maxMessages, maxSize int) *fakeMessageBatch {
-	return &fakeMessageBatch{
-		messages:    make([]*azservicebus.Message, 0),
-		maxMessages: maxMessages,
-		maxSize:     maxSize,
-	}
-}
-
-func (f *fakeMessageBatch) AddMessage(message *azservicebus.Message, options *azservicebus.AddMessageOptions) error {
-	if f.addMessageErr != nil {
-		return f.addMessageErr
-	}
-
-	// Simulate message size (rough approximation)
-	messageSize := len(message.Body) + 100 // Adding overhead for headers, etc.
-
-	// Check if adding this message would exceed limits
-	if len(f.messages) >= f.maxMessages || f.currentSize+messageSize > f.maxSize {
-		return azservicebus.ErrMessageTooLarge
-	}
-
-	f.messages = append(f.messages, message)
-	f.currentSize += messageSize
-	return nil
-}
-
-func (f *fakeMessageBatch) NumMessages() int {
-	return len(f.messages)
-}
-
-func (f *fakeMessageBatch) SizeInBytes() int {
-	return f.currentSize
-}
-
 type fakeAzSender struct {
 	mu                            sync.RWMutex
 	DoSendMessage                 func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
@@ -568,11 +524,8 @@ type fakeAzSender struct {
 	SendMessageBatchReceivedValue *azservicebus.MessageBatch
 	CloseErr                      error
 
-	BatchMaxMessages int                 // Max messages per batch (default: 3 for testing)
-	BatchMaxSize     int                 // Max size per batch (default: 1000 bytes for testing)
-	BatchesCreated   int                 // Track how many batches were created
-	BatchesSent      int                 // Track how many batches were sent
-	SentBatches      []*fakeMessageBatch // Track all sent batches
+	BatchesCreated int // Track how many batches were created
+	BatchesSent    int // Track how many batches were sent
 }
 
 func (f *fakeAzSender) SendMessage(
@@ -602,11 +555,6 @@ func (f *fakeAzSender) SendMessageBatch(
 	f.SendMessageBatchReceivedValue = batch
 	f.BatchesSent++
 
-	// Track fake batches if batch is actually our fake batch
-	if fakeBatch, ok := interface{}(batch).(*fakeMessageBatch); ok {
-		f.SentBatches = append(f.SentBatches, fakeBatch)
-	}
-
 	if f.DoSendMessageBatch != nil {
 		if err := f.DoSendMessageBatch(ctx, batch, options); err != nil {
 			return err
@@ -631,19 +579,8 @@ func (f *fakeAzSender) NewMessageBatch(
 		return f.NewMessageBatchReturnValue, nil
 	}
 
-	// Set defaults if not configured
-	maxMessages := f.BatchMaxMessages
-	if maxMessages == 0 {
-		maxMessages = 3 // Default for testing
-	}
-	maxSize := f.BatchMaxSize
-	if maxSize == 0 {
-		maxSize = 1000 // Default for testing
-	}
-
-	// Create our fake batch and return it as a MessageBatch using unsafe conversion
-	fakeBatch := newFakeMessageBatch(maxMessages, maxSize)
-	return (*azservicebus.MessageBatch)(unsafe.Pointer(fakeBatch)), nil
+	// Return a real MessageBatch for testing
+	return &azservicebus.MessageBatch{}, nil
 }
 
 func (f *fakeAzSender) Close(ctx context.Context) error {
