@@ -415,11 +415,9 @@ func TestSender_SendAsBatch_NewMessageBatchError(t *testing.T) {
 func TestSender_SendAsBatch_SingleBatch_Success(t *testing.T) {
 	g := NewWithT(t)
 
-	batchesSent := 0
 	azSender := &fakeAzSender{
 		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
 		DoSendMessageBatch: func(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
-			batchesSent++
 			return nil
 		},
 	}
@@ -438,7 +436,7 @@ func TestSender_SendAsBatch_SingleBatch_Success(t *testing.T) {
 	// This will error due to real MessageBatch limitations in test, but we test that the logic was exercised
 	g.Expect(err).To(HaveOccurred()) // Real MessageBatch fails in tests due to zero max size
 	g.Expect(azSender.BatchesCreated).To(Equal(1))
-	g.Expect(batchesSent).To(Equal(0)) // No batches sent due to AddMessage failure
+	g.Expect(azSender.BatchesSent).To(Equal(0)) // No batches sent due to AddMessage failure
 }
 
 func TestSender_SendAsBatch_MessageTooLarge_SingleMessage(t *testing.T) {
