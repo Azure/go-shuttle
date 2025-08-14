@@ -150,16 +150,6 @@ func (d *Sender) ToServiceBusMessage(
 // SendAsBatch sends the array of azservicebus messages as batches.
 // When options.AllowMultipleBatch is true, large message arrays are split into multiple batches.
 // When options.AllowMultipleBatch is false, behaves like SendMessageBatch (fails if messages don't fit in single batch).
-//
-// Example usage:
-//   // For backward compatibility (single batch only)
-//   err := sender.SendAsBatch(ctx, messages, &SendAsBatchOptions{AllowMultipleBatch: false})
-//
-//   // For large message arrays (multiple batches allowed)
-//   err := sender.SendAsBatch(ctx, messages, &SendAsBatchOptions{AllowMultipleBatch: true})
-//
-//   // With nil options (defaults to AllowMultipleBatch: false)
-//   err := sender.SendAsBatch(ctx, messages, nil)
 func (d *Sender) SendAsBatch(ctx context.Context, messages []*azservicebus.Message, options *SendAsBatchOptions) error {
 	// Check if there is a context error before doing anything since
 	// we rely on context failures to detect if the sender is dead.
@@ -169,6 +159,13 @@ func (d *Sender) SendAsBatch(ctx context.Context, messages []*azservicebus.Messa
 
 	if options == nil {
 		options = &SendAsBatchOptions{AllowMultipleBatch: false}
+	}
+
+	// Apply timeout for the entire operation
+	if d.options.SendTimeout > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
+		defer cancel()
 	}
 
 	if len(messages) == 0 {
@@ -182,13 +179,6 @@ func (d *Sender) SendAsBatch(ctx context.Context, messages []*azservicebus.Messa
 			return d.sendBatch(ctx, currentMessageBatch)
 		}
 		return nil // Nothing to send for multiple batch mode
-	}
-
-	// Apply timeout for the entire operation
-	if d.options.SendTimeout > 0 {
-		var cancel func()
-		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
-		defer cancel()
 	}
 
 	// Create a message batch. It will automatically be sized for the Service Bus
