@@ -570,17 +570,7 @@ func (f *fakeAzSender) NewMessageBatch(
 	defer f.mu.Unlock()
 	f.BatchesCreated++
 
-	if f.NewMessageBatchErr != nil {
-		return nil, f.NewMessageBatchErr
-	}
-
-	// Return a real MessageBatch if one is provided
-	if f.NewMessageBatchReturnValue != nil {
-		return f.NewMessageBatchReturnValue, nil
-	}
-
-	// Return a real MessageBatch for testing
-	return &azservicebus.MessageBatch{}, nil
+	return f.NewMessageBatchReturnValue, f.NewMessageBatchErr
 }
 
 func (f *fakeAzSender) Close(ctx context.Context) error {
