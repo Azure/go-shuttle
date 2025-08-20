@@ -159,8 +159,8 @@ func TestSender_WithDefaultSendTimeout(t *testing.T) {
 	})
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
-	err = sender.SendMessageBatch(context.Background(), nil)
-	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred())
 }
 
 func TestSender_WithSendTimeout(t *testing.T) {
@@ -186,12 +186,12 @@ func TestSender_WithSendTimeout(t *testing.T) {
 	})
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
-	err = sender.SendMessageBatch(context.Background(), nil)
-	g.Expect(err).ToNot(HaveOccurred())
-	err = sender.SendAsBatch(context.Background(), nil, nil)
-	g.Expect(err).ToNot(HaveOccurred())
-	err = sender.SendAsBatch(context.Background(), nil, &SendAsBatchOptions{AllowMultipleBatch: true})
-	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred())
+	err = sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, nil)
+	g.Expect(err).To(HaveOccurred())
+	err = sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, &SendAsBatchOptions{AllowMultipleBatch: true})
+	g.Expect(err).To(HaveOccurred())
 }
 
 func TestSender_WithContextCanceled(t *testing.T) {
@@ -215,8 +215,8 @@ func TestSender_WithContextCanceled(t *testing.T) {
 
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).To(MatchError(context.DeadlineExceeded))
-	err = sender.SendMessageBatch(context.Background(), nil)
-	g.Expect(err).To(MatchError(context.DeadlineExceeded))
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred()) // Now expects error for empty messages instead of timeout
 }
 
 func TestSender_SendWithCanceledContext(t *testing.T) {
@@ -238,8 +238,8 @@ func TestSender_SendWithCanceledContext(t *testing.T) {
 
 	err := sender.SendMessage(ctx, "test")
 	g.Expect(err).To(MatchError(context.Canceled))
-	err = sender.SendMessageBatch(ctx, nil)
-	g.Expect(err).To(MatchError(context.Canceled))
+	err = sender.SendMessageBatch(ctx, []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred()) // Now expects error for empty messages instead of context canceled
 }
 
 func TestSender_DisabledSendTimeout(t *testing.T) {
@@ -264,8 +264,8 @@ func TestSender_DisabledSendTimeout(t *testing.T) {
 	})
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
-	err = sender.SendMessageBatch(context.Background(), nil)
-	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred())
 }
 
 func TestSender_SendMessage(t *testing.T) {
@@ -354,8 +354,9 @@ func TestSender_SendAsBatch_EmptyMessages_AllowMultiple(t *testing.T) {
 
 	options := &SendAsBatchOptions{AllowMultipleBatch: true}
 	err := sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, options)
-	g.Expect(err).ToNot(HaveOccurred())
-	// Should not call send since no messages
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("cannot send empty message array"))
+	// Should not call send since error returned early
 	g.Expect(azSender.SendMessageBatchCalled).To(BeFalse())
 	// No batches should be created
 	g.Expect(azSender.BatchesCreated).To(Equal(0))
@@ -370,12 +371,13 @@ func TestSender_SendAsBatch_EmptyMessages_SingleBatch(t *testing.T) {
 
 	options := &SendAsBatchOptions{AllowMultipleBatch: false}
 	err := sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, options)
-	// Should succeed because empty batch is valid for backward compatibility
-	g.Expect(err).ToNot(HaveOccurred())
-	// Should attempt to send
-	g.Expect(azSender.SendMessageBatchCalled).To(BeTrue())
-	// One batch should be created
-	g.Expect(azSender.BatchesCreated).To(Equal(1))
+	// Should fail because empty message array is not allowed
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("cannot send empty message array"))
+	// Should not attempt to send
+	g.Expect(azSender.SendMessageBatchCalled).To(BeFalse())
+	// No batch should be created
+	g.Expect(azSender.BatchesCreated).To(Equal(0))
 }
 
 func TestSender_SendAsBatch_ContextCanceled(t *testing.T) {
@@ -489,7 +491,7 @@ func TestSender_SendAsBatch_SingleBatch_TooManyMessages_AllowMultipleFalse(t *te
 	g.Expect(azSender.BatchesCreated).To(Equal(1))
 }
 
-func TestSender_SendAsBatch_SendBatchError_EmptyBatch(t *testing.T) {
+func TestSender_SendAsBatch_EmptyMessages_Error(t *testing.T) {
 	g := NewWithT(t)
 	expectedErr := fmt.Errorf("send batch failed")
 	azSender := &fakeAzSender{
@@ -498,13 +500,13 @@ func TestSender_SendAsBatch_SendBatchError_EmptyBatch(t *testing.T) {
 	}
 	sender := NewSender(azSender, nil)
 
-	// Use empty messages so we can test the send error (empty batch will be sent)
+	// Use empty messages which should now return an error directly
 	options := &SendAsBatchOptions{AllowMultipleBatch: false}
 	err := sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, options)
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("send batch failed"))
-	g.Expect(azSender.BatchesCreated).To(Equal(1))
-	g.Expect(azSender.SendMessageBatchCalled).To(BeTrue())
+	g.Expect(err.Error()).To(ContainSubstring("cannot send empty message array"))
+	g.Expect(azSender.BatchesCreated).To(Equal(0)) // No batches created since error returned early
+	g.Expect(azSender.SendMessageBatchCalled).To(BeFalse()) // No send attempt made
 }
 
 type fakeAzSender struct {

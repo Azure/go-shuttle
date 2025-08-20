@@ -169,16 +169,7 @@ func (d *Sender) SendAsBatch(ctx context.Context, messages []*azservicebus.Messa
 	}
 
 	if len(messages) == 0 {
-		// For backward compatibility, still create and send an empty batch
-		// when AllowMultipleBatch is false (original SendMessageBatch behavior)
-		if !options.AllowMultipleBatch {
-			currentMessageBatch, err := d.newMessageBatch(ctx, nil)
-			if err != nil {
-				return err
-			}
-			return d.sendBatch(ctx, currentMessageBatch)
-		}
-		return nil // Nothing to send for multiple batch mode
+		return fmt.Errorf("cannot send empty message array")
 	}
 
 	// Create a message batch. It will automatically be sized for the Service Bus
