@@ -2,6 +2,7 @@ package shuttle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -19,6 +20,14 @@ const (
 
 // MessageBody is a type to represent that an input message body can be of any type
 type MessageBody any
+
+// SendAsBatchOptions contains options for the SendAsBatch method
+type SendAsBatchOptions struct {
+	// AllowMultipleBatch when true, allows splitting large message arrays into multiple batches.
+	// When false, behaves like the original SendMessageBatch method.
+	// Default: false
+	AllowMultipleBatch bool
+}
 
 // AzServiceBusSender is satisfied by *azservicebus.Sender
 type AzServiceBusSender interface {
@@ -138,31 +147,87 @@ func (d *Sender) ToServiceBusMessage(
 	return msg, nil
 }
 
-// SendMessageBatch sends the array of azservicebus messages as a batch.
-func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.Message) error {
+// SendAsBatch sends the array of azservicebus messages as batches.
+// When options.AllowMultipleBatch is true, large message arrays are split into multiple batches.
+// When options.AllowMultipleBatch is false, behaves like SendMessageBatch (fails if messages don't fit in single batch).
+func (d *Sender) SendAsBatch(ctx context.Context, messages []*azservicebus.Message, options *SendAsBatchOptions) error {
 	// Check if there is a context error before doing anything since
 	// we rely on context failures to detect if the sender is dead.
 	if ctx.Err() != nil {
-		return fmt.Errorf("failed to send message: %w", ctx.Err())
+		return fmt.Errorf("failed to send message batch: %w", ctx.Err())
 	}
 
-	batch, err := d.newMessageBatch(ctx, &azservicebus.MessageBatchOptions{})
-	if err != nil {
-		return err
+	if options == nil {
+		options = &SendAsBatchOptions{AllowMultipleBatch: false}
 	}
-	for _, msg := range messages {
-		if err := batch.AddMessage(msg, nil); err != nil {
-			return err
-		}
-	}
+
+	// Apply timeout for the entire operation
 	if d.options.SendTimeout > 0 {
 		var cancel func()
 		ctx, cancel = context.WithTimeout(ctx, d.options.SendTimeout)
 		defer cancel()
 	}
 
-	errChan := make(chan error)
+	if len(messages) == 0 {
+		return fmt.Errorf("cannot send empty message array")
+	}
 
+	// Create a message batch. It will automatically be sized for the Service Bus
+	// namespace's maximum message size.
+	currentMessageBatch, err := d.newMessageBatch(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < len(messages); i++ {
+		// Add a message to our message batch. This can be called multiple times.
+		err = currentMessageBatch.AddMessage(messages[i], nil)
+
+		if err != nil && errors.Is(err, azservicebus.ErrMessageTooLarge) {
+			if currentMessageBatch.NumMessages() == 0 {
+				// This means the message itself is too large to be sent, even on its own.
+				// This will require intervention from the user.
+				return fmt.Errorf("single message is too large to be sent in a batch: %w", err)
+			}
+
+			// Message batch is full. Send it and create a new one.
+			if !options.AllowMultipleBatch {
+				// For single batch mode, return error if messages don't fit
+				return fmt.Errorf("messages do not fit in a single batch: %w", err)
+			}
+
+			// Send what we have since the batch is full
+			if err := d.sendBatch(ctx, currentMessageBatch); err != nil {
+				return err
+			}
+
+			// Create a new batch and retry adding this message to our batch.
+			newBatch, err := d.newMessageBatch(ctx, nil)
+			if err != nil {
+				return err
+			}
+
+			currentMessageBatch = newBatch
+
+			// rewind the counter and attempt to add the message again (this batch
+			// was full so it didn't go out with the previous sendBatch call).
+			i--
+		} else if err != nil {
+			return err
+		}
+	}
+
+	// check if any messages are remaining to be sent.
+	if currentMessageBatch.NumMessages() > 0 {
+		return d.sendBatch(ctx, currentMessageBatch)
+	}
+
+	return nil
+}
+
+// sendBatch sends a single message batch with proper error handling and metrics
+func (d *Sender) sendBatch(ctx context.Context, batch *azservicebus.MessageBatch) error {
+	errChan := make(chan error)
 	go func() {
 		if err := d.sendMessageBatch(ctx, batch, nil); err != nil {
 			errChan <- fmt.Errorf("failed to send message batch: %w", err)
@@ -183,6 +248,12 @@ func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.
 		}
 		return err
 	}
+}
+
+// SendMessageBatch sends the array of azservicebus messages as a batch.
+// Deprecated: Use SendAsBatch instead. This method will be removed in a future version.
+func (d *Sender) SendMessageBatch(ctx context.Context, messages []*azservicebus.Message) error {
+	return d.SendAsBatch(ctx, messages, &SendAsBatchOptions{AllowMultipleBatch: false})
 }
 
 func (d *Sender) sendMessage(ctx context.Context, msg *azservicebus.Message, options *azservicebus.SendMessageOptions) error {

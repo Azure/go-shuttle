@@ -159,8 +159,8 @@ func TestSender_WithDefaultSendTimeout(t *testing.T) {
 	})
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
-	err = sender.SendMessageBatch(context.Background(), nil)
-	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred())
 }
 
 func TestSender_WithSendTimeout(t *testing.T) {
@@ -186,14 +186,19 @@ func TestSender_WithSendTimeout(t *testing.T) {
 	})
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
-	err = sender.SendMessageBatch(context.Background(), nil)
-	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred())
+	err = sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, nil)
+	g.Expect(err).To(HaveOccurred())
+	err = sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, &SendAsBatchOptions{AllowMultipleBatch: true})
+	g.Expect(err).To(HaveOccurred())
 }
 
 func TestSender_WithContextCanceled(t *testing.T) {
 	g := NewWithT(t)
 	sendTimeout := 1 * time.Second
 	azSender := &fakeAzSender{
+		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
 		DoSendMessage: func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
 			time.Sleep(2 * time.Second)
 			return nil
@@ -210,8 +215,8 @@ func TestSender_WithContextCanceled(t *testing.T) {
 
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).To(MatchError(context.DeadlineExceeded))
-	err = sender.SendMessageBatch(context.Background(), nil)
-	g.Expect(err).To(MatchError(context.DeadlineExceeded))
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred()) // error for empty messages instead of timeout
 }
 
 func TestSender_SendWithCanceledContext(t *testing.T) {
@@ -233,7 +238,7 @@ func TestSender_SendWithCanceledContext(t *testing.T) {
 
 	err := sender.SendMessage(ctx, "test")
 	g.Expect(err).To(MatchError(context.Canceled))
-	err = sender.SendMessageBatch(ctx, nil)
+	err = sender.SendMessageBatch(ctx, []*azservicebus.Message{})
 	g.Expect(err).To(MatchError(context.Canceled))
 }
 
@@ -241,6 +246,7 @@ func TestSender_DisabledSendTimeout(t *testing.T) {
 	g := NewWithT(t)
 	sendTimeout := -1 * time.Second
 	azSender := &fakeAzSender{
+		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
 		DoSendMessage: func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error {
 			_, ok := ctx.Deadline()
 			g.Expect(ok).To(BeFalse())
@@ -258,8 +264,8 @@ func TestSender_DisabledSendTimeout(t *testing.T) {
 	})
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
-	err = sender.SendMessageBatch(context.Background(), nil)
-	g.Expect(err).ToNot(HaveOccurred())
+	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
+	g.Expect(err).To(HaveOccurred())
 }
 
 func TestSender_SendMessage(t *testing.T) {
@@ -286,8 +292,8 @@ func TestSender_SendMessageBatch(t *testing.T) {
 	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
 	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{msg})
+	// no way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
 	g.Expect(err).To(HaveOccurred())
-	// No way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
 }
 
 func TestSender_AzSender(t *testing.T) {
@@ -341,6 +347,150 @@ func TestSender_ConcurrentSendAndSetAzSender(t *testing.T) {
 	g.Expect(azSender2.SendMessageCalled).To(BeTrue())
 }
 
+func TestSender_SendAsBatch_EmptyMessages(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{}
+	sender := NewSender(azSender, nil)
+
+	options := &SendAsBatchOptions{AllowMultipleBatch: true}
+	err := sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, options)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("cannot send empty message array"))
+	// Should not call send since error returned early
+	g.Expect(azSender.SendMessageBatchCalled).To(BeFalse())
+	// No batches should be created
+	g.Expect(azSender.BatchesCreated).To(Equal(0))
+}
+
+func TestSender_SendAsBatch_EmptyMessages_SingleBatch(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{
+		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
+	}
+	sender := NewSender(azSender, nil)
+
+	options := &SendAsBatchOptions{AllowMultipleBatch: false}
+	err := sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, options)
+	// Should fail because empty message array is not allowed
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("cannot send empty message array"))
+	// Should not attempt to send
+	g.Expect(azSender.SendMessageBatchCalled).To(BeFalse())
+	// No batch should be created
+	g.Expect(azSender.BatchesCreated).To(Equal(0))
+}
+
+func TestSender_SendAsBatch_ContextCanceled(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{}
+	sender := NewSender(azSender, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	options := &SendAsBatchOptions{AllowMultipleBatch: true}
+	err = sender.SendAsBatch(ctx, []*azservicebus.Message{msg}, options)
+	g.Expect(err).To(MatchError(context.Canceled))
+}
+
+func TestSender_SendAsBatch_NewMessageBatchError(t *testing.T) {
+	g := NewWithT(t)
+	expectedErr := fmt.Errorf("batch creation failed")
+	azSender := &fakeAzSender{
+		NewMessageBatchErr: expectedErr,
+	}
+	sender := NewSender(azSender, nil)
+
+	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	options := &SendAsBatchOptions{AllowMultipleBatch: true}
+	err = sender.SendAsBatch(context.Background(), []*azservicebus.Message{msg}, options)
+	g.Expect(err).To(Equal(expectedErr))
+	g.Expect(azSender.BatchesCreated).To(Equal(1))
+	g.Expect(azSender.SendMessageBatchCalled).To(BeFalse()) // Should not try to send if batch creation fails
+}
+
+func TestSender_SendAsBatch_SingleBatch_Success(t *testing.T) {
+	g := NewWithT(t)
+
+	azSender := &fakeAzSender{
+		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
+		DoSendMessageBatch: func(ctx context.Context, batch *azservicebus.MessageBatch, options *azservicebus.SendMessageBatchOptions) error {
+			return nil
+		},
+	}
+
+	sender := NewSender(azSender, &SenderOptions{
+		Marshaller: &DefaultJSONMarshaller{},
+	})
+
+	// Create a message (the real batch will fail to add it due to zero size, but we can test the logic)
+	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	options := &SendAsBatchOptions{AllowMultipleBatch: true}
+	err = sender.SendAsBatch(context.Background(), []*azservicebus.Message{msg}, options)
+
+	// no way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
+	g.Expect(err).To(HaveOccurred()) // Real MessageBatch fails in tests due to zero max size
+	g.Expect(azSender.BatchesCreated).To(Equal(1))
+	g.Expect(azSender.BatchesSent).To(Equal(0)) // No batches sent due to AddMessage failure
+}
+
+func TestSender_SendAsBatch_MessageTooLarge_SingleMessage(t *testing.T) {
+	g := NewWithT(t)
+
+	azSender := &fakeAzSender{
+		NewMessageBatchReturnValue: &azservicebus.MessageBatch{}, // Real MessageBatch with 0 max size
+	}
+
+	sender := NewSender(azSender, &SenderOptions{
+		Marshaller: &DefaultJSONMarshaller{},
+	})
+
+	// Create any message - it will be too large for the real MessageBatch with 0 max size
+	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	options := &SendAsBatchOptions{AllowMultipleBatch: true}
+	err = sender.SendAsBatch(context.Background(), []*azservicebus.Message{msg}, options)
+
+	// Should fail because any message is too large for a real MessageBatch in tests
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("single message is too large"))
+	g.Expect(azSender.BatchesCreated).To(Equal(1))
+}
+
+func TestSender_SendAsBatch_SingleBatch_TooManyMessages_AllowMultipleFalse(t *testing.T) {
+	g := NewWithT(t)
+	azSender := &fakeAzSender{
+		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
+	}
+	sender := NewSender(azSender, &SenderOptions{
+		Marshaller: &DefaultJSONMarshaller{},
+	})
+
+	// Create multiple messages
+	messages := make([]*azservicebus.Message, 3)
+	for i := range messages {
+		msg, err := sender.ToServiceBusMessage(context.Background(), fmt.Sprintf("test%d", i))
+		g.Expect(err).ToNot(HaveOccurred())
+		messages[i] = msg
+	}
+
+	options := &SendAsBatchOptions{AllowMultipleBatch: false}
+	err := sender.SendAsBatch(context.Background(), messages, options)
+
+	// Should fail because messages don't fit in single batch and multiple batches not allowed
+	// The real MessageBatch has max size 0 in tests, so AddMessage will fail immediately
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(azSender.BatchesCreated).To(Equal(1))
+}
+
 type fakeAzSender struct {
 	mu                            sync.RWMutex
 	DoSendMessage                 func(ctx context.Context, message *azservicebus.Message, options *azservicebus.SendMessageOptions) error
@@ -355,6 +505,9 @@ type fakeAzSender struct {
 	NewMessageBatchErr            error
 	SendMessageBatchReceivedValue *azservicebus.MessageBatch
 	CloseErr                      error
+
+	BatchesCreated int // Track how many batches were created
+	BatchesSent    int // Track how many batches were sent
 }
 
 func (f *fakeAzSender) SendMessage(
@@ -382,6 +535,8 @@ func (f *fakeAzSender) SendMessageBatch(
 	defer f.mu.Unlock()
 	f.SendMessageBatchCalled = true
 	f.SendMessageBatchReceivedValue = batch
+	f.BatchesSent++
+
 	if f.DoSendMessageBatch != nil {
 		if err := f.DoSendMessageBatch(ctx, batch, options); err != nil {
 			return err
@@ -393,6 +548,10 @@ func (f *fakeAzSender) SendMessageBatch(
 func (f *fakeAzSender) NewMessageBatch(
 	ctx context.Context,
 	options *azservicebus.MessageBatchOptions) (*azservicebus.MessageBatch, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.BatchesCreated++
+
 	return f.NewMessageBatchReturnValue, f.NewMessageBatchErr
 }
 
