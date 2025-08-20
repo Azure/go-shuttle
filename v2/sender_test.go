@@ -216,7 +216,7 @@ func TestSender_WithContextCanceled(t *testing.T) {
 	err := sender.SendMessage(context.Background(), "test")
 	g.Expect(err).To(MatchError(context.DeadlineExceeded))
 	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{})
-	g.Expect(err).To(HaveOccurred()) // Now expects error for empty messages instead of timeout
+	g.Expect(err).To(HaveOccurred()) // error for empty messages instead of timeout
 }
 
 func TestSender_SendWithCanceledContext(t *testing.T) {
@@ -239,7 +239,7 @@ func TestSender_SendWithCanceledContext(t *testing.T) {
 	err := sender.SendMessage(ctx, "test")
 	g.Expect(err).To(MatchError(context.Canceled))
 	err = sender.SendMessageBatch(ctx, []*azservicebus.Message{})
-	g.Expect(err).To(HaveOccurred()) // Now expects error for empty messages instead of context canceled
+	g.Expect(err).To(MatchError(context.Canceled))
 }
 
 func TestSender_DisabledSendTimeout(t *testing.T) {
@@ -292,8 +292,8 @@ func TestSender_SendMessageBatch(t *testing.T) {
 	msg, err := sender.ToServiceBusMessage(context.Background(), "test")
 	g.Expect(err).ToNot(HaveOccurred())
 	err = sender.SendMessageBatch(context.Background(), []*azservicebus.Message{msg})
+	// no way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
 	g.Expect(err).To(HaveOccurred())
-	// No way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
 }
 
 func TestSender_AzSender(t *testing.T) {
@@ -347,7 +347,7 @@ func TestSender_ConcurrentSendAndSetAzSender(t *testing.T) {
 	g.Expect(azSender2.SendMessageCalled).To(BeTrue())
 }
 
-func TestSender_SendAsBatch_EmptyMessages_AllowMultiple(t *testing.T) {
+func TestSender_SendAsBatch_EmptyMessages(t *testing.T) {
 	g := NewWithT(t)
 	azSender := &fakeAzSender{}
 	sender := NewSender(azSender, nil)
@@ -435,7 +435,7 @@ func TestSender_SendAsBatch_SingleBatch_Success(t *testing.T) {
 	options := &SendAsBatchOptions{AllowMultipleBatch: true}
 	err = sender.SendAsBatch(context.Background(), []*azservicebus.Message{msg}, options)
 
-	// This will error due to real MessageBatch limitations in test, but we test that the logic was exercised
+	// no way to create a MessageBatch struct with a non-0 max bytes in test, so the best we can do is expect an error.
 	g.Expect(err).To(HaveOccurred()) // Real MessageBatch fails in tests due to zero max size
 	g.Expect(azSender.BatchesCreated).To(Equal(1))
 	g.Expect(azSender.BatchesSent).To(Equal(0)) // No batches sent due to AddMessage failure
@@ -489,24 +489,6 @@ func TestSender_SendAsBatch_SingleBatch_TooManyMessages_AllowMultipleFalse(t *te
 	// The real MessageBatch has max size 0 in tests, so AddMessage will fail immediately
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(azSender.BatchesCreated).To(Equal(1))
-}
-
-func TestSender_SendAsBatch_EmptyMessages_Error(t *testing.T) {
-	g := NewWithT(t)
-	expectedErr := fmt.Errorf("send batch failed")
-	azSender := &fakeAzSender{
-		NewMessageBatchReturnValue: &azservicebus.MessageBatch{},
-		SendMessageBatchErr:        expectedErr,
-	}
-	sender := NewSender(azSender, nil)
-
-	// Use empty messages which should now return an error directly
-	options := &SendAsBatchOptions{AllowMultipleBatch: false}
-	err := sender.SendAsBatch(context.Background(), []*azservicebus.Message{}, options)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("cannot send empty message array"))
-	g.Expect(azSender.BatchesCreated).To(Equal(0)) // No batches created since error returned early
-	g.Expect(azSender.SendMessageBatchCalled).To(BeFalse()) // No send attempt made
 }
 
 type fakeAzSender struct {
