@@ -224,7 +224,6 @@ func (p *Processor) start(ctx context.Context, receiverEx *ReceiverEx) error {
 	for _, msg := range messages {
 		p.process(ctx, receiverEx, msg)
 	}
-receiveLoop:
 	for ctx.Err() == nil {
 		select {
 		case <-time.After(*p.options.ReceiveInterval):
@@ -243,7 +242,6 @@ receiveLoop:
 			}
 		case <-ctx.Done():
 			logger.Info(fmt.Sprintf("context done, stop receiving from processor %s", receiverName))
-			break receiveLoop
 		}
 	}
 	logger.Info(fmt.Sprintf("exiting processor %s", receiverName))
