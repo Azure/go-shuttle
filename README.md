@@ -38,7 +38,7 @@ type ProcessorOptions struct {
 
 ### MultiProcessor
 
-Deprecated: `NewMultiProcessor`, `ReceiverEx`, and `NewReceiverEx` are deprecated and will be removed in a future major version.
+Deprecated: `NewMultiProcessor`, `ReceiverEx`, and `NewReceiverEx` are deprecated and will be removed in a future version.
 Use `NewProcessor` with one receiver per processor instead.
 
 ## Middlewares:

@@ -28,7 +28,7 @@ type MessageSettler interface {
 
 // ReceiverEx names a Service Bus receiver for NewMultiProcessor.
 //
-// Deprecated: NewMultiProcessor is deprecated and will be removed in a future major version.
+// Deprecated: NewMultiProcessor is deprecated and will be removed in a future version.
 // Use NewProcessor with one receiver per Processor instead.
 type ReceiverEx struct { // shuttle.Receiver is already an exported interface
 	name       string
@@ -37,7 +37,7 @@ type ReceiverEx struct { // shuttle.Receiver is already an exported interface
 
 // NewReceiverEx creates a named receiver for NewMultiProcessor.
 //
-// Deprecated: NewMultiProcessor is deprecated and will be removed in a future major version.
+// Deprecated: NewMultiProcessor is deprecated and will be removed in a future version.
 // Use NewProcessor with one receiver per Processor instead.
 func NewReceiverEx(name string, sbReceiver Receiver) *ReceiverEx {
 	return &ReceiverEx{
@@ -133,7 +133,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 
 // NewMultiProcessor creates a new processor with a list of receivers and a handler.
 //
-// Deprecated: NewMultiProcessor is deprecated and will be removed in a future major version.
+// Deprecated: NewMultiProcessor is deprecated and will be removed in a future version.
 // Use NewProcessor with one receiver per Processor instead.
 func NewMultiProcessor(receiversEx []*ReceiverEx, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := applyProcessorOptions(options)
