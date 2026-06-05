@@ -356,7 +356,7 @@ func SetTo(to string) func(msg *azservicebus.Message) error {
 func getMessageType(mb MessageBody) string {
 	var msgType string
 	vo := reflect.ValueOf(mb)
-	if vo.Kind() == reflect.Ptr {
+	if vo.Kind() == reflect.Pointer {
 		msgType = reflect.Indirect(vo).Type().Name()
 	} else {
 		msgType = vo.Type().Name()

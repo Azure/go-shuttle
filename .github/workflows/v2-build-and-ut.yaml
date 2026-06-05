@@ -11,12 +11,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6.0.3
 
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v6.4.0
         with:
-          go-version: 1.21
+          go-version: 1.25.x
 
       - name: Build
         run: |

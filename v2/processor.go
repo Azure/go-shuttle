@@ -242,7 +242,6 @@ func (p *Processor) start(ctx context.Context, receiverEx *ReceiverEx) error {
 			}
 		case <-ctx.Done():
 			logger.Info(fmt.Sprintf("context done, stop receiving from processor %s", receiverName))
-			break
 		}
 	}
 	logger.Info(fmt.Sprintf("exiting processor %s", receiverName))
