@@ -11,8 +11,6 @@ import (
 	"github.com/Azure/go-shuttle/v2/metrics/processor"
 )
 
-const defaultReceiverName = "receiver"
-
 type Receiver interface {
 	ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
 	MessageSettler
@@ -158,7 +156,7 @@ func (p *Processor) start(ctx context.Context) error {
 		return fmt.Errorf("failed to receive messages: %w", err)
 	}
 	logger.Info(fmt.Sprintf("received %d messages - initial", len(messages)))
-	processor.Metric.IncMessageReceived(defaultReceiverName, float64(len(messages)))
+	processor.Metric.IncMessageReceived(float64(len(messages)))
 	for _, msg := range messages {
 		p.process(ctx, msg)
 	}
@@ -174,7 +172,7 @@ func (p *Processor) start(ctx context.Context) error {
 				return fmt.Errorf("failed to receive messages: %w", err)
 			}
 			logger.Info(fmt.Sprintf("received %d messages from processor loop", len(messages)))
-			processor.Metric.IncMessageReceived(defaultReceiverName, float64(len(messages)))
+			processor.Metric.IncMessageReceived(float64(len(messages)))
 			for _, msg := range messages {
 				p.process(ctx, msg)
 			}
@@ -195,10 +193,10 @@ func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedM
 		defer cancel()
 		defer func() {
 			<-p.concurrencyTokens
-			processor.Metric.IncMessageHandled(defaultReceiverName, message)
-			processor.Metric.DecConcurrentMessageCount(defaultReceiverName, message)
+			processor.Metric.IncMessageHandled(message)
+			processor.Metric.DecConcurrentMessageCount(message)
 		}()
-		processor.Metric.IncConcurrentMessageCount(defaultReceiverName, message)
+		processor.Metric.IncConcurrentMessageCount(message)
 		p.handle.Handle(msgContext, p.receiver, message)
 	}()
 }

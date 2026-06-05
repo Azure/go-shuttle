@@ -12,7 +12,6 @@ import (
 
 const (
 	subsystem          = "goshuttle_handler"
-	receiverNameLabel  = "receiverName"
 	messageTypeLabel   = "messageType"
 	deliveryCountLabel = "deliveryCount"
 	successLabel       = "success"
@@ -34,12 +33,12 @@ func NewRegistry() *Registry {
 			Name:      "message_received_total",
 			Help:      "total number of messages received by the processor",
 			Subsystem: subsystem,
-		}, []string{receiverNameLabel}),
+		}, nil),
 		MessageHandledCount: prom.NewCounterVec(prom.CounterOpts{
 			Name:      "message_handled_total",
 			Help:      "total number of messages handled by this handler",
 			Subsystem: subsystem,
-		}, []string{receiverNameLabel, messageTypeLabel, deliveryCountLabel}),
+		}, []string{messageTypeLabel, deliveryCountLabel}),
 		MessageLockRenewedCount: prom.NewCounterVec(prom.CounterOpts{
 			Name:      "message_lock_renewed_total",
 			Help:      "total number of message lock renewal",
@@ -64,7 +63,7 @@ func NewRegistry() *Registry {
 			Name:      "concurrent_message_count",
 			Help:      "number of messages being handled concurrently",
 			Subsystem: subsystem,
-		}, []string{receiverNameLabel, messageTypeLabel}),
+		}, []string{messageTypeLabel}),
 	}
 }
 
@@ -105,12 +104,12 @@ type Recorder interface {
 	IncMessageLockRenewedFailure(msg *azservicebus.ReceivedMessage)
 	IncMessageLockRenewedSuccess(msg *azservicebus.ReceivedMessage)
 	IncMessageLockRenewalTimeoutCount(msg *azservicebus.ReceivedMessage)
-	IncMessageHandled(receiverName string, msg *azservicebus.ReceivedMessage)
-	IncMessageReceived(receiverName string, count float64)
+	IncMessageHandled(msg *azservicebus.ReceivedMessage)
+	IncMessageReceived(count float64)
 	IncHealthCheckSuccessCount(namespace, entity, subscription string)
 	IncHealthCheckFailureCount(namespace, entity, subscription string)
-	IncConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage)
-	DecConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage)
+	IncConcurrentMessageCount(msg *azservicebus.ReceivedMessage)
+	DecConcurrentMessageCount(msg *azservicebus.ReceivedMessage)
 }
 
 // IncMessageLockRenewedSuccess increase the message lock renewal success counter
@@ -128,24 +127,21 @@ func (m *Registry) IncMessageLockRenewedFailure(msg *azservicebus.ReceivedMessag
 }
 
 // IncMessageHandled increase the message Handled
-func (m *Registry) IncMessageHandled(receiverName string, msg *azservicebus.ReceivedMessage) {
+func (m *Registry) IncMessageHandled(msg *azservicebus.ReceivedMessage) {
 	labels := getMessageTypeLabel(msg)
-	labels[receiverNameLabel] = receiverName
 	labels[deliveryCountLabel] = strconv.FormatUint(uint64(msg.DeliveryCount), 10)
 	m.MessageHandledCount.With(labels).Inc()
 }
 
 // IncConcurrentMessageCount increases the concurrent message counter
-func (m *Registry) IncConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage) {
+func (m *Registry) IncConcurrentMessageCount(msg *azservicebus.ReceivedMessage) {
 	labels := getMessageTypeLabel(msg)
-	labels[receiverNameLabel] = receiverName
 	m.ConcurrentMessageCount.With(labels).Inc()
 }
 
 // DecConcurrentMessageCount decreases the concurrent message counter
-func (m *Registry) DecConcurrentMessageCount(receiverName string, msg *azservicebus.ReceivedMessage) {
+func (m *Registry) DecConcurrentMessageCount(msg *azservicebus.ReceivedMessage) {
 	labels := getMessageTypeLabel(msg)
-	labels[receiverNameLabel] = receiverName
 	m.ConcurrentMessageCount.With(labels).Dec()
 }
 
@@ -162,8 +158,8 @@ func (m *Registry) IncMessageDeadlineReachedCount(msg *azservicebus.ReceivedMess
 }
 
 // IncMessageReceived increases the message received counter
-func (m *Registry) IncMessageReceived(receiverName string, count float64) {
-	m.MessageReceivedCount.WithLabelValues(receiverName).Add(count)
+func (m *Registry) IncMessageReceived(count float64) {
+	m.MessageReceivedCount.WithLabelValues().Add(count)
 }
 
 // IncHealthCheckSuccessCount increases the connection success gauge and resets the failure gauge
