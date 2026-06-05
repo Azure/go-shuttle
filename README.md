@@ -38,9 +38,8 @@ type ProcessorOptions struct {
 
 ### MultiProcessor
 
-`NewMultiProcessor` takes in a list of receivers and a message handler. It creates a processor for each receiver and starts them concurrently.
-
-see [Processor and MultiProcessor examples](v2/processor_test.go)
+Deprecated: `NewMultiProcessor`, `ReceiverEx`, and `NewReceiverEx` are deprecated and will be removed in a future version.
+Use `NewProcessor` with one receiver per processor instead.
 
 ## Middlewares:
 GoSHuttle provides a few middleware to simplify the implementation of the message handler in the application code
