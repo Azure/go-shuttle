@@ -118,20 +118,20 @@ func (p *Processor) Start(ctx context.Context) (err error) {
 			err = fmt.Errorf("panic recovered from processor: %v", rec)
 		}
 	}()
-	return p.startOne(ctx)
+	return p.startWithRetries(ctx)
 }
 
-// startOne starts a processor and blocks until an error occurs or the context is canceled.
+// startWithRetries starts a processor and blocks until an error occurs or the context is canceled.
 // It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
 // Returns a combined list of errors during the start attempts or ctx.Err() if the context
 // is cancelled during the retries.
-func (p *Processor) startOne(ctx context.Context) error {
+func (p *Processor) startWithRetries(ctx context.Context) error {
 	logger := getLogger(ctx)
 	var savedError error
 	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
 		if err := p.start(ctx); err != nil {
 			savedError = errors.Join(savedError, err)
-			logger.Error(fmt.Sprintf("processor start attempt %d failed: %v", attempt, err))
+			logger.Error(fmt.Sprintf("processor start attempt %d failed: %s", attempt, err))
 			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
 				break
 			}

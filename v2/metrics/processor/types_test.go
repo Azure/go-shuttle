@@ -42,7 +42,7 @@ func TestNewInformerDefault(t *testing.T) {
 	g.Expect(i.registry).To(Equal(Metric))
 }
 
-func TestProcessorMetricsDoNotIncludeReceiverNameLabel(t *testing.T) {
+func TestProcessorMetrics(t *testing.T) {
 	g := NewWithT(t)
 	r := NewRegistry()
 	msg := &azservicebus.ReceivedMessage{
