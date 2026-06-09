@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/go-shuttle/v2/metrics/common"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 type fakeRegistry struct {
@@ -31,13 +33,43 @@ func TestRegistry_Init(t *testing.T) {
 	g.Expect(func() { r.Init(prometheus.NewRegistry()) }).ToNot(Panic())
 	g.Expect(func() { r.Init(fRegistry) }).ToNot(Panic())
 	g.Expect(fRegistry.collectors).To(HaveLen(7))
-	Metric.IncMessageReceived("testReceiverName", 10)
+	Metric.IncMessageReceived(10)
 }
 
 func TestNewInformerDefault(t *testing.T) {
 	i := NewInformer()
 	g := NewWithT(t)
 	g.Expect(i.registry).To(Equal(Metric))
+}
+
+func TestProcessorMetrics(t *testing.T) {
+	g := NewWithT(t)
+	r := NewRegistry()
+	msg := &azservicebus.ReceivedMessage{
+		ApplicationProperties: map[string]interface{}{
+			"type": "someType",
+		},
+		DeliveryCount: 3,
+	}
+
+	r.IncMessageReceived(1)
+	r.IncMessageHandled(msg)
+	r.IncConcurrentMessageCount(msg)
+
+	for _, collector := range []prometheus.Collector{
+		r.MessageReceivedCount,
+		r.MessageHandledCount,
+		r.ConcurrentMessageCount,
+	} {
+		metricCount := 0
+		common.Collect(collector, func(metric *dto.Metric) {
+			metricCount++
+			for _, label := range metric.GetLabel() {
+				g.Expect(label.GetName()).ToNot(Equal("receiverName"))
+			}
+		})
+		g.Expect(metricCount).To(BeNumerically(">", 0))
+	}
 }
 
 func TestLockRenewalMetrics(t *testing.T) {

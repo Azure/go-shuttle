@@ -24,7 +24,7 @@ It allows concurrent message handling and provides a message handler middleware 
 ```golang
 // ProcessorOptions configures the processor
 // MaxConcurrency defaults to 1. Not setting MaxConcurrency, or setting it to 0 or a negative value will fallback to the default.
-// ReceiveInterval defaults to 2 seconds if not set.
+// ReceiveInterval defaults to 1 second if not set.
 // StartMaxAttempt defaults to 1 if not set (no retries). Not setting StartMaxAttempt, or setting it to non-positive value will fallback to the default.
 // StartRetryDelayStrategy defaults to a fixed 5-second delay if not set.
 type ProcessorOptions struct {
@@ -35,11 +35,6 @@ type ProcessorOptions struct {
     StartRetryDelayStrategy RetryDelayStrategy
 }
 ```
-
-### MultiProcessor
-
-Deprecated: `NewMultiProcessor`, `ReceiverEx`, and `NewReceiverEx` are deprecated and will be removed in a future version.
-Use `NewProcessor` with one receiver per processor instead.
 
 ## Middlewares:
 GoSHuttle provides a few middleware to simplify the implementation of the message handler in the application code
