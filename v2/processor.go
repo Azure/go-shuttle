@@ -177,8 +177,7 @@ func (p *Processor) start(ctx context.Context) error {
 				p.process(ctx, msg)
 			}
 		case <-ctx.Done():
-			logger.Info("context done, stop receiving")
-			break
+			logger.Info("context done, stop receiving from processor")
 		}
 	}
 	logger.Info("exiting processor")
