@@ -115,7 +115,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 func (p *Processor) Start(ctx context.Context) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			err = fmt.Errorf("panic recovered from processor: %v", rec)
+			err = fmt.Errorf("panic recovered from processor: %s", rec)
 		}
 	}()
 	return p.startWithRetries(ctx)
@@ -131,7 +131,7 @@ func (p *Processor) startWithRetries(ctx context.Context) error {
 	for attempt := 0; attempt < p.options.StartMaxAttempt; attempt++ {
 		if err := p.start(ctx); err != nil {
 			savedError = errors.Join(savedError, err)
-			logger.Error(fmt.Sprintf("processor start attempt %d failed: %s", attempt, err))
+			logger.Error(fmt.Errorf("processor start attempt %d failed: %w", attempt, err).Error())
 			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
 				break
 			}
