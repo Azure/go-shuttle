@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -42,7 +43,11 @@ type Processor struct {
 	receiver          Receiver
 	options           ProcessorOptions
 	handle            Handler
-	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor
+	concurrencyTokens chan struct{} // TODO: remove once receive sizing and in-flight tracking share a simpler lifecycle model.
+	inFlightMessages  *inFlightMessages
+	shutdownCtx       context.Context
+	shutdownCancel    context.CancelFunc
+	receiveMu         sync.Mutex
 }
 
 // ProcessorOptions configures the processor
@@ -101,11 +106,15 @@ func applyProcessorOptions(options *ProcessorOptions) *ProcessorOptions {
 // NewProcessor creates a new processor with the provided receiver and handler.
 func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOptions) *Processor {
 	opts := applyProcessorOptions(options)
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 	return &Processor{
 		receiver:          receiver,
 		handle:            handler,
 		options:           *opts,
 		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
+		inFlightMessages:  newInFlightMessages(),
+		shutdownCtx:       shutdownCtx,
+		shutdownCancel:    shutdownCancel,
 	}
 }
 
@@ -113,12 +122,26 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 // It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
 // Returns a combined list of errors encountered during each processor start attempt.
 func (p *Processor) Start(ctx context.Context) (err error) {
+	if p.isClosed() {
+		return context.Canceled
+	}
+	ctx, cancel := p.startContext(ctx)
+	defer cancel()
 	defer func() {
 		if rec := recover(); rec != nil {
 			err = fmt.Errorf("panic recovered from processor: %s", rec)
 		}
 	}()
 	return p.startWithRetries(ctx)
+}
+
+// Close stops receiving new messages, cancels in-flight message handlers, and
+// abandons messages currently held by the processor.
+func (p *Processor) Close(ctx context.Context) error {
+	p.shutdownCancel()
+	p.receiveMu.Lock()
+	defer p.receiveMu.Unlock()
+	return p.inFlightMessages.close(ctx, p.receiver)
 }
 
 // startWithRetries starts a processor and blocks until an error occurs or the context is canceled.
@@ -147,18 +170,32 @@ func (p *Processor) startWithRetries(ctx context.Context) error {
 	return savedError
 }
 
+func (p *Processor) startContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	if p.isClosed() {
+		cancel()
+		return ctx, cancel
+	}
+	go func() {
+		select {
+		case <-p.shutdownCtx.Done():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
+}
+
+func (p *Processor) isClosed() bool {
+	return p.shutdownCtx.Err() != nil
+}
+
 // start starts the processor and blocks until an error occurs or the context is canceled.
 func (p *Processor) start(ctx context.Context) error {
 	logger := getLogger(ctx)
 	logger.Info("starting processor")
-	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxReceiveCount, nil)
-	if err != nil {
-		return fmt.Errorf("failed to receive messages: %w", err)
-	}
-	logger.Info(fmt.Sprintf("received %d messages - initial", len(messages)))
-	processor.Metric.IncMessageReceived(float64(len(messages)))
-	for _, msg := range messages {
-		p.process(ctx, msg)
+	if err := p.receiveAndProcess(ctx, p.options.MaxReceiveCount, "initial"); err != nil {
+		return err
 	}
 	for ctx.Err() == nil {
 		select {
@@ -167,14 +204,8 @@ func (p *Processor) start(ctx context.Context) error {
 			if ctx.Err() != nil || maxMessages == 0 {
 				break
 			}
-			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
-			if err != nil {
-				return fmt.Errorf("failed to receive messages: %w", err)
-			}
-			logger.Info(fmt.Sprintf("received %d messages from processor loop", len(messages)))
-			processor.Metric.IncMessageReceived(float64(len(messages)))
-			for _, msg := range messages {
-				p.process(ctx, msg)
+			if err := p.receiveAndProcess(ctx, maxMessages, "from processor loop"); err != nil {
+				return err
 			}
 		case <-ctx.Done():
 			logger.Info("context done, stop receiving from processor")
@@ -184,13 +215,32 @@ func (p *Processor) start(ctx context.Context) error {
 	return ctx.Err()
 }
 
+func (p *Processor) receiveAndProcess(ctx context.Context, maxMessages int, source string) error {
+	p.receiveMu.Lock()
+	defer p.receiveMu.Unlock()
+
+	messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
+	if err != nil {
+		return fmt.Errorf("failed to receive messages: %w", err)
+	}
+	getLogger(ctx).Info(fmt.Sprintf("received %d messages - %s", len(messages), source))
+	processor.Metric.IncMessageReceived(float64(len(messages)))
+	for _, msg := range messages {
+		p.process(ctx, msg)
+	}
+	return nil
+}
+
 func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedMessage) {
 	p.concurrencyTokens <- struct{}{}
+	p.inFlightMessages.track(message)
+
 	go func() {
 		msgContext, cancel := context.WithCancel(ctx)
 		// cancel messageContext when we get out of this goroutine
 		defer cancel()
 		defer func() {
+			p.inFlightMessages.forget(message)
 			<-p.concurrencyTokens
 			processor.Metric.IncMessageHandled(message)
 			processor.Metric.DecConcurrentMessageCount(message)

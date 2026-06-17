@@ -3,6 +3,7 @@ package shuttle_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
@@ -18,11 +19,18 @@ type fakeSettler struct {
 	DeadLetterCalled atomic.Int32
 	DeferCalled      atomic.Int32
 	RenewCalled      atomic.Int32
+	SetupAbandonErr  error
+
+	mu                sync.Mutex
+	AbandonedMessages []*azservicebus.ReceivedMessage
 }
 
 func (f *fakeSettler) AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error {
 	f.AbandonCalled.Add(1)
-	return nil
+	f.mu.Lock()
+	f.AbandonedMessages = append(f.AbandonedMessages, message)
+	f.mu.Unlock()
+	return f.SetupAbandonErr
 }
 
 func (f *fakeSettler) CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error {
@@ -45,6 +53,14 @@ func (f *fakeSettler) RenewMessageLock(ctx context.Context, message *azservicebu
 	return nil
 }
 
+func (f *fakeSettler) abandonedMessages() []*azservicebus.ReceivedMessage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	messages := make([]*azservicebus.ReceivedMessage, len(f.AbandonedMessages))
+	copy(messages, f.AbandonedMessages)
+	return messages
+}
+
 type fakeReceiver struct {
 	// outcomes to verify
 	ReceiveCalls []int // array of maxMessage value passed to receive calls in the lifetime of the fake receiver
@@ -55,21 +71,51 @@ type fakeReceiver struct {
 	*fakeSettler
 	SetupMaxReceiveCalls int
 	SetupReceivePanic    string
+	SetupRespectContext  bool
+	SetupReceiveStarted  chan struct{}
 }
 
-func (f *fakeReceiver) ReceiveMessages(_ context.Context, maxMessages int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
+func (f *fakeReceiver) ReceiveMessages(ctx context.Context, maxMessages int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
 	f.ReceiveCalls = append(f.ReceiveCalls, maxMessages)
+	if f.SetupReceiveStarted != nil {
+		select {
+		case f.SetupReceiveStarted <- struct{}{}:
+		default:
+		}
+	}
 	if maxMessages == 0 && len(f.SetupReceivedMessages) > 0 {
 		return nil, nil
 	}
 	var result []*azservicebus.ReceivedMessage
-	for msg := range f.SetupReceivedMessages {
-		result = append(result, msg)
-		if len(result) == maxMessages || len(f.SetupReceivedMessages) == 0 {
-			break
+	for len(result) < maxMessages {
+		if f.SetupRespectContext {
+			select {
+			case msg, ok := <-f.SetupReceivedMessages:
+				if !ok {
+					return f.receiveResult(result)
+				}
+				result = append(result, msg)
+				if len(f.SetupReceivedMessages) == 0 {
+					return f.receiveResult(result)
+				}
+			case <-ctx.Done():
+				return result, ctx.Err()
+			}
+			continue
 		}
+		for msg := range f.SetupReceivedMessages {
+			result = append(result, msg)
+			if len(result) == maxMessages || len(f.SetupReceivedMessages) == 0 {
+				break
+			}
+		}
+		break
 	}
 
+	return f.receiveResult(result)
+}
+
+func (f *fakeReceiver) receiveResult(result []*azservicebus.ReceivedMessage) ([]*azservicebus.ReceivedMessage, error) {
 	if f.SetupReceivePanic != "" {
 		panic(f.SetupReceivePanic)
 	}

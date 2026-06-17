@@ -2,6 +2,7 @@ package shuttle_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -375,6 +376,195 @@ func TestProcessorStart_RecoversReceiverPanic(t *testing.T) {
 	g.Expect(func() { err = processor.Start(ctx) }).To(Not(Panic()))
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("panic recovered from processor: receive panic!"))
+}
+
+func TestProcessorClose_CancelsAndAbandonsInflightMessages(t *testing.T) {
+	messages := messagesChannel(2)
+	close(messages)
+	settler := &fakeSettler{}
+	rcv := &fakeReceiver{
+		fakeSettler:           settler,
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  10,
+	}
+	started := make(chan *azservicebus.ReceivedMessage, 2)
+	canceled := make(chan *azservicebus.ReceivedMessage, 2)
+	processor := shuttle.NewProcessor(rcv, func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
+		started <- message
+		<-ctx.Done()
+		canceled <- message
+	}, &shuttle.ProcessorOptions{
+		MaxConcurrency:  2,
+		ReceiveInterval: to.Ptr(1 * time.Hour),
+	})
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- processor.Start(context.Background()) }()
+
+	g := NewWithT(t)
+	g.Eventually(started).Should(Receive())
+	g.Eventually(started).Should(Receive())
+
+	g.Expect(processor.Close(context.Background())).To(Succeed())
+	g.Eventually(canceled).Should(Receive())
+	g.Eventually(canceled).Should(Receive())
+	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
+	g.Expect(settler.AbandonCalled.Load()).To(Equal(int32(2)))
+	g.Expect(settler.abandonedMessages()).To(HaveLen(2))
+}
+
+func TestProcessorClose_StopsStartReceiveLoop(t *testing.T) {
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage),
+		SetupMaxReceiveCalls:  10,
+		SetupRespectContext:   true,
+		SetupReceiveStarted:   make(chan struct{}, 1),
+	}
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
+		ReceiveInterval: to.Ptr(10 * time.Millisecond),
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- processor.Start(context.Background()) }()
+
+	g := NewWithT(t)
+	g.Eventually(rcv.SetupReceiveStarted).Should(Receive())
+	g.Expect(processor.Close(context.Background())).To(Succeed())
+	g.Eventually(errCh).Should(Receive(MatchError(MatchRegexp("failed to receive messages: context canceled"))))
+	g.Expect(rcv.ReceiveCalls).To(HaveLen(1))
+}
+
+func TestProcessorClose_WaitsForReceiveBatchBeforeAbandoning(t *testing.T) {
+	messages := make(chan *azservicebus.ReceivedMessage)
+	settler := &fakeSettler{}
+	rcv := &fakeReceiver{
+		fakeSettler:           settler,
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  10,
+		SetupReceiveStarted:   make(chan struct{}, 1),
+	}
+	releaseHandler := make(chan struct{})
+	processor := shuttle.NewProcessor(rcv, func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
+		<-releaseHandler
+	}, &shuttle.ProcessorOptions{
+		ReceiveInterval: to.Ptr(1 * time.Hour),
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- processor.Start(context.Background()) }()
+
+	g := NewWithT(t)
+	g.Eventually(rcv.SetupReceiveStarted).Should(Receive())
+
+	closeErrCh := make(chan error, 1)
+	go func() { closeErrCh <- processor.Close(context.Background()) }()
+	g.Consistently(closeErrCh, 20*time.Millisecond).ShouldNot(Receive())
+
+	message := &azservicebus.ReceivedMessage{MessageID: "received-during-close"}
+	messages <- message
+
+	g.Eventually(closeErrCh).Should(Receive(Succeed()))
+	abandoned := settler.abandonedMessages()
+	g.Expect(abandoned).To(HaveLen(1))
+	g.Expect(abandoned[0]).To(BeIdenticalTo(message))
+
+	close(releaseHandler)
+	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
+}
+
+func TestProcessorClose_ReturnsAbandonErrors(t *testing.T) {
+	abandonErr := errors.New("abandon failed")
+	messages := messagesChannel(2)
+	close(messages)
+	settler := &fakeSettler{SetupAbandonErr: abandonErr}
+	rcv := &fakeReceiver{
+		fakeSettler:           settler,
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  10,
+	}
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	processor := shuttle.NewProcessor(rcv, func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
+		started <- struct{}{}
+		<-release
+	}, &shuttle.ProcessorOptions{
+		MaxConcurrency:  2,
+		ReceiveInterval: to.Ptr(1 * time.Hour),
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- processor.Start(context.Background()) }()
+	defer func() {
+		close(release)
+		<-errCh
+	}()
+
+	g := NewWithT(t)
+	g.Eventually(started).Should(Receive())
+	g.Eventually(started).Should(Receive())
+
+	err := processor.Close(context.Background())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, abandonErr)).To(BeTrue())
+	g.Expect(err.Error()).To(ContainSubstring("failed to abandon message"))
+	g.Expect(settler.AbandonCalled.Load()).To(Equal(int32(2)))
+}
+
+func TestProcessorClose_IsIdempotent(t *testing.T) {
+	messages := messagesChannel(1)
+	close(messages)
+	settler := &fakeSettler{}
+	rcv := &fakeReceiver{
+		fakeSettler:           settler,
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  10,
+	}
+	started := make(chan struct{}, 1)
+	processor := shuttle.NewProcessor(rcv, func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
+		started <- struct{}{}
+		<-ctx.Done()
+	}, &shuttle.ProcessorOptions{
+		ReceiveInterval: to.Ptr(1 * time.Hour),
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- processor.Start(context.Background()) }()
+
+	g := NewWithT(t)
+	g.Eventually(started).Should(Receive())
+	g.Expect(processor.Close(context.Background())).To(Succeed())
+	g.Expect(processor.Close(context.Background())).To(Succeed())
+	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
+	g.Expect(settler.AbandonCalled.Load()).To(Equal(int32(1)))
+}
+
+func TestProcessorClose_DoesNotWaitForHandlerToExit(t *testing.T) {
+	messages := messagesChannel(1)
+	close(messages)
+	settler := &fakeSettler{}
+	rcv := &fakeReceiver{
+		fakeSettler:           settler,
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  10,
+	}
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	processor := shuttle.NewProcessor(rcv, func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
+		started <- struct{}{}
+		<-release
+	}, &shuttle.ProcessorOptions{
+		ReceiveInterval: to.Ptr(1 * time.Hour),
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- processor.Start(context.Background()) }()
+
+	g := NewWithT(t)
+	g.Eventually(started).Should(Receive())
+
+	closeCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	g.Expect(processor.Close(closeCtx)).To(Succeed())
+	g.Expect(settler.AbandonCalled.Load()).To(Equal(int32(1)))
+	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
+
+	close(release)
 }
 
 func messagesChannel(messageCount int) chan *azservicebus.ReceivedMessage {
