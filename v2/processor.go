@@ -11,7 +11,7 @@ import (
 	"github.com/Azure/go-shuttle/v2/metrics/processor"
 )
 
-const shutdownGracePeriodPollInterval = 10 * time.Millisecond
+const shutdownGracePeriodPollInterval = 100 * time.Millisecond
 
 type Receiver interface {
 	ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
