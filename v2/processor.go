@@ -11,6 +11,8 @@ import (
 	"github.com/Azure/go-shuttle/v2/metrics/processor"
 )
 
+const shutdownGracePeriodPollInterval = 10 * time.Millisecond
+
 type Receiver interface {
 	ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
 	MessageSettler
@@ -43,7 +45,6 @@ type Processor struct {
 	options           ProcessorOptions
 	handle            Handler
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor
-	inFlight          *inFlightHandlers
 }
 
 // ProcessorOptions configures the processor
@@ -114,7 +115,6 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 		handle:            handler,
 		options:           *opts,
 		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
-		inFlight:          newInFlightHandlers(),
 	}
 }
 
@@ -203,13 +203,11 @@ func (p *Processor) start(ctx context.Context) error {
 
 func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedMessage) {
 	p.concurrencyTokens <- struct{}{}
-	p.inFlight.add()
 	go func() {
 		msgContext, cancel := context.WithCancel(ctx)
 		// cancel messageContext when we get out of this goroutine
 		defer cancel()
 		defer func() {
-			p.inFlight.done()
 			<-p.concurrencyTokens
 			processor.Metric.IncMessageHandled(message)
 			processor.Metric.DecConcurrentMessageCount(message)
@@ -232,20 +230,27 @@ func (p *Processor) waitForInFlightHandlers() error {
 	if gracePeriod == nil || *gracePeriod <= 0 {
 		return nil
 	}
+	if len(p.concurrencyTokens) == 0 {
+		return nil
+	}
 
 	timer := time.NewTimer(*gracePeriod)
 	defer timer.Stop()
+	ticker := time.NewTicker(shutdownGracePeriodPollInterval)
+	defer ticker.Stop()
 
-	select {
-	case <-p.inFlight.doneCh():
-		return nil
-	case <-timer.C:
+	for {
 		select {
-		case <-p.inFlight.doneCh():
-			return nil
-		default:
+		case <-ticker.C:
+			if len(p.concurrencyTokens) == 0 {
+				return nil
+			}
+		case <-timer.C:
+			if len(p.concurrencyTokens) == 0 {
+				return nil
+			}
+			return fmt.Errorf("timed out waiting %s for %d in-flight message handler(s): %w", *gracePeriod, len(p.concurrencyTokens), context.DeadlineExceeded)
 		}
-		return fmt.Errorf("timed out waiting %s for %d in-flight message handler(s): %w", *gracePeriod, p.inFlight.count(), context.DeadlineExceeded)
 	}
 }
 
