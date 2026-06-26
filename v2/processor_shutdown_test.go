@@ -47,6 +47,8 @@ func TestProcessorStart_ShutdownGracePeriodDisabledReturnsBeforeHandlerFinishes(
 			err := requireProcessorReturned(t, errCh)
 
 			require.ErrorIs(t, err, context.Canceled)
+			require.NotErrorIs(t, err, context.DeadlineExceeded)
+			require.Equal(t, 1, receiver.receiveCalls)
 			handler.requireStillBlocked(t)
 			handler.unblockAndWait(t)
 		})
@@ -81,7 +83,11 @@ func TestProcessorStart_ShutdownGracePeriodWaitsForHandler(t *testing.T) {
 	requireProcessorStillRunning(t, errCh)
 	handler.unblockAndWait(t)
 
-	require.ErrorIs(t, requireProcessorReturned(t, errCh), context.Canceled)
+	err := requireProcessorReturned(t, errCh)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, context.DeadlineExceeded)
+	require.Equal(t, 2, receiver.receiveCalls)
 }
 
 func TestProcessorStart_ShutdownGracePeriodTimesOutAndDoesNotRetry(t *testing.T) {
