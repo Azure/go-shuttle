@@ -14,6 +14,11 @@ import (
 	"github.com/Azure/go-shuttle/v2"
 )
 
+const (
+	processorResultTimeout       = 2 * time.Second
+	processorStillRunningTimeout = 50 * time.Millisecond
+)
+
 func TestProcessorStart_ShutdownGracePeriodDisabledReturnsBeforeHandlerFinishes(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -24,37 +29,39 @@ func TestProcessorStart_ShutdownGracePeriodDisabledReturnsBeforeHandlerFinishes(
 		{name: "negative", gracePeriod: to.Ptr(-time.Second)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := newShutdownBlockedHandler()
+			handler, handlerFunc := newBlockingHandler()
+			t.Cleanup(handler.unblock)
 			receiver := &singleMessageReceiver{fakeSettler: &fakeSettler{}}
-			processor := shuttle.NewProcessor(receiver, handler.Handle, &shuttle.ProcessorOptions{
+			processor := shuttle.NewProcessor(receiver, handlerFunc, &shuttle.ProcessorOptions{
 				ReceiveInterval:     to.Ptr(time.Hour),
 				ShutdownGracePeriod: tc.gracePeriod,
 			})
 
 			ctx, cancel := context.WithCancel(context.Background())
 			errCh := startProcessor(ctx, processor)
-			handler.waitStarted(t, errCh)
-			defer handler.releaseAndWait(t)
+			requireSignal(t, handler.started, errCh, "handler did not start")
 
 			cancel()
-			err := waitForProcessorResult(t, errCh)
+			err := requireProcessorResult(t, errCh)
 
 			require.ErrorIs(t, err, context.Canceled)
-			handler.assertStillRunning(t)
+			handler.requireStillBlocked(t)
+			handler.unblockAndWait(t)
 		})
 	}
 }
 
 func TestProcessorStart_ShutdownGracePeriodWaitsForHandler(t *testing.T) {
-	handler := newShutdownBlockedHandler()
+	handler, handlerFunc := newBlockingHandler()
+	t.Cleanup(handler.unblock)
 	secondReceiveStarted := make(chan struct{})
-	receiver := &contextErrorAfterFirstReceive{
+	receiver := &firstReceiveThenContextErrorReceiver{
 		fakeSettler:          &fakeSettler{},
 		secondReceiveStarted: secondReceiveStarted,
 	}
 	shutdownGracePeriod := 500 * time.Millisecond
 
-	processor := shuttle.NewProcessor(receiver, handler.Handle, &shuttle.ProcessorOptions{
+	processor := shuttle.NewProcessor(receiver, handlerFunc, &shuttle.ProcessorOptions{
 		MaxConcurrency:      2,
 		ReceiveInterval:     to.Ptr(time.Millisecond),
 		ShutdownGracePeriod: &shutdownGracePeriod,
@@ -62,23 +69,23 @@ func TestProcessorStart_ShutdownGracePeriodWaitsForHandler(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := startProcessor(ctx, processor)
-	handler.waitStarted(t, errCh)
-	defer handler.releaseAndWait(t)
-	waitForSignal(t, secondReceiveStarted, errCh, "second receive did not start")
+	requireSignal(t, handler.started, errCh, "handler did not start")
+	requireSignal(t, secondReceiveStarted, errCh, "second receive did not start")
 
 	cancel()
-	assertProcessorStillRunning(t, errCh)
-	handler.releaseAndWait(t)
+	requireProcessorStillRunning(t, errCh)
+	handler.unblockAndWait(t)
 
-	require.ErrorIs(t, waitForProcessorResult(t, errCh), context.Canceled)
+	require.ErrorIs(t, requireProcessorResult(t, errCh), context.Canceled)
 }
 
 func TestProcessorStart_ShutdownGracePeriodTimesOutAndDoesNotRetry(t *testing.T) {
-	handler := newShutdownBlockedHandler()
+	handler, handlerFunc := newBlockingHandler()
+	t.Cleanup(handler.unblock)
 	receiver := &singleMessageReceiver{fakeSettler: &fakeSettler{}}
 	shutdownGracePeriod := 150 * time.Millisecond
 
-	processor := shuttle.NewProcessor(receiver, handler.Handle, &shuttle.ProcessorOptions{
+	processor := shuttle.NewProcessor(receiver, handlerFunc, &shuttle.ProcessorOptions{
 		ReceiveInterval:         to.Ptr(time.Hour),
 		ShutdownGracePeriod:     &shutdownGracePeriod,
 		StartMaxAttempt:         3,
@@ -87,14 +94,13 @@ func TestProcessorStart_ShutdownGracePeriodTimesOutAndDoesNotRetry(t *testing.T)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := startProcessor(ctx, processor)
-	handler.waitStarted(t, errCh)
-	defer handler.releaseAndWait(t)
+	requireSignal(t, handler.started, errCh, "handler did not start")
 
 	cancel()
 	start := time.Now()
-	err := waitForProcessorResult(t, errCh)
+	err := requireProcessorResult(t, errCh)
 	elapsed := time.Since(start)
-	handler.releaseAndWait(t)
+	handler.unblockAndWait(t)
 
 	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -109,67 +115,61 @@ func startProcessor(ctx context.Context, processor *shuttle.Processor) <-chan er
 	return errCh
 }
 
-func assertProcessorStillRunning(t *testing.T, errCh <-chan error) {
+func requireProcessorStillRunning(t *testing.T, errCh <-chan error) {
 	t.Helper()
 
 	select {
 	case err := <-errCh:
 		t.Fatalf("processor returned before the handler was released: %v", err)
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(processorStillRunningTimeout):
 	}
 }
 
-func waitForProcessorResult(t *testing.T, errCh <-chan error) error {
+func requireProcessorResult(t *testing.T, errCh <-chan error) error {
 	t.Helper()
 
 	select {
 	case err := <-errCh:
 		return err
-	case <-time.After(2 * time.Second):
+	case <-time.After(processorResultTimeout):
 		t.Fatal("processor did not return")
 		return nil
 	}
 }
 
-func waitForSignal(t *testing.T, signal <-chan struct{}, errCh <-chan error, timeoutMessage string) {
+func requireSignal(t *testing.T, signal <-chan struct{}, errCh <-chan error, timeoutMessage string) {
 	t.Helper()
 
 	select {
 	case <-signal:
 	case err := <-errCh:
 		t.Fatalf("processor returned early: %v", err)
-	case <-time.After(2 * time.Second):
+	case <-time.After(processorResultTimeout):
 		t.Fatal(timeoutMessage)
 	}
 }
 
-type shutdownBlockedHandler struct {
+type blockingHandler struct {
 	started     chan struct{}
-	release     chan struct{}
-	releaseOnce sync.Once
+	unblockCh   chan struct{}
+	unblockOnce sync.Once
 	done        chan struct{}
 }
 
-func newShutdownBlockedHandler() *shutdownBlockedHandler {
-	return &shutdownBlockedHandler{
-		started: make(chan struct{}),
-		release: make(chan struct{}),
-		done:    make(chan struct{}),
+func newBlockingHandler() (*blockingHandler, shuttle.HandlerFunc) {
+	h := &blockingHandler{
+		started:   make(chan struct{}),
+		unblockCh: make(chan struct{}),
+		done:      make(chan struct{}),
+	}
+	return h, func(_ context.Context, _ shuttle.MessageSettler, _ *azservicebus.ReceivedMessage) {
+		close(h.started)
+		defer close(h.done)
+		<-h.unblockCh
 	}
 }
 
-func (h *shutdownBlockedHandler) Handle(_ context.Context, _ shuttle.MessageSettler, _ *azservicebus.ReceivedMessage) {
-	close(h.started)
-	defer close(h.done)
-	<-h.release
-}
-
-func (h *shutdownBlockedHandler) waitStarted(t *testing.T, errCh <-chan error) {
-	t.Helper()
-	waitForSignal(t, h.started, errCh, "handler did not start")
-}
-
-func (h *shutdownBlockedHandler) assertStillRunning(t *testing.T) {
+func (h *blockingHandler) requireStillBlocked(t *testing.T) {
 	t.Helper()
 
 	select {
@@ -179,15 +179,19 @@ func (h *shutdownBlockedHandler) assertStillRunning(t *testing.T) {
 	}
 }
 
-func (h *shutdownBlockedHandler) releaseAndWait(t *testing.T) {
+func (h *blockingHandler) unblock() {
+	h.unblockOnce.Do(func() {
+		close(h.unblockCh)
+	})
+}
+
+func (h *blockingHandler) unblockAndWait(t *testing.T) {
 	t.Helper()
 
-	h.releaseOnce.Do(func() {
-		close(h.release)
-	})
+	h.unblock()
 	select {
 	case <-h.done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(processorResultTimeout):
 		t.Fatal("handler did not return")
 	}
 }
@@ -205,14 +209,14 @@ func (r *singleMessageReceiver) ReceiveMessages(_ context.Context, _ int, _ *azs
 	return nil, errors.New("unexpected retry")
 }
 
-type contextErrorAfterFirstReceive struct {
+type firstReceiveThenContextErrorReceiver struct {
 	*fakeSettler
 	receiveCalls         int
 	secondReceiveStarted chan<- struct{}
 	closeSecondReceive   sync.Once
 }
 
-func (r *contextErrorAfterFirstReceive) ReceiveMessages(ctx context.Context, _ int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
+func (r *firstReceiveThenContextErrorReceiver) ReceiveMessages(ctx context.Context, _ int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
 	r.receiveCalls++
 	if r.receiveCalls == 1 {
 		return []*azservicebus.ReceivedMessage{{}}, nil
