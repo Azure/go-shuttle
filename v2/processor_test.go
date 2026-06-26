@@ -216,6 +216,48 @@ func TestProcessorStart_ShutdownGracePeriodTimesOutWaitingForInFlightHandler(t *
 	a.Less(elapsed, time.Second)
 }
 
+func TestProcessorStart_ContextCanceledStopsRetriesAfterShutdownGracePeriodTimeout(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	messages := messagesChannel(1)
+	close(messages)
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: messages,
+		SetupMaxReceiveCalls:  10,
+	}
+
+	shutdownGracePeriod := 25 * time.Millisecond
+	processor := shuttle.NewProcessor(rcv, blockingHandler(started, release, done),
+		&shuttle.ProcessorOptions{
+			ReceiveInterval:         to.Ptr(time.Hour),
+			ShutdownGracePeriod:     &shutdownGracePeriod,
+			StartMaxAttempt:         3,
+			StartRetryDelayStrategy: &shuttle.ConstantDelayStrategy{Delay: 0},
+		})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- processor.Start(ctx) }()
+	waitForHandlerStart(t, started, errCh)
+
+	cancel()
+	start := time.Now()
+	err := waitForProcessorError(t, errCh)
+	elapsed := time.Since(start)
+
+	close(release)
+	<-done
+
+	a := require.New(t)
+	a.ErrorIs(err, context.Canceled)
+	a.ErrorIs(err, context.DeadlineExceeded)
+	a.Equal(1, len(rcv.ReceiveCalls))
+	a.GreaterOrEqual(elapsed, shutdownGracePeriod)
+	a.Less(elapsed, time.Second)
+}
+
 func TestProcessorStart_ShutdownGracePeriodDisabledByDefault(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})

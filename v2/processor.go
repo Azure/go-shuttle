@@ -142,6 +142,10 @@ func (p *Processor) startWithRetries(ctx context.Context) error {
 		if err := p.start(ctx); err != nil {
 			savedError = errors.Join(savedError, err)
 			logger.Error(fmt.Errorf("processor start attempt %d failed: %w", attempt, err).Error())
+			if ctx.Err() != nil {
+				logger.Info("context done, stop retrying")
+				return savedError
+			}
 			if attempt+1 == p.options.StartMaxAttempt { // last attempt, return early
 				break
 			}
