@@ -101,9 +101,7 @@ func TestProcessorStart_ContextCanceledAfterStart(t *testing.T) {
 }
 
 func TestProcessorStart_ShutdownGracePeriodWaitsForInFlightHandler(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	done := make(chan struct{})
+	handler := newBlockedHandler()
 	messages := messagesChannel(1)
 	close(messages)
 	rcv := &fakeReceiver{
@@ -113,7 +111,7 @@ func TestProcessorStart_ShutdownGracePeriodWaitsForInFlightHandler(t *testing.T)
 	}
 
 	shutdownGracePeriod := 200 * time.Millisecond
-	processor := shuttle.NewProcessor(rcv, blockingHandler(started, release, done),
+	processor := shuttle.NewProcessor(rcv, handler.Handle,
 		&shuttle.ProcessorOptions{
 			ReceiveInterval:     to.Ptr(time.Hour),
 			ShutdownGracePeriod: &shutdownGracePeriod,
@@ -122,34 +120,26 @@ func TestProcessorStart_ShutdownGracePeriodWaitsForInFlightHandler(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() { errCh <- processor.Start(ctx) }()
-	waitForHandlerStart(t, started, errCh)
+	handler.waitStarted(t, errCh)
 
 	cancel()
-	select {
-	case err := <-errCh:
-		t.Fatalf("processor returned before the in-flight handler completed: %v", err)
-	case <-time.After(20 * time.Millisecond):
-	}
-
-	close(release)
-	<-done
+	assertProcessorStillRunning(t, errCh)
+	handler.releaseAndWait(t)
 
 	a := require.New(t)
 	a.ErrorIs(waitForProcessorError(t, errCh), context.Canceled)
 }
 
-func TestProcessorStart_ShutdownGracePeriodWaitsAfterReceiveCanceled(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	done := make(chan struct{})
+func TestProcessorStart_ShutdownGracePeriodWaitsWhenReceiveReturnsContextError(t *testing.T) {
+	handler := newBlockedHandler()
 	secondReceiveStarted := make(chan struct{})
-	rcv := &contextCanceledReceiveReceiver{
+	rcv := &cancelableSecondReceiveReceiver{
 		fakeSettler:          &fakeSettler{},
 		secondReceiveStarted: secondReceiveStarted,
 	}
 
 	shutdownGracePeriod := 200 * time.Millisecond
-	processor := shuttle.NewProcessor(rcv, blockingHandler(started, release, done),
+	processor := shuttle.NewProcessor(rcv, handler.Handle,
 		&shuttle.ProcessorOptions{
 			MaxConcurrency:      2,
 			ReceiveInterval:     to.Ptr(time.Millisecond),
@@ -159,27 +149,19 @@ func TestProcessorStart_ShutdownGracePeriodWaitsAfterReceiveCanceled(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() { errCh <- processor.Start(ctx) }()
-	waitForHandlerStart(t, started, errCh)
+	handler.waitStarted(t, errCh)
 	waitForReceiveStart(t, secondReceiveStarted, errCh)
 
 	cancel()
-	select {
-	case err := <-errCh:
-		t.Fatalf("processor returned before the in-flight handler completed: %v", err)
-	case <-time.After(20 * time.Millisecond):
-	}
-
-	close(release)
-	<-done
+	assertProcessorStillRunning(t, errCh)
+	handler.releaseAndWait(t)
 
 	a := require.New(t)
 	a.ErrorIs(waitForProcessorError(t, errCh), context.Canceled)
 }
 
 func TestProcessorStart_ShutdownGracePeriodTimesOutWaitingForInFlightHandler(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	done := make(chan struct{})
+	handler := newBlockedHandler()
 	messages := messagesChannel(1)
 	close(messages)
 	rcv := &fakeReceiver{
@@ -189,7 +171,7 @@ func TestProcessorStart_ShutdownGracePeriodTimesOutWaitingForInFlightHandler(t *
 	}
 
 	shutdownGracePeriod := 25 * time.Millisecond
-	processor := shuttle.NewProcessor(rcv, blockingHandler(started, release, done),
+	processor := shuttle.NewProcessor(rcv, handler.Handle,
 		&shuttle.ProcessorOptions{
 			ReceiveInterval:     to.Ptr(time.Hour),
 			ShutdownGracePeriod: &shutdownGracePeriod,
@@ -198,15 +180,14 @@ func TestProcessorStart_ShutdownGracePeriodTimesOutWaitingForInFlightHandler(t *
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() { errCh <- processor.Start(ctx) }()
-	waitForHandlerStart(t, started, errCh)
+	handler.waitStarted(t, errCh)
 
 	cancel()
 	start := time.Now()
 	err := waitForProcessorError(t, errCh)
 	elapsed := time.Since(start)
 
-	close(release)
-	<-done
+	handler.releaseAndWait(t)
 
 	a := require.New(t)
 	a.ErrorIs(err, context.Canceled)
@@ -216,10 +197,8 @@ func TestProcessorStart_ShutdownGracePeriodTimesOutWaitingForInFlightHandler(t *
 	a.Less(elapsed, time.Second)
 }
 
-func TestProcessorStart_ContextCanceledStopsRetriesAfterShutdownGracePeriodTimeout(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	done := make(chan struct{})
+func TestProcessorStart_CanceledShutdownTimeoutDoesNotRetry(t *testing.T) {
+	handler := newBlockedHandler()
 	messages := messagesChannel(1)
 	close(messages)
 	rcv := &fakeReceiver{
@@ -229,7 +208,7 @@ func TestProcessorStart_ContextCanceledStopsRetriesAfterShutdownGracePeriodTimeo
 	}
 
 	shutdownGracePeriod := 25 * time.Millisecond
-	processor := shuttle.NewProcessor(rcv, blockingHandler(started, release, done),
+	processor := shuttle.NewProcessor(rcv, handler.Handle,
 		&shuttle.ProcessorOptions{
 			ReceiveInterval:         to.Ptr(time.Hour),
 			ShutdownGracePeriod:     &shutdownGracePeriod,
@@ -240,15 +219,14 @@ func TestProcessorStart_ContextCanceledStopsRetriesAfterShutdownGracePeriodTimeo
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() { errCh <- processor.Start(ctx) }()
-	waitForHandlerStart(t, started, errCh)
+	handler.waitStarted(t, errCh)
 
 	cancel()
 	start := time.Now()
 	err := waitForProcessorError(t, errCh)
 	elapsed := time.Since(start)
 
-	close(release)
-	<-done
+	handler.releaseAndWait(t)
 
 	a := require.New(t)
 	a.ErrorIs(err, context.Canceled)
@@ -259,9 +237,7 @@ func TestProcessorStart_ContextCanceledStopsRetriesAfterShutdownGracePeriodTimeo
 }
 
 func TestProcessorStart_ShutdownGracePeriodDisabledByDefault(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	done := make(chan struct{})
+	handler := newBlockedHandler()
 	messages := messagesChannel(1)
 	close(messages)
 	rcv := &fakeReceiver{
@@ -270,7 +246,7 @@ func TestProcessorStart_ShutdownGracePeriodDisabledByDefault(t *testing.T) {
 		SetupMaxReceiveCalls:  10,
 	}
 
-	processor := shuttle.NewProcessor(rcv, blockingHandler(started, release, done),
+	processor := shuttle.NewProcessor(rcv, handler.Handle,
 		&shuttle.ProcessorOptions{
 			ReceiveInterval: to.Ptr(time.Hour),
 		})
@@ -278,14 +254,13 @@ func TestProcessorStart_ShutdownGracePeriodDisabledByDefault(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() { errCh <- processor.Start(ctx) }()
-	waitForHandlerStart(t, started, errCh)
+	handler.waitStarted(t, errCh)
 
 	cancel()
 	a := require.New(t)
 	a.ErrorIs(waitForProcessorError(t, errCh), context.Canceled)
 
-	close(release)
-	<-done
+	handler.releaseAndWait(t)
 }
 
 func TestProcessorStart_CanSetMaxConcurrency(t *testing.T) {
@@ -583,23 +558,47 @@ func enqueueCount(q chan *azservicebus.ReceivedMessage, messageCount int) {
 	}
 }
 
-func blockingHandler(started chan<- struct{}, release <-chan struct{}, done chan<- struct{}) shuttle.HandlerFunc {
-	return func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
-		close(started)
-		defer close(done)
-		<-release
+// blockedHandler keeps a processor handler in flight until the test releases it.
+type blockedHandler struct {
+	started chan struct{}
+	release chan struct{}
+	done    chan struct{}
+}
+
+func newBlockedHandler() *blockedHandler {
+	return &blockedHandler{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
 	}
 }
 
-func waitForHandlerStart(t *testing.T, started <-chan struct{}, errCh <-chan error) {
+func (h *blockedHandler) Handle(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
+	close(h.started)
+	defer close(h.done)
+	<-h.release
+}
+
+func (h *blockedHandler) waitStarted(t *testing.T, errCh <-chan error) {
 	t.Helper()
 
 	select {
-	case <-started:
+	case <-h.started:
 	case err := <-errCh:
 		t.Fatalf("processor returned before the handler started: %v", err)
 	case <-time.After(time.Second):
 		t.Fatal("handler did not start")
+	}
+}
+
+func (h *blockedHandler) releaseAndWait(t *testing.T) {
+	t.Helper()
+
+	close(h.release)
+	select {
+	case <-h.done:
+	case <-time.After(time.Second):
+		t.Fatal("handler did not return")
 	}
 }
 
@@ -615,6 +614,16 @@ func waitForReceiveStart(t *testing.T, started <-chan struct{}, errCh <-chan err
 	}
 }
 
+func assertProcessorStillRunning(t *testing.T, errCh <-chan error) {
+	t.Helper()
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("processor returned before the handler was released: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+}
+
 func waitForProcessorError(t *testing.T, errCh <-chan error) error {
 	t.Helper()
 
@@ -627,13 +636,14 @@ func waitForProcessorError(t *testing.T, errCh <-chan error) error {
 	}
 }
 
-type contextCanceledReceiveReceiver struct {
+// cancelableSecondReceiveReceiver returns one message, then blocks in ReceiveMessages until the context is canceled.
+type cancelableSecondReceiveReceiver struct {
 	*fakeSettler
 	receiveCalls         int
 	secondReceiveStarted chan<- struct{}
 }
 
-func (r *contextCanceledReceiveReceiver) ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
+func (r *cancelableSecondReceiveReceiver) ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
 	r.receiveCalls++
 	if r.receiveCalls == 1 {
 		return []*azservicebus.ReceivedMessage{{}}, nil
