@@ -44,7 +44,7 @@ func TestProcessorStart_ShutdownGracePeriodDisabledReturnsBeforeHandlerFinishes(
 			// The handler stays blocked. With shutdown grace disabled, Start should
 			// return on cancellation without waiting for that handler to finish.
 			cancel()
-			err := requireProcessorResult(t, errCh)
+			err := requireProcessorReturned(t, errCh)
 
 			require.ErrorIs(t, err, context.Canceled)
 			handler.requireStillBlocked(t)
@@ -81,7 +81,7 @@ func TestProcessorStart_ShutdownGracePeriodWaitsForHandler(t *testing.T) {
 	requireProcessorStillRunning(t, errCh)
 	handler.unblockAndWait(t)
 
-	require.ErrorIs(t, requireProcessorResult(t, errCh), context.Canceled)
+	require.ErrorIs(t, requireProcessorReturned(t, errCh), context.Canceled)
 }
 
 func TestProcessorStart_ShutdownGracePeriodTimesOutAndDoesNotRetry(t *testing.T) {
@@ -105,8 +105,9 @@ func TestProcessorStart_ShutdownGracePeriodTimesOutAndDoesNotRetry(t *testing.T)
 	// the shutdown timeout and should not enter another receive/start attempt.
 	cancel()
 	start := time.Now()
-	err := requireProcessorResult(t, errCh)
+	err := requireProcessorReturned(t, errCh)
 	elapsed := time.Since(start)
+	handler.requireStillBlocked(t)
 	handler.unblockAndWait(t)
 
 	require.ErrorIs(t, err, context.Canceled)
@@ -132,7 +133,7 @@ func requireProcessorStillRunning(t *testing.T, errCh <-chan error) {
 	}
 }
 
-func requireProcessorResult(t *testing.T, errCh <-chan error) error {
+func requireProcessorReturned(t *testing.T, errCh <-chan error) error {
 	t.Helper()
 
 	select {
