@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -43,6 +44,7 @@ type Processor struct {
 	options           ProcessorOptions
 	handle            Handler
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor
+	inFlight          *inFlightHandlers
 }
 
 // ProcessorOptions configures the processor
@@ -52,6 +54,7 @@ type Processor struct {
 // ReceiveInterval defaults to 1 second if not set.
 // StartMaxAttempt defaults to 1 if not set (no retries). Not setting StartMaxAttempt, or setting it to non-positive value will fallback to the default.
 // StartRetryDelayStrategy defaults to a fixed 5-second delay if not set.
+// ShutdownGracePeriod is disabled if not set, or if set to 0 or a negative value.
 type ProcessorOptions struct {
 	// MaxConcurrency is the maximum number of concurrent messages to process at a time.
 	MaxConcurrency int
@@ -67,6 +70,9 @@ type ProcessorOptions struct {
 
 	// StartRetryDelay is the delay between each start attempt.
 	StartRetryDelayStrategy RetryDelayStrategy
+
+	// ShutdownGracePeriod is the maximum time Start waits for in-flight handlers to finish after the processor context is canceled.
+	ShutdownGracePeriod *time.Duration
 }
 
 func applyProcessorOptions(options *ProcessorOptions) *ProcessorOptions {
@@ -94,6 +100,9 @@ func applyProcessorOptions(options *ProcessorOptions) *ProcessorOptions {
 		if options.StartRetryDelayStrategy != nil {
 			opts.StartRetryDelayStrategy = options.StartRetryDelayStrategy
 		}
+		if options.ShutdownGracePeriod != nil {
+			opts.ShutdownGracePeriod = options.ShutdownGracePeriod
+		}
 	}
 	return opts
 }
@@ -106,11 +115,13 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 		handle:            handler,
 		options:           *opts,
 		concurrencyTokens: make(chan struct{}, opts.MaxConcurrency),
+		inFlight:          newInFlightHandlers(),
 	}
 }
 
 // Start starts processing on the receiver and blocks until the processor is stopped or the context is canceled.
 // It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
+// When ShutdownGracePeriod is set to a positive duration, cancellation waits up to that duration for in-flight handlers to return.
 // Returns a combined list of errors encountered during each processor start attempt.
 func (p *Processor) Start(ctx context.Context) (err error) {
 	defer func() {
@@ -153,6 +164,9 @@ func (p *Processor) start(ctx context.Context) error {
 	logger.Info("starting processor")
 	messages, err := p.receiver.ReceiveMessages(ctx, p.options.MaxReceiveCount, nil)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+			return p.stop(ctx)
+		}
 		return fmt.Errorf("failed to receive messages: %w", err)
 	}
 	logger.Info(fmt.Sprintf("received %d messages - initial", len(messages)))
@@ -169,6 +183,10 @@ func (p *Processor) start(ctx context.Context) error {
 			}
 			messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
 			if err != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+					logger.Info("context done, stop receiving from processor")
+					return p.stop(ctx)
+				}
 				return fmt.Errorf("failed to receive messages: %w", err)
 			}
 			logger.Info(fmt.Sprintf("received %d messages from processor loop", len(messages)))
@@ -181,16 +199,18 @@ func (p *Processor) start(ctx context.Context) error {
 		}
 	}
 	logger.Info("exiting processor")
-	return ctx.Err()
+	return p.stop(ctx)
 }
 
 func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedMessage) {
 	p.concurrencyTokens <- struct{}{}
+	p.inFlight.add()
 	go func() {
 		msgContext, cancel := context.WithCancel(ctx)
 		// cancel messageContext when we get out of this goroutine
 		defer cancel()
 		defer func() {
+			p.inFlight.done()
 			<-p.concurrencyTokens
 			processor.Metric.IncMessageHandled(message)
 			processor.Metric.DecConcurrentMessageCount(message)
@@ -198,6 +218,84 @@ func (p *Processor) process(ctx context.Context, message *azservicebus.ReceivedM
 		processor.Metric.IncConcurrentMessageCount(message)
 		p.handle.Handle(msgContext, p.receiver, message)
 	}()
+}
+
+func (p *Processor) stop(ctx context.Context) error {
+	ctxErr := ctx.Err()
+	if waitErr := p.waitForInFlightHandlers(); waitErr != nil {
+		return errors.Join(ctxErr, waitErr)
+	}
+	return ctxErr
+}
+
+func (p *Processor) waitForInFlightHandlers() error {
+	gracePeriod := p.options.ShutdownGracePeriod
+	if gracePeriod == nil || *gracePeriod <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(*gracePeriod)
+	defer timer.Stop()
+
+	select {
+	case <-p.inFlight.doneCh():
+		return nil
+	case <-timer.C:
+		select {
+		case <-p.inFlight.doneCh():
+			return nil
+		default:
+		}
+		return fmt.Errorf("timed out waiting %s for %d in-flight message handler(s): %w", *gracePeriod, p.inFlight.count(), context.DeadlineExceeded)
+	}
+}
+
+type inFlightHandlers struct {
+	mu      sync.Mutex
+	active  int
+	drained chan struct{}
+}
+
+func newInFlightHandlers() *inFlightHandlers {
+	drained := make(chan struct{})
+	close(drained)
+	return &inFlightHandlers{
+		drained: drained,
+	}
+}
+
+func (h *inFlightHandlers) add() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.active == 0 {
+		h.drained = make(chan struct{})
+	}
+	h.active++
+}
+
+func (h *inFlightHandlers) done() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.active--
+	if h.active == 0 {
+		close(h.drained)
+	}
+}
+
+func (h *inFlightHandlers) doneCh() <-chan struct{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.drained
+}
+
+func (h *inFlightHandlers) count() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.active
 }
 
 type PanicHandlerOptions struct {

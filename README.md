@@ -21,18 +21,23 @@ It allows concurrent message handling and provides a message handler middleware 
 
 `StartMaxAttempt` and `StartRetryDelayStrategy` configures the retry behaviour for the processor.
 
+`ShutdownGracePeriod` configures an optional bounded wait for in-flight handlers after the processor context is canceled.
+
 ```golang
 // ProcessorOptions configures the processor
 // MaxConcurrency defaults to 1. Not setting MaxConcurrency, or setting it to 0 or a negative value will fallback to the default.
 // ReceiveInterval defaults to 1 second if not set.
 // StartMaxAttempt defaults to 1 if not set (no retries). Not setting StartMaxAttempt, or setting it to non-positive value will fallback to the default.
 // StartRetryDelayStrategy defaults to a fixed 5-second delay if not set.
+// ShutdownGracePeriod is disabled if not set, or if set to 0 or a negative value.
 type ProcessorOptions struct {
     MaxConcurrency  int
+    MaxReceiveCount int
     ReceiveInterval *time.Duration
     
     StartMaxAttempt         int
     StartRetryDelayStrategy RetryDelayStrategy
+    ShutdownGracePeriod     *time.Duration
 }
 ```
 
