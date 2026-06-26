@@ -39,8 +39,10 @@ func TestProcessorStart_ShutdownGracePeriodDisabledReturnsBeforeHandlerFinishes(
 
 			ctx, cancel := context.WithCancel(context.Background())
 			errCh := startProcessor(ctx, processor)
-			requireSignal(t, handler.started, errCh, "handler did not start")
+			requireSignal(t, handler.startedCh, errCh, "handler did not start")
 
+			// The handler stays blocked. With shutdown grace disabled, Start should
+			// return on cancellation without waiting for that handler to finish.
 			cancel()
 			err := requireProcessorResult(t, errCh)
 
@@ -69,9 +71,12 @@ func TestProcessorStart_ShutdownGracePeriodWaitsForHandler(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := startProcessor(ctx, processor)
-	requireSignal(t, handler.started, errCh, "handler did not start")
+	requireSignal(t, handler.startedCh, errCh, "handler did not start")
 	requireSignal(t, secondReceiveStarted, errCh, "second receive did not start")
 
+	// The second receive is waiting on ctx.Done(), and the handler is still
+	// blocked. Cancellation moves the processor into shutdown, where it should
+	// wait for the in-flight handler instead of returning immediately.
 	cancel()
 	requireProcessorStillRunning(t, errCh)
 	handler.unblockAndWait(t)
@@ -94,8 +99,10 @@ func TestProcessorStart_ShutdownGracePeriodTimesOutAndDoesNotRetry(t *testing.T)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := startProcessor(ctx, processor)
-	requireSignal(t, handler.started, errCh, "handler did not start")
+	requireSignal(t, handler.startedCh, errCh, "handler did not start")
 
+	// Leave the handler blocked past the grace period. Start should return with
+	// the shutdown timeout and should not enter another receive/start attempt.
 	cancel()
 	start := time.Now()
 	err := requireProcessorResult(t, errCh)
@@ -150,21 +157,27 @@ func requireSignal(t *testing.T, signal <-chan struct{}, errCh <-chan error, tim
 }
 
 type blockingHandler struct {
-	started     chan struct{}
+	startedCh   chan struct{}
 	unblockCh   chan struct{}
 	unblockOnce sync.Once
-	done        chan struct{}
+	doneCh      chan struct{}
 }
 
+// newBlockingHandler returns a handler that reports when processor.Start begins
+// handling a message, then blocks until the test calls unblock.
+//
+// The channels are intentional: the handler runs in a processor goroutine, while
+// the test goroutine needs to wait for exact lifecycle points without racing on
+// shared bools.
 func newBlockingHandler() (*blockingHandler, shuttle.HandlerFunc) {
 	h := &blockingHandler{
-		started:   make(chan struct{}),
+		startedCh: make(chan struct{}),
 		unblockCh: make(chan struct{}),
-		done:      make(chan struct{}),
+		doneCh:    make(chan struct{}),
 	}
 	return h, func(_ context.Context, _ shuttle.MessageSettler, _ *azservicebus.ReceivedMessage) {
-		close(h.started)
-		defer close(h.done)
+		close(h.startedCh)
+		defer close(h.doneCh)
 		<-h.unblockCh
 	}
 }
@@ -173,7 +186,7 @@ func (h *blockingHandler) requireStillBlocked(t *testing.T) {
 	t.Helper()
 
 	select {
-	case <-h.done:
+	case <-h.doneCh:
 		t.Fatal("handler returned before it was released")
 	default:
 	}
@@ -190,7 +203,7 @@ func (h *blockingHandler) unblockAndWait(t *testing.T) {
 
 	h.unblock()
 	select {
-	case <-h.done:
+	case <-h.doneCh:
 	case <-time.After(processorResultTimeout):
 		t.Fatal("handler did not return")
 	}
@@ -216,6 +229,9 @@ type firstReceiveThenContextErrorReceiver struct {
 	closeSecondReceive   sync.Once
 }
 
+// ReceiveMessages returns one message, then blocks the next receive until the
+// processor context is canceled. That lets tests drive shutdown through the same
+// ctx.Err() path used when a real Service Bus receive is interrupted.
 func (r *firstReceiveThenContextErrorReceiver) ReceiveMessages(ctx context.Context, _ int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
 	r.receiveCalls++
 	if r.receiveCalls == 1 {
