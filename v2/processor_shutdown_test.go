@@ -14,7 +14,7 @@ import (
 	"github.com/Azure/go-shuttle/v2"
 )
 
-func TestProcessorStart_ShutdownGracePeriodDisabledReturnsWithoutWaiting(t *testing.T) {
+func TestProcessorStart_ShutdownGracePeriodDisabledReturnsBeforeHandlerFinishes(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		gracePeriod *time.Duration
@@ -40,6 +40,7 @@ func TestProcessorStart_ShutdownGracePeriodDisabledReturnsWithoutWaiting(t *test
 			err := waitForProcessorResult(t, errCh)
 
 			require.ErrorIs(t, err, context.Canceled)
+			handler.assertStillRunning(t)
 		})
 	}
 }
@@ -166,6 +167,16 @@ func (h *shutdownBlockedHandler) Handle(_ context.Context, _ shuttle.MessageSett
 func (h *shutdownBlockedHandler) waitStarted(t *testing.T, errCh <-chan error) {
 	t.Helper()
 	waitForSignal(t, h.started, errCh, "handler did not start")
+}
+
+func (h *shutdownBlockedHandler) assertStillRunning(t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-h.done:
+		t.Fatal("handler returned before it was released")
+	default:
+	}
 }
 
 func (h *shutdownBlockedHandler) releaseAndWait(t *testing.T) {
