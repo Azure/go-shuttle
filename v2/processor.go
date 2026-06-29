@@ -46,7 +46,6 @@ type Processor struct {
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor
 	inFlightMessages  *inFlightMessages
 	lifecycle         processorLifecycle
-	receiveMu         sync.Mutex
 }
 
 // ErrProcessorClosed is returned when Start is called after the processor has been closed.
@@ -180,12 +179,10 @@ func (p *Processor) Start(ctx context.Context) (err error) {
 }
 
 // Close stops receiving new messages, cancels in-flight message handlers, and
-// abandons messages currently held by the processor.
+// best-effort abandons messages currently held by the processor.
 func (p *Processor) Close(ctx context.Context) error {
 	p.lifecycle.close()
 
-	p.receiveMu.Lock()
-	defer p.receiveMu.Unlock()
 	return p.inFlightMessages.close(ctx, p.receiver)
 }
 
@@ -241,9 +238,6 @@ func (p *Processor) start(ctx context.Context) error {
 }
 
 func (p *Processor) receiveAndProcess(ctx context.Context, maxMessages int, source string) error {
-	p.receiveMu.Lock()
-	defer p.receiveMu.Unlock()
-
 	messages, err := p.receiver.ReceiveMessages(ctx, maxMessages, nil)
 	if err != nil {
 		return fmt.Errorf("failed to receive messages: %w", err)

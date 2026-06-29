@@ -452,19 +452,15 @@ func TestProcessorClose_StopsStartReceiveLoop(t *testing.T) {
 	g.Expect(rcv.ReceiveCalls).To(HaveLen(1))
 }
 
-func TestProcessorClose_WaitsForReceiveBatchBeforeAbandoning(t *testing.T) {
+func TestProcessorClose_DoesNotWaitForActiveReceive(t *testing.T) {
 	messages := make(chan *azservicebus.ReceivedMessage)
-	settler := &fakeSettler{}
 	rcv := &fakeReceiver{
-		fakeSettler:           settler,
+		fakeSettler:           &fakeSettler{},
 		SetupReceivedMessages: messages,
 		SetupMaxReceiveCalls:  10,
 		SetupReceiveStarted:   make(chan struct{}, 1),
 	}
-	releaseHandler := make(chan struct{})
-	processor := shuttle.NewProcessor(rcv, func(ctx context.Context, settler shuttle.MessageSettler, message *azservicebus.ReceivedMessage) {
-		<-releaseHandler
-	}, &shuttle.ProcessorOptions{
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
 		ReceiveInterval: to.Ptr(1 * time.Hour),
 	})
 	errCh := make(chan error, 1)
@@ -475,17 +471,10 @@ func TestProcessorClose_WaitsForReceiveBatchBeforeAbandoning(t *testing.T) {
 
 	closeErrCh := make(chan error, 1)
 	go func() { closeErrCh <- processor.Close(context.Background()) }()
-	g.Consistently(closeErrCh, 20*time.Millisecond).ShouldNot(Receive())
-
-	message := &azservicebus.ReceivedMessage{MessageID: "received-during-close"}
-	messages <- message
 
 	g.Eventually(closeErrCh).Should(Receive(Succeed()))
-	abandoned := settler.abandonedMessages()
-	g.Expect(abandoned).To(HaveLen(1))
-	g.Expect(abandoned[0]).To(BeIdenticalTo(message))
 
-	close(releaseHandler)
+	close(messages)
 	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
 }
 
