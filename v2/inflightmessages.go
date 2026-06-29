@@ -37,29 +37,55 @@ func (m *inFlightMessages) forget(message *azservicebus.ReceivedMessage) {
 
 func (m *inFlightMessages) close(ctx context.Context, settler MessageSettler) error {
 	messages := m.messages()
-	errs := make([]error, len(messages))
-	var wg sync.WaitGroup
-	wg.Add(len(messages))
+	abandonResults := make(chan error, len(messages))
 
-	for i, message := range messages {
-		i, message := i, message
+	for _, message := range messages {
+		message := message
 		go func() {
-			defer wg.Done()
-
-			abandonCtx, cancel := context.WithTimeout(ctx, inFlightMessageAbandonTimeout)
-			defer cancel()
-
-			err := settler.AbandonMessage(abandonCtx, message, nil)
-			if err != nil {
-				errs[i] = fmt.Errorf("failed to abandon message %s during processor close: %w", message.MessageID, err)
-				return
-			}
-			m.forget(message)
+			abandonResults <- m.abandon(ctx, settler, message)
 		}()
 	}
 
-	wg.Wait()
+	var errs []error
+	for range messages {
+		select {
+		case err := <-abandonResults:
+			if err != nil {
+				errs = append(errs, err)
+			}
+		case <-ctx.Done():
+			errs = append(errs, ctx.Err())
+			errs = append(errs, drainAbandonErrors(abandonResults)...)
+			return errors.Join(errs...)
+		}
+	}
 	return errors.Join(errs...)
+}
+
+func (m *inFlightMessages) abandon(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) error {
+	abandonCtx, cancel := context.WithTimeout(ctx, inFlightMessageAbandonTimeout)
+	defer cancel()
+
+	err := settler.AbandonMessage(abandonCtx, message, nil)
+	if err != nil {
+		return fmt.Errorf("failed to abandon message %s during processor close: %w", message.MessageID, err)
+	}
+	m.forget(message)
+	return nil
+}
+
+func drainAbandonErrors(abandonResults <-chan error) []error {
+	var errs []error
+	for {
+		select {
+		case err := <-abandonResults:
+			if err != nil {
+				errs = append(errs, err)
+			}
+		default:
+			return errs
+		}
+	}
 }
 
 func (m *inFlightMessages) messages() []*azservicebus.ReceivedMessage {
