@@ -113,7 +113,7 @@ func TestProcessorStart_ReturnsProcessorClosedErrorAfterClose(t *testing.T) {
 
 	err := processor.Start(context.Background())
 
-	require.ErrorContains(t, err, "failed to start processor: processor has already been closed")
+	require.ErrorContains(t, err, "failed to start processor since it has already been closed")
 	require.Empty(t, rcv.ReceiveCalls)
 }
 
