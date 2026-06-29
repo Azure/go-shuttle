@@ -101,6 +101,24 @@ func TestProcessorStart_ContextCanceledAfterStart(t *testing.T) {
 	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
 }
 
+func TestProcessorStart_ReturnsProcessorClosedErrorAfterClose(t *testing.T) {
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage),
+	}
+	close(rcv.SetupReceivedMessages)
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Millisecond), nil)
+
+	require.NoError(t, processor.Close(context.Background()))
+
+	err := processor.Start(context.Background())
+
+	require.ErrorIs(t, err, shuttle.ErrProcessorClosed)
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorContains(t, err, "processor has already been closed")
+	require.Empty(t, rcv.ReceiveCalls)
+}
+
 func TestProcessorStart_CanSetMaxConcurrency(t *testing.T) {
 	a := require.New(t)
 	rcv := &fakeReceiver{
