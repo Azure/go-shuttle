@@ -32,6 +32,17 @@ func (m *inFlightMessages) forget(message *azservicebus.ReceivedMessage) {
 	delete(m.tracked, message)
 }
 
+func (m *inFlightMessages) messages() []*azservicebus.ReceivedMessage {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	messages := make([]*azservicebus.ReceivedMessage, 0, len(m.tracked))
+	for message := range m.tracked {
+		messages = append(messages, message)
+	}
+	return messages
+}
+
 func (m *inFlightMessages) close(ctx context.Context, settler MessageSettler) error {
 	messages := m.messages()
 	abandonResults := make(chan error, len(messages))
@@ -64,15 +75,4 @@ func (m *inFlightMessages) abandon(ctx context.Context, settler MessageSettler, 
 	}
 	m.forget(message)
 	return nil
-}
-
-func (m *inFlightMessages) messages() []*azservicebus.ReceivedMessage {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	messages := make([]*azservicebus.ReceivedMessage, 0, len(m.tracked))
-	for message := range m.tracked {
-		messages = append(messages, message)
-	}
-	return messages
 }
