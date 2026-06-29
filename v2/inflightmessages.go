@@ -36,17 +36,29 @@ func (m *inFlightMessages) forget(message *azservicebus.ReceivedMessage) {
 }
 
 func (m *inFlightMessages) close(ctx context.Context, settler MessageSettler) error {
-	var errs []error
-	for _, message := range m.messages() {
-		abandonCtx, cancel := context.WithTimeout(ctx, inFlightMessageAbandonTimeout)
-		err := settler.AbandonMessage(abandonCtx, message, nil)
-		cancel()
-		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to abandon message %s during processor close: %w", message.MessageID, err))
-			continue
-		}
-		m.forget(message)
+	messages := m.messages()
+	errs := make([]error, len(messages))
+	var wg sync.WaitGroup
+	wg.Add(len(messages))
+
+	for i, message := range messages {
+		i, message := i, message
+		go func() {
+			defer wg.Done()
+
+			abandonCtx, cancel := context.WithTimeout(ctx, inFlightMessageAbandonTimeout)
+			defer cancel()
+
+			err := settler.AbandonMessage(abandonCtx, message, nil)
+			if err != nil {
+				errs[i] = fmt.Errorf("failed to abandon message %s during processor close: %w", message.MessageID, err)
+				return
+			}
+			m.forget(message)
+		}()
 	}
+
+	wg.Wait()
 	return errors.Join(errs...)
 }
 
