@@ -45,10 +45,50 @@ type Processor struct {
 	handle            Handler
 	concurrencyTokens chan struct{} // tracks how many concurrent messages are currently being handled by the processor
 	inFlightMessages  *inFlightMessages
-	lifecycleMu       sync.Mutex
-	closed            bool
-	cancelStart       context.CancelFunc
+	lifecycle         processorLifecycle
 	receiveMu         sync.Mutex
+}
+
+type processorLifecycle struct {
+	mu             sync.Mutex
+	closed         bool
+	cancelStartCtx context.CancelFunc
+}
+
+func (l *processorLifecycle) start(ctx context.Context) (context.Context, context.CancelFunc) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.closed {
+		return nil, nil
+	}
+
+	ctx, cancelStartCtx := context.WithCancel(ctx)
+	l.cancelStartCtx = cancelStartCtx
+	return ctx, cancelStartCtx
+}
+
+func (l *processorLifecycle) close() {
+	if cancelStartCtx := l.closeStart(); cancelStartCtx != nil {
+		cancelStartCtx()
+	}
+}
+
+func (l *processorLifecycle) closeStart() context.CancelFunc {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.closed = true
+	cancelStartCtx := l.cancelStartCtx
+	l.cancelStartCtx = nil
+	return cancelStartCtx
+}
+
+func (l *processorLifecycle) clearStart() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.cancelStartCtx = nil
 }
 
 // ProcessorOptions configures the processor
@@ -120,11 +160,11 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 // It will retry starting the processor based on the StartMaxAttempt and StartRetryDelayStrategy.
 // Returns a combined list of errors encountered during each processor start attempt.
 func (p *Processor) Start(ctx context.Context) (err error) {
-	ctx, cancel, ok := p.startContext(ctx)
-	if !ok {
+	ctx, cancel := p.lifecycle.start(ctx)
+	if ctx == nil {
 		return context.Canceled
 	}
-	defer p.clearStartCancel()
+	defer p.lifecycle.clearStart()
 	defer cancel()
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -137,15 +177,7 @@ func (p *Processor) Start(ctx context.Context) (err error) {
 // Close stops receiving new messages, cancels in-flight message handlers, and
 // abandons messages currently held by the processor.
 func (p *Processor) Close(ctx context.Context) error {
-	p.lifecycleMu.Lock()
-	p.closed = true
-	cancelStart := p.cancelStart
-	p.cancelStart = nil
-	p.lifecycleMu.Unlock()
-
-	if cancelStart != nil {
-		cancelStart()
-	}
+	p.lifecycle.close()
 
 	p.receiveMu.Lock()
 	defer p.receiveMu.Unlock()
@@ -176,26 +208,6 @@ func (p *Processor) startWithRetries(ctx context.Context) error {
 		}
 	}
 	return savedError
-}
-
-func (p *Processor) startContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {
-	p.lifecycleMu.Lock()
-	defer p.lifecycleMu.Unlock()
-
-	if p.closed {
-		return nil, nil, false
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	p.cancelStart = cancel
-	return ctx, cancel, true
-}
-
-func (p *Processor) clearStartCancel() {
-	p.lifecycleMu.Lock()
-	defer p.lifecycleMu.Unlock()
-
-	p.cancelStart = nil
 }
 
 // start starts the processor and blocks until an error occurs or the context is canceled.
