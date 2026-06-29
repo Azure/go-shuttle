@@ -181,21 +181,22 @@ func TestInFlightMessages_CloseKeepsMessagesWhenAbandonFails(t *testing.T) {
 	require.Same(t, message, abandonedMessages[0])
 }
 
-func TestInFlightMessages_CloseUsesAbandonTimeout(t *testing.T) {
+func TestInFlightMessages_CloseUsesCloseContext(t *testing.T) {
 	inFlight := newInFlightMessages()
 	settler := &inFlightMessageSettler{}
 
 	inFlight.track(&azservicebus.ReceivedMessage{MessageID: "message"})
 
-	beforeClose := time.Now()
-	require.NoError(t, inFlight.close(context.Background(), settler))
-	afterClose := time.Now()
+	deadline := time.Now().Add(1 * time.Minute)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+
+	require.NoError(t, inFlight.close(ctx, settler))
 
 	deadlines := settler.abandonDeadlines()
 	require.Len(t, deadlines, 1)
 	require.True(t, deadlines[0].ok)
-	require.True(t, deadlines[0].deadline.After(beforeClose.Add(9*time.Second)))
-	require.True(t, deadlines[0].deadline.Before(afterClose.Add(11*time.Second)))
+	require.True(t, deadlines[0].deadline.Equal(deadline))
 }
 
 type inFlightMessageSettler struct {

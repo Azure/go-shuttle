@@ -5,12 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
-
-const inFlightMessageAbandonTimeout = 10 * time.Second
 
 type inFlightMessages struct {
 	mu      sync.RWMutex
@@ -54,38 +51,19 @@ func (m *inFlightMessages) close(ctx context.Context, settler MessageSettler) er
 				errs = append(errs, err)
 			}
 		case <-ctx.Done():
-			errs = append(errs, ctx.Err())
-			errs = append(errs, drainAbandonErrors(abandonResults)...)
-			return errors.Join(errs...)
+			return errors.Join(append(errs, ctx.Err())...)
 		}
 	}
 	return errors.Join(errs...)
 }
 
 func (m *inFlightMessages) abandon(ctx context.Context, settler MessageSettler, message *azservicebus.ReceivedMessage) error {
-	abandonCtx, cancel := context.WithTimeout(ctx, inFlightMessageAbandonTimeout)
-	defer cancel()
-
-	err := settler.AbandonMessage(abandonCtx, message, nil)
+	err := settler.AbandonMessage(ctx, message, nil)
 	if err != nil {
 		return fmt.Errorf("failed to abandon message %s during processor close: %w", message.MessageID, err)
 	}
 	m.forget(message)
 	return nil
-}
-
-func drainAbandonErrors(abandonResults <-chan error) []error {
-	var errs []error
-	for {
-		select {
-		case err := <-abandonResults:
-			if err != nil {
-				errs = append(errs, err)
-			}
-		default:
-			return errs
-		}
-	}
 }
 
 func (m *inFlightMessages) messages() []*azservicebus.ReceivedMessage {
