@@ -161,7 +161,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 func (p *Processor) Start(ctx context.Context) (err error) {
 	ctx, cancel := p.lifecycle.start(ctx)
 	if ctx == nil {
-		return fmt.Errorf("processor has already been closed: %w", context.Canceled)
+		return fmt.Errorf("failed to start processor: processor has already been closed: %w", context.Canceled)
 	}
 	defer p.lifecycle.clearStart()
 	defer cancel()
