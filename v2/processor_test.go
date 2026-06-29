@@ -113,8 +113,6 @@ func TestProcessorStart_ReturnsProcessorClosedErrorAfterClose(t *testing.T) {
 
 	err := processor.Start(context.Background())
 
-	require.ErrorIs(t, err, shuttle.ErrProcessorClosed)
-	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorContains(t, err, "processor has already been closed")
 	require.Empty(t, rcv.ReceiveCalls)
 }

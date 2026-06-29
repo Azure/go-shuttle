@@ -48,11 +48,6 @@ type Processor struct {
 	lifecycle         processorLifecycle
 }
 
-// ErrProcessorClosed is returned when Start is called after the processor has been closed.
-var ErrProcessorClosed = errors.New("processor has already been closed")
-
-var errProcessorClosed = fmt.Errorf("%w: %w", ErrProcessorClosed, context.Canceled)
-
 type processorLifecycle struct {
 	mu             sync.Mutex
 	closed         bool
@@ -166,7 +161,7 @@ func NewProcessor(receiver Receiver, handler HandlerFunc, options *ProcessorOpti
 func (p *Processor) Start(ctx context.Context) (err error) {
 	ctx, cancel := p.lifecycle.start(ctx)
 	if ctx == nil {
-		return errProcessorClosed
+		return fmt.Errorf("processor has already been closed: %w", context.Canceled)
 	}
 	defer p.lifecycle.clearStart()
 	defer cancel()
@@ -226,7 +221,7 @@ func (p *Processor) start(ctx context.Context) error {
 			if ctx.Err() != nil || maxMessages == 0 {
 				break
 			}
-			if err := p.receiveAndProcess(ctx, maxMessages, "from processor loop"); err != nil {
+			if err := p.receiveAndProcess(ctx, maxMessages, "processor loop"); err != nil {
 				return err
 			}
 		case <-ctx.Done():

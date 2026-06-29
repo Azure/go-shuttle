@@ -55,19 +55,14 @@ func (m *inFlightMessages) close(ctx context.Context, settler MessageSettler) er
 	}
 
 	var errs []error
-	for completed := 0; completed < len(messages); completed++ {
+	for range messages {
 		select {
 		case err := <-abandonResults:
 			if err != nil {
 				errs = append(errs, err)
 			}
 		case <-ctx.Done():
-			getLogger(ctx).Warn(fmt.Sprintf(
-				"processor close context done while abandoning in-flight messages: %s; completed=%d remaining=%d",
-				ctx.Err(),
-				completed,
-				len(messages)-completed,
-			))
+			getLogger(ctx).Warn(fmt.Sprintf("processor close context done while abandoning in-flight messages: %s", ctx.Err()))
 			return errors.Join(append(errs, ctx.Err())...)
 		}
 	}
