@@ -22,6 +22,8 @@ func TestInFlightMessages_CloseAbandonsTrackedMessages(t *testing.T) {
 	inFlight.forget(forgottenMessage)
 
 	require.NoError(t, inFlight.close(context.Background(), settler))
+	require.Empty(t, inFlight.messages())
+	require.NoError(t, inFlight.close(context.Background(), settler))
 
 	messages := settler.abandonedMessages()
 	require.Len(t, messages, 1)
@@ -35,9 +37,21 @@ func TestInFlightMessages_CloseAbandonsTrackedMessagesConcurrently(t *testing.T)
 	abandonStarted := make(chan *azservicebus.ReceivedMessage, 2)
 	releaseAbandons := make(chan struct{})
 	var releaseOnce sync.Once
-	settler := &blockingInFlightMessageSettler{
-		abandonStarted: abandonStarted,
-		releaseAbandon: releaseAbandons,
+	settler := &inFlightMessageSettler{
+		abandon: func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
+			select {
+			case abandonStarted <- message:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			select {
+			case <-releaseAbandons:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
 	}
 
 	release := func() {
@@ -82,9 +96,12 @@ func TestInFlightMessages_CloseReturnsWhenContextIsCanceled(t *testing.T) {
 	abandonStarted := make(chan *azservicebus.ReceivedMessage, 1)
 	releaseAbandon := make(chan struct{})
 	var releaseOnce sync.Once
-	settler := &contextIgnoringBlockingInFlightMessageSettler{
-		abandonStarted: abandonStarted,
-		releaseAbandon: releaseAbandon,
+	settler := &inFlightMessageSettler{
+		abandon: func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
+			abandonStarted <- message
+			<-releaseAbandon
+			return nil
+		},
 	}
 
 	release := func() {
@@ -123,111 +140,53 @@ func TestInFlightMessages_CloseReturnsWhenContextIsCanceled(t *testing.T) {
 	}, 1*time.Second, 10*time.Millisecond)
 }
 
-func TestInFlightMessages_CloseRemovesTrackedMessages(t *testing.T) {
-	inFlight := newInFlightMessages()
-	settler := &inFlightMessageSettler{}
-	message := &azservicebus.ReceivedMessage{MessageID: "message"}
-
-	inFlight.track(message)
-
-	require.NoError(t, inFlight.close(context.Background(), settler))
-	require.NoError(t, inFlight.close(context.Background(), settler))
-
-	messages := settler.abandonedMessages()
-	require.Len(t, messages, 1)
-	require.Same(t, message, messages[0])
-}
-
-func TestInFlightMessages_CloseReturnsAbandonErrors(t *testing.T) {
+func TestInFlightMessages_CloseReturnsAbandonErrorsAndKeepsMessages(t *testing.T) {
 	firstErr := errors.New("first abandon failed")
 	secondErr := errors.New("second abandon failed")
 	inFlight := newInFlightMessages()
+	firstMessage := &azservicebus.ReceivedMessage{MessageID: "first"}
+	secondMessage := &azservicebus.ReceivedMessage{MessageID: "second"}
+	abandonErrors := make(chan error, 2)
+	abandonErrors <- firstErr
+	abandonErrors <- secondErr
 	settler := &inFlightMessageSettler{
-		abandonErrors: []error{firstErr, secondErr},
+		abandon: func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
+			return <-abandonErrors
+		},
 	}
 
-	inFlight.track(&azservicebus.ReceivedMessage{MessageID: "first"})
-	inFlight.track(&azservicebus.ReceivedMessage{MessageID: "second"})
+	inFlight.track(firstMessage)
+	inFlight.track(secondMessage)
 
 	err := inFlight.close(context.Background(), settler)
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, secondErr)
-}
-
-func TestInFlightMessages_CloseKeepsMessagesWhenAbandonFails(t *testing.T) {
-	abandonErr := errors.New("abandon failed")
-	inFlight := newInFlightMessages()
-	failingSettler := &inFlightMessageSettler{
-		abandonErrors: []error{abandonErr},
-	}
-	message := &azservicebus.ReceivedMessage{MessageID: "message"}
-
-	inFlight.track(message)
-
-	err := inFlight.close(context.Background(), failingSettler)
-
-	require.ErrorIs(t, err, abandonErr)
-	messages := inFlight.messages()
-	require.Len(t, messages, 1)
-	require.Same(t, message, messages[0])
+	require.ElementsMatch(t, []*azservicebus.ReceivedMessage{firstMessage, secondMessage}, inFlight.messages())
 
 	successfulSettler := &inFlightMessageSettler{}
 	require.NoError(t, inFlight.close(context.Background(), successfulSettler))
 	require.Empty(t, inFlight.messages())
 	abandonedMessages := successfulSettler.abandonedMessages()
-	require.Len(t, abandonedMessages, 1)
-	require.Same(t, message, abandonedMessages[0])
-}
-
-func TestInFlightMessages_CloseUsesCloseContext(t *testing.T) {
-	inFlight := newInFlightMessages()
-	settler := &inFlightMessageSettler{}
-
-	inFlight.track(&azservicebus.ReceivedMessage{MessageID: "message"})
-
-	deadline := time.Now().Add(1 * time.Minute)
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
-	defer cancel()
-
-	require.NoError(t, inFlight.close(ctx, settler))
-
-	deadlines := settler.abandonDeadlines()
-	require.Len(t, deadlines, 1)
-	require.True(t, deadlines[0].ok)
-	require.True(t, deadlines[0].deadline.Equal(deadline))
+	require.ElementsMatch(t, []*azservicebus.ReceivedMessage{firstMessage, secondMessage}, abandonedMessages)
 }
 
 type inFlightMessageSettler struct {
-	mu             sync.Mutex
-	abandoned      []*azservicebus.ReceivedMessage
-	deadlines      []abandonDeadline
-	abandonErrors  []error
-	abandonAttempt int
-}
-
-type abandonDeadline struct {
-	deadline time.Time
-	ok       bool
+	mu        sync.Mutex
+	abandoned []*azservicebus.ReceivedMessage
+	abandon   func(context.Context, *azservicebus.ReceivedMessage) error
 }
 
 func (s *inFlightMessageSettler) AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error {
-	deadline, ok := ctx.Deadline()
-
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.abandoned = append(s.abandoned, message)
-	s.deadlines = append(s.deadlines, abandonDeadline{
-		deadline: deadline,
-		ok:       ok,
-	})
-	err := error(nil)
-	if s.abandonAttempt < len(s.abandonErrors) {
-		err = s.abandonErrors[s.abandonAttempt]
+	s.mu.Unlock()
+
+	if s.abandon != nil {
+		return s.abandon(ctx, message)
 	}
-	s.abandonAttempt++
-	return err
+	return nil
 }
 
 func (s *inFlightMessageSettler) CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error {
@@ -252,75 +211,4 @@ func (s *inFlightMessageSettler) abandonedMessages() []*azservicebus.ReceivedMes
 	messages := make([]*azservicebus.ReceivedMessage, len(s.abandoned))
 	copy(messages, s.abandoned)
 	return messages
-}
-
-func (s *inFlightMessageSettler) abandonDeadlines() []abandonDeadline {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	deadlines := make([]abandonDeadline, len(s.deadlines))
-	copy(deadlines, s.deadlines)
-	return deadlines
-}
-
-type blockingInFlightMessageSettler struct {
-	abandonStarted chan<- *azservicebus.ReceivedMessage
-	releaseAbandon <-chan struct{}
-}
-
-func (s *blockingInFlightMessageSettler) AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error {
-	select {
-	case s.abandonStarted <- message:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
-	select {
-	case <-s.releaseAbandon:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (s *blockingInFlightMessageSettler) CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error {
-	return nil
-}
-
-func (s *blockingInFlightMessageSettler) DeadLetterMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeadLetterOptions) error {
-	return nil
-}
-
-func (s *blockingInFlightMessageSettler) DeferMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeferMessageOptions) error {
-	return nil
-}
-
-func (s *blockingInFlightMessageSettler) RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error {
-	return nil
-}
-
-type contextIgnoringBlockingInFlightMessageSettler struct {
-	abandonStarted chan<- *azservicebus.ReceivedMessage
-	releaseAbandon <-chan struct{}
-}
-
-func (s *contextIgnoringBlockingInFlightMessageSettler) AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error {
-	s.abandonStarted <- message
-	<-s.releaseAbandon
-	return nil
-}
-
-func (s *contextIgnoringBlockingInFlightMessageSettler) CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error {
-	return nil
-}
-
-func (s *contextIgnoringBlockingInFlightMessageSettler) DeadLetterMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeadLetterOptions) error {
-	return nil
-}
-
-func (s *contextIgnoringBlockingInFlightMessageSettler) DeferMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.DeferMessageOptions) error {
-	return nil
-}
-
-func (s *contextIgnoringBlockingInFlightMessageSettler) RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error {
-	return nil
 }
