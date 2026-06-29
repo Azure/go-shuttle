@@ -39,18 +39,9 @@ func TestInFlightMessages_CloseAbandonsTrackedMessagesConcurrently(t *testing.T)
 	var releaseOnce sync.Once
 	settler := &inFlightMessageSettler{
 		abandon: func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
-			select {
-			case abandonStarted <- message:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-
-			select {
-			case <-releaseAbandons:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			abandonStarted <- message
+			<-releaseAbandons
+			return nil
 		},
 	}
 
@@ -133,6 +124,63 @@ func TestInFlightMessages_CloseReturnsWhenContextIsCanceled(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("timed out waiting for close to return after context cancellation")
 	}
+
+	abandonedMessages := settler.abandonedMessages()
+	require.Len(t, abandonedMessages, 1)
+	require.Equal(t, "blocked", abandonedMessages[0].MessageID)
+
+	release()
+	require.Eventually(t, func() bool {
+		return len(inFlight.messages()) == 0
+	}, 1*time.Second, 10*time.Millisecond)
+}
+
+func TestInFlightMessages_CloseReturnsWhenContextDeadlineExpires(t *testing.T) {
+	inFlight := newInFlightMessages()
+	abandonStarted := make(chan *azservicebus.ReceivedMessage, 1)
+	releaseAbandon := make(chan struct{})
+	var releaseOnce sync.Once
+	settler := &inFlightMessageSettler{
+		abandon: func(ctx context.Context, message *azservicebus.ReceivedMessage) error {
+			abandonStarted <- message
+			<-releaseAbandon
+			return nil
+		},
+	}
+
+	release := func() {
+		releaseOnce.Do(func() {
+			close(releaseAbandon)
+		})
+	}
+	t.Cleanup(release)
+
+	inFlight.track(&azservicebus.ReceivedMessage{MessageID: "deadline"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	closeErr := make(chan error, 1)
+	go func() {
+		closeErr <- inFlight.close(ctx, settler)
+	}()
+
+	select {
+	case <-abandonStarted:
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for abandon attempt to start")
+	}
+
+	select {
+	case err := <-closeErr:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for close to return after context deadline")
+	}
+
+	abandonedMessages := settler.abandonedMessages()
+	require.Len(t, abandonedMessages, 1)
+	require.Equal(t, "deadline", abandonedMessages[0].MessageID)
 
 	release()
 	require.Eventually(t, func() bool {
