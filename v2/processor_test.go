@@ -70,9 +70,7 @@ func TestProcessorStart_DefaultsToMaxConcurrency(t *testing.T) {
 		SetupReceivedMessages: messages,
 	}
 	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err := processor.Start(ctx)
+	err := processor.Start(context.Background())
 	a.ErrorContains(err, "max receive calls exceeded")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
@@ -127,10 +125,7 @@ func TestProcessorStart_CanSetMaxConcurrency(t *testing.T) {
 	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
 		MaxConcurrency: 10,
 	})
-	ctx, cancel := context.WithCancel(context.Background())
-	// pre-cancel the context
-	cancel()
-	err := processor.Start(ctx)
+	err := processor.Start(context.Background())
 	a.ErrorContains(err, "max receive calls exceeded")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(10, rcv.ReceiveCalls[0], "the processor should have used max concurrency of 10")
@@ -191,9 +186,7 @@ func TestProcessorStart_MaxReceiveCountGreaterThanMaxConcurrency(t *testing.T) {
 		MaxConcurrency:  5,
 		MaxReceiveCount: 10,
 	})
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err := processor.Start(ctx)
+	err := processor.Start(context.Background())
 	a.ErrorContains(err, "max receive calls exceeded")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(5, rcv.ReceiveCalls[0], "the processor should have used max concurrency as max receive count")
@@ -210,9 +203,7 @@ func TestProcessorStart_DisableMaxReceiveCount(t *testing.T) {
 		MaxConcurrency:  5,
 		MaxReceiveCount: -1,
 	})
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err := processor.Start(ctx)
+	err := processor.Start(context.Background())
 	a.ErrorContains(err, "max receive calls exceeded")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(5, rcv.ReceiveCalls[0], "the processor should have used max concurrency as max receive count")
@@ -311,9 +302,7 @@ func TestProcessorStart_DefaultsToStartMaxAttempt(t *testing.T) {
 		SetupReceiveError:     fmt.Errorf("fake receive error"),
 	}
 	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err := processor.Start(ctx)
+	err := processor.Start(context.Background())
 	a.ErrorContains(err, "fake receive error")
 	a.Equal(1, len(rcv.ReceiveCalls), "there should be 1 entry in the ReceiveCalls array")
 	a.Equal(1, rcv.ReceiveCalls[0], "the processor should have used the default max concurrency of 1")
@@ -434,7 +423,6 @@ func TestProcessorClose_StopsStartReceiveLoop(t *testing.T) {
 		fakeSettler:           &fakeSettler{},
 		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage),
 		SetupMaxReceiveCalls:  10,
-		SetupRespectContext:   true,
 		SetupReceiveStarted:   make(chan struct{}, 1),
 	}
 	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
@@ -471,9 +459,7 @@ func TestProcessorClose_DoesNotWaitForActiveReceive(t *testing.T) {
 	go func() { closeErrCh <- processor.Close(context.Background()) }()
 
 	g.Eventually(closeErrCh).Should(Receive(Succeed()))
-
-	close(messages)
-	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
+	g.Eventually(errCh).Should(Receive(MatchError(MatchRegexp("failed to receive messages: context canceled"))))
 }
 
 func TestProcessorClose_ReturnsAbandonErrors(t *testing.T) {

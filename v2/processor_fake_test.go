@@ -71,7 +71,6 @@ type fakeReceiver struct {
 	*fakeSettler
 	SetupMaxReceiveCalls int
 	SetupReceivePanic    string
-	SetupRespectContext  bool
 	SetupReceiveStarted  chan struct{}
 }
 
@@ -88,28 +87,18 @@ func (f *fakeReceiver) ReceiveMessages(ctx context.Context, maxMessages int, _ *
 	}
 	var result []*azservicebus.ReceivedMessage
 	for len(result) < maxMessages {
-		if f.SetupRespectContext {
-			select {
-			case msg, ok := <-f.SetupReceivedMessages:
-				if !ok {
-					return f.receiveResult(result)
-				}
-				result = append(result, msg)
-				if len(f.SetupReceivedMessages) == 0 {
-					return f.receiveResult(result)
-				}
-			case <-ctx.Done():
-				return result, ctx.Err()
+		select {
+		case msg, ok := <-f.SetupReceivedMessages:
+			if !ok {
+				return f.receiveResult(result)
 			}
-			continue
-		}
-		for msg := range f.SetupReceivedMessages {
 			result = append(result, msg)
-			if len(result) == maxMessages || len(f.SetupReceivedMessages) == 0 {
-				break
+			if len(f.SetupReceivedMessages) == 0 {
+				return f.receiveResult(result)
 			}
+		case <-ctx.Done():
+			return result, ctx.Err()
 		}
-		break
 	}
 
 	return f.receiveResult(result)

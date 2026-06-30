@@ -83,7 +83,7 @@ func (l *processorLifecycle) markClosed() context.CancelFunc {
 	return cancelStartCtx
 }
 
-func (l *processorLifecycle) clearStart() {
+func (l *processorLifecycle) clearCancelStartCtx() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -163,7 +163,7 @@ func (p *Processor) Start(ctx context.Context) (err error) {
 	if ctx == nil {
 		return fmt.Errorf("failed to start processor since it has already been closed: %w", context.Canceled)
 	}
-	defer p.lifecycle.clearStart()
+	defer p.lifecycle.clearCancelStartCtx()
 	defer cancel()
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -176,6 +176,7 @@ func (p *Processor) Start(ctx context.Context) (err error) {
 // Close stops receiving new messages, cancels in-flight message handlers, and
 // best-effort abandons messages currently held by the processor.
 func (p *Processor) Close(ctx context.Context) error {
+	// Close the active processor loop so no further messages are received.
 	p.lifecycle.close()
 
 	return p.inFlightMessages.close(ctx, p.receiver)
