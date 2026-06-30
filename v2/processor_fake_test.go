@@ -18,11 +18,12 @@ type fakeSettler struct {
 	DeadLetterCalled atomic.Int32
 	DeferCalled      atomic.Int32
 	RenewCalled      atomic.Int32
+	SetupAbandonErr  error
 }
 
 func (f *fakeSettler) AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error {
 	f.AbandonCalled.Add(1)
-	return nil
+	return f.SetupAbandonErr
 }
 
 func (f *fakeSettler) CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error {
@@ -55,21 +56,40 @@ type fakeReceiver struct {
 	*fakeSettler
 	SetupMaxReceiveCalls int
 	SetupReceivePanic    string
+	SetupReceiveStarted  chan struct{}
 }
 
-func (f *fakeReceiver) ReceiveMessages(_ context.Context, maxMessages int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
+func (f *fakeReceiver) ReceiveMessages(ctx context.Context, maxMessages int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
 	f.ReceiveCalls = append(f.ReceiveCalls, maxMessages)
+	if f.SetupReceiveStarted != nil {
+		select {
+		case f.SetupReceiveStarted <- struct{}{}:
+		default:
+		}
+	}
 	if maxMessages == 0 && len(f.SetupReceivedMessages) > 0 {
 		return nil, nil
 	}
 	var result []*azservicebus.ReceivedMessage
-	for msg := range f.SetupReceivedMessages {
-		result = append(result, msg)
-		if len(result) == maxMessages || len(f.SetupReceivedMessages) == 0 {
-			break
+	for len(result) < maxMessages {
+		select {
+		case msg, ok := <-f.SetupReceivedMessages:
+			if !ok {
+				return f.receiveResult(result)
+			}
+			result = append(result, msg)
+			if len(f.SetupReceivedMessages) == 0 {
+				return f.receiveResult(result)
+			}
+		case <-ctx.Done():
+			return result, ctx.Err()
 		}
 	}
 
+	return f.receiveResult(result)
+}
+
+func (f *fakeReceiver) receiveResult(result []*azservicebus.ReceivedMessage) ([]*azservicebus.ReceivedMessage, error) {
 	if f.SetupReceivePanic != "" {
 		panic(f.SetupReceivePanic)
 	}
