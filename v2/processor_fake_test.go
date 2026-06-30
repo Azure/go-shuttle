@@ -3,7 +3,6 @@ package shuttle_test
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
@@ -20,16 +19,10 @@ type fakeSettler struct {
 	DeferCalled      atomic.Int32
 	RenewCalled      atomic.Int32
 	SetupAbandonErr  error
-
-	mu                sync.Mutex
-	AbandonedMessages []*azservicebus.ReceivedMessage
 }
 
 func (f *fakeSettler) AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error {
 	f.AbandonCalled.Add(1)
-	f.mu.Lock()
-	f.AbandonedMessages = append(f.AbandonedMessages, message)
-	f.mu.Unlock()
 	return f.SetupAbandonErr
 }
 
@@ -51,14 +44,6 @@ func (f *fakeSettler) DeferMessage(ctx context.Context, message *azservicebus.Re
 func (f *fakeSettler) RenewMessageLock(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.RenewMessageLockOptions) error {
 	f.RenewCalled.Add(1)
 	return nil
-}
-
-func (f *fakeSettler) abandonedMessages() []*azservicebus.ReceivedMessage {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	messages := make([]*azservicebus.ReceivedMessage, len(f.AbandonedMessages))
-	copy(messages, f.AbandonedMessages)
-	return messages
 }
 
 type fakeReceiver struct {

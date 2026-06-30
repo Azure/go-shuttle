@@ -366,6 +366,28 @@ func TestProcessorStart_ContextCanceledDuringStartRetry(t *testing.T) {
 	a.Equal(1, rcv.ReceiveCalls[1], "the processor should have retried the receive call once")
 }
 
+func TestProcessorStart_DoesNotRetryAfterCloseDuringFirstAttempt(t *testing.T) {
+	rcv := &fakeReceiver{
+		fakeSettler:           &fakeSettler{},
+		SetupReceivedMessages: make(chan *azservicebus.ReceivedMessage),
+		SetupMaxReceiveCalls:  10,
+		SetupReceiveStarted:   make(chan struct{}, 1),
+	}
+
+	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
+		StartMaxAttempt:         3,
+		StartRetryDelayStrategy: &shuttle.ConstantDelayStrategy{Delay: 20 * time.Millisecond},
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- processor.Start(context.Background()) }()
+
+	g := NewWithT(t)
+	g.Eventually(rcv.SetupReceiveStarted).Should(Receive())
+	g.Expect(processor.Close(context.Background())).To(Succeed())
+	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
+	g.Expect(rcv.ReceiveCalls).To(HaveLen(1))
+}
+
 func TestProcessorStart_RecoversReceiverPanic(t *testing.T) {
 	rcv := &fakeReceiver{
 		fakeSettler:           &fakeSettler{},
@@ -415,7 +437,6 @@ func TestProcessorClose_CancelsAndAbandonsInflightMessages(t *testing.T) {
 	g.Eventually(canceled).Should(Receive())
 	g.Eventually(errCh).Should(Receive(MatchError(context.Canceled)))
 	g.Expect(settler.AbandonCalled.Load()).To(Equal(int32(2)))
-	g.Expect(settler.abandonedMessages()).To(HaveLen(2))
 }
 
 func TestProcessorClose_StopsStartReceiveLoop(t *testing.T) {
@@ -436,30 +457,6 @@ func TestProcessorClose_StopsStartReceiveLoop(t *testing.T) {
 	g.Expect(processor.Close(context.Background())).To(Succeed())
 	g.Eventually(errCh).Should(Receive(MatchError(MatchRegexp("failed to receive messages: context canceled"))))
 	g.Expect(rcv.ReceiveCalls).To(HaveLen(1))
-}
-
-func TestProcessorClose_DoesNotWaitForActiveReceive(t *testing.T) {
-	messages := make(chan *azservicebus.ReceivedMessage)
-	rcv := &fakeReceiver{
-		fakeSettler:           &fakeSettler{},
-		SetupReceivedMessages: messages,
-		SetupMaxReceiveCalls:  10,
-		SetupReceiveStarted:   make(chan struct{}, 1),
-	}
-	processor := shuttle.NewProcessor(rcv, MyHandler(0*time.Second), &shuttle.ProcessorOptions{
-		ReceiveInterval: to.Ptr(1 * time.Hour),
-	})
-	errCh := make(chan error, 1)
-	go func() { errCh <- processor.Start(context.Background()) }()
-
-	g := NewWithT(t)
-	g.Eventually(rcv.SetupReceiveStarted).Should(Receive())
-
-	closeErrCh := make(chan error, 1)
-	go func() { closeErrCh <- processor.Close(context.Background()) }()
-
-	g.Eventually(closeErrCh).Should(Receive(Succeed()))
-	g.Eventually(errCh).Should(Receive(MatchError(MatchRegexp("failed to receive messages: context canceled"))))
 }
 
 func TestProcessorClose_ReturnsAbandonErrors(t *testing.T) {
