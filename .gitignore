@@ -21,3 +21,17 @@ test-debug.env
 .env.bak
 scripts/containergroup.yaml
 *.junit.xml
+# Squad: ignore runtime state (logs, inbox, sessions)
+# Note: .squad/casting/* is identity and MUST be committed to main, not ignored
+.squad/orchestration-log/
+.squad/log/
+.squad/decisions/inbox/
+.squad/sessions/
+.squad/.scratch/
+.squad/.cache/
+# Squad: state owned by squad-state branch (two-layer/orphan backend)
+.squad/decisions.md
+.squad/agents/*/history.md
+# /Squad: state owned by squad-state branch
+# Squad: SubSquad activation file (local to this machine)
+.squad-workstream
